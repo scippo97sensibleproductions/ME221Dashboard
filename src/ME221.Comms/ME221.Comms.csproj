@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>true</IsPackable>
+    <PackageId>ME221.Comms</PackageId>
+    <Version>0.1.0</Version>
+    <Description>ME221 ECU communication library — zero-allocation frame protocol over serial/USB</Description>
+    <AnalysisLevel>preview-recommended</AnalysisLevel>
+    <LangVersion>default</LangVersion>
+  </PropertyGroup>
+
+
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ME221.Comms.Tests" />
+    <InternalsVisibleTo Include="ME221.Comms.IntegrationTests" />
+    <InternalsVisibleTo Include="ME221.Emulator" />
+    <InternalsVisibleTo Include="ME221.Emulator.Tests" />
+    <InternalsVisibleTo Include="ME221.Benchmarks" />
+  </ItemGroup>
+
+
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.4.0-dev-02437" />
+  </ItemGroup>
+
+</Project>

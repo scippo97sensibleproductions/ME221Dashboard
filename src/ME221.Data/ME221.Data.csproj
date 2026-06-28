@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ME221.Data</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackageId>ME221.Data</PackageId>
+    <Version>0.1.0</Version>
+    <Description>ME221 ECU calibration data model, .mefw firmware reader, and DEF XML parser</Description>
+    <LangVersion>default</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.4.0-dev-02437" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Trim descriptor to preserve types for JSON serialization -->
+    <TrimmerRootDescriptor Include="ME221.Data.Trim.xml" />
+  </ItemGroup>
+
+</Project>

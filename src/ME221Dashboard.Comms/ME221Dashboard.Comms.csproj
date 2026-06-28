@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>ME221Dashboard.Comms</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ME221.Benchmarks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ME221.Comms\ME221.Comms.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.4.0-dev-02437" />
+    <PackageReference Include="System.IO.Ports" Version="11.0.0-preview.5.26302.115" />
+  </ItemGroup>
+
+</Project>

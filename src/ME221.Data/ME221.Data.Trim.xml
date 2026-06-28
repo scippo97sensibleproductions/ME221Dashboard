@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<linker>
+  <!-- Preserve ME221.Data types for JSON serialization -->
+  <assembly fullname="ME221.Data">
+    <type fullname="ME221.Data.CalibrationData" preserve="all" />
+    <type fullname="ME221.Data.DataLinkDefinition" preserve="all" />
+    <type fullname="ME221.Data.DriverDefinition" preserve="all" />
+    <type fullname="ME221.Data.GaugeConfigEntry" preserve="all" />
+    <type fullname="ME221.Data.TableDefinition" preserve="all" />
+    <type fullname="ME221.Data.TextValueMapping" preserve="all" />
+    <type fullname="ME221.Data.Models.*" preserve="all" />
+  </assembly>
+</linker>

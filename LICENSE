@@ -1,0 +1,46 @@
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+
+Copyright (c) 2026 Lorenzo Di Mauro
+
+This work is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License.
+
+You are free to:
+
+  Share -- copy and redistribute the material in any medium or format
+
+  Adapt -- remix, transform, and build upon the material
+
+Under the following terms:
+
+  Attribution -- You must give appropriate credit, provide a link to
+  the license, and indicate if changes were made. You may do so in
+  any reasonable manner, but not in any way that suggests the licensor
+  endorses you or your use.
+
+  NonCommercial -- You may not use the material for commercial purposes.
+
+  ShareAlike -- If you remix, transform, or build upon the material,
+  you must distribute your contributions under the same license as
+  the original.
+
+  No additional restrictions -- You may not apply legal terms or
+  technological measures that legally restrict others from doing
+  anything the license permits.
+
+Full license text: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+---
+
+Acknowledgements
+
+The ME221 ECU hardware and MEITE tuning software are products of
+Motorsport Electronics Limited (motorsport-electronics.co.uk).
+
+Written permission was obtained from Motorsport Electronics to
+develop and distribute this software for free, non-commercial use.
+No proprietary code from Motorsport Electronics is included in
+this repository. All protocol implementations are original work.
+
+If you use this code, libraries, or protocol implementation,
+credit the author.

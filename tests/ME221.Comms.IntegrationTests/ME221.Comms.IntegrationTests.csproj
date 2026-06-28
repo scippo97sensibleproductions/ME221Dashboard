@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="RawTest.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/ME221.Comms/ME221.Comms.csproj" />
+    <ProjectReference Include="../../src/ME221.Data/ME221.Data.csproj" />
+    <ProjectReference Include="../../src/ME221Dashboard.Comms/ME221Dashboard.Comms.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="TestConfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

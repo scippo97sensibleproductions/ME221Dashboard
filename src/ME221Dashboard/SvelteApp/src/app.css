@@ -1,0 +1,436 @@
+@import "tailwindcss";
+@import "../node_modules/flowbite-svelte/dist/theme-selector/themes/default.css";
+@plugin 'flowbite/plugin';
+@custom-variant dark (&:where(.dark, .dark *));
+@source "../node_modules/flowbite-svelte/dist";
+@source "../node_modules/flowbite-svelte-icons/dist";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Flowbite Tailwind Color Token Overrides (Metro Dark Theme)
+
+   Flowbite's @theme references --color-gray-*, --color-primary-*,
+   --color-emerald-*, etc. for its semantic tokens. By overriding THESE
+   base tokens in our @theme (which comes AFTER Flowbite's import),
+   all Flowbite components automatically resolve to Metro colors.
+
+   This is the ONLY reliable way to theme Flowbite in Tailwind v4 —
+   .dark {} overrides lose to @theme processing order.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Border Radius (Metro = sharp) ──────────────────────────────────── */
+  --radius-0: 0px;
+  --radius-xxs: 0px;
+  --radius-xs: 0px;
+  --radius-sm: 2px;
+  --radius: 2px;
+  --radius-base: 2px;
+  --radius-lg: 4px;
+
+  /* ── Gray Scale (Metro dark theme) ─────────────────────────────────────
+     Flowbite references these in .dark mode:
+       --color-body: var(--color-gray-400)     → secondary text
+       --color-heading: var(--color-gray-900)  → primary text
+       --color-neutral-primary: var(--color-gray-950) → page bg
+       --color-neutral-primary-medium: var(--color-gray-800) → card bg
+       --color-neutral-primary-strong: var(--color-gray-700) → hover bg
+       --color-neutral-secondary-medium: var(--color-gray-800) → alt card bg
+     ═══════════════════════════════════════════════════════════════════════════ */
+  --color-gray-50:  #FFFFFF;
+  --color-gray-100: #F0F0F0;
+  --color-gray-200: #E0E0E0;
+  --color-gray-300: #CCCCCC;
+  --color-gray-400: #A0A0A0;
+  --color-gray-500: #888888;
+  --color-gray-600: #666666;
+  --color-gray-700: #333333;
+  --color-gray-800: #222222;
+  --color-gray-900: #0A0A0A;
+  --color-gray-950: #0A0A0A;
+
+  /* ── Black & White (used by Flowbite for heading, etc.) ──────────────── */
+  --color-white: #FFFFFF;
+  --color-black: #0A0A0A;
+
+  /* ── Primary / Brand (Metro Blue) ──────────────────────────────────── */
+  --color-primary-50:  #E6F2FF;
+  --color-primary-100: #0D3B66;
+  --color-primary-200: #0078D7;
+  --color-primary-300: #0078D7;
+  --color-primary-400: #1A8AE0;
+  --color-primary-500: #0078D7;
+  --color-primary-600: #005A9E;
+  --color-primary-700: #0078D7;
+  --color-primary-800: #004578;
+  --color-primary-900: #003366;
+  --color-primary-950: #001A33;
+
+  /* ── Emerald (Metro Green) ─────────────────────────────────────────── */
+  --color-emerald-50:  #0A1A0A;
+  --color-emerald-100: #0E6D0E;
+  --color-emerald-200: #107C10;
+  --color-emerald-300: #4CAF50;
+  --color-emerald-400: #107C10;
+  --color-emerald-500: #107C10;
+  --color-emerald-600: #107C10;
+  --color-emerald-700: #0E6D0E;
+  --color-emerald-800: #0C5E0C;
+  --color-emerald-900: #0A4F0A;
+  --color-emerald-950: #073D07;
+
+  /* ── Rose (Metro Red) ──────────────────────────────────────────────── */
+  --color-rose-50:  #1A0A0A;
+  --color-rose-100: #C50F1F;
+  --color-rose-200: #E81123;
+  --color-rose-300: #FF6B6B;
+  --color-rose-400: #E81123;
+  --color-rose-500: #E81123;
+  --color-rose-600: #E81123;
+  --color-rose-700: #C50F1F;
+  --color-rose-800: #A30D1A;
+  --color-rose-900: #800A15;
+  --color-rose-950: #5C070F;
+
+  /* ── Orange (Metro Orange) ─────────────────────────────────────────── */
+  --color-orange-50:  #1A1600;
+  --color-orange-100: #B83201;
+  --color-orange-200: #D83B01;
+  --color-orange-300: #FFB900;
+  --color-orange-400: #D83B01;
+  --color-orange-500: #D83B01;
+  --color-orange-600: #D83B01;
+  --color-orange-700: #B83201;
+  --color-orange-800: #992A01;
+  --color-orange-900: #7A2101;
+  --color-orange-950: #5C1901;
+
+  /* ── Yellow (Metro Yellow) ─────────────────────────────────────────── */
+  --color-yellow-50:  #1A1600;
+  --color-yellow-100: #B88A00;
+  --color-yellow-200: #D4A000;
+  --color-yellow-300: #FFB900;
+  --color-yellow-400: #FFB900;
+  --color-yellow-500: #E5A700;
+  --color-yellow-600: #CC9500;
+  --color-yellow-700: #B38300;
+  --color-yellow-800: #997000;
+  --color-yellow-900: #805E00;
+  --color-yellow-950: #664B00;
+
+  /* ── Purple (Metro Purple) ─────────────────────────────────────────── */
+  --color-purple-50:  #1A0D26;
+  --color-purple-100: #4A1D6A;
+  --color-purple-200: #6B2C91;
+  --color-purple-300: #8B3CB1;
+  --color-purple-400: #6B2C91;
+  --color-purple-500: #6B2C91;
+  --color-purple-600: #6B2C91;
+  --color-purple-700: #4A1D6A;
+  --color-purple-800: #3A1754;
+  --color-purple-900: #2A113E;
+  --color-purple-950: #1A0B28;
+
+  /* ── Teal (Metro Teal) ─────────────────────────────────────────────── */
+  --color-teal-50:  #0A1A1A;
+  --color-teal-100: #006666;
+  --color-teal-200: #008585;
+  --color-teal-300: #00A5A5;
+  --color-teal-400: #00A5A5;
+  --color-teal-500: #00A5A5;
+  --color-teal-600: #00A5A5;
+  --color-teal-700: #006666;
+  --color-teal-800: #004D4D;
+  --color-teal-900: #003333;
+  --color-teal-950: #001A1A;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Metro Styles — MUST be inside @layer base for Tailwind v4
+
+   Tailwind v4 strips ALL CSS outside @layer blocks during dev.
+   Only @import, @theme, and @layer are preserved.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    --metro-bg:             #0A0A0A;
+    --metro-surface:        #1A1A1A;
+    --metro-sidebar:        #1F2937;
+    --metro-card:           #222222;
+    --metro-card-hover:     #2A2A2A;
+    --metro-border:         #333333;
+    --metro-border-subtle:  #1F1F1F;
+    --metro-input-bg:       #1A1A1A;
+    --metro-input-border:   #444444;
+    --metro-hover:          #2A2A2A;
+
+    --metro-blue:           #0078D7;
+    --metro-blue-dark:      #005A9E;
+    --metro-blue-light:     #1A8AE0;
+    --metro-teal:           #00A5A5;
+    --metro-purple:         #6B2C91;
+    --metro-purple-dark:    #5A2480;
+    --metro-orange:         #D83B01;
+    --metro-orange-dark:    #B83201;
+    --metro-green:          #107C10;
+    --metro-green-dark:     #0E6D0E;
+    --metro-red:            #E81123;
+    --metro-red-dark:       #C50F1F;
+    --metro-yellow:         #FFB900;
+
+    --metro-text:           #FFFFFF;
+    --metro-text-secondary: #A0A0A0;
+    --metro-text-muted:     #666666;
+    --metro-text-on-accent: #FFFFFF;
+
+    --metro-gradient:       linear-gradient(180deg, #0078D7 0%, #005A9E 100%);
+    --metro-gradient-hover: linear-gradient(180deg, #1A8AE0 0%, #0068B8 100%);
+
+    --metro-focus:          #0078D7;
+
+    --metro-transition:     150ms ease;
+    --metro-transition-slow: 200ms ease-in-out;
+
+    --metro-font:           'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+    --metro-font-mono:      'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    background-color: var(--metro-bg);
+    color: var(--metro-text);
+    font-family: var(--metro-font);
+  }
+
+  #app {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Dropdown: no shadow, sharp */
+  .dark [data-scope="dropdown"][data-part="base"],
+  .dark .dropdown {
+    box-shadow: none !important;
+    border-radius: 2px !important;
+  }
+
+  /* Flowbite heading color: override to white (was mapped to gray-900 which we need dark) */
+  .dark {
+    --color-heading: #FFFFFF;
+  }
+
+  .dark [data-scope="dropdown-item"] [data-part="item"] {
+    border-radius: 0 !important;
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+    color: #A0A0A0 !important;
+    transition: background-color 150ms ease, color 150ms ease !important;
+  }
+
+  .dark [data-scope="dropdown-item"] [data-part="item"]:hover {
+    background-color: #2A2A2A !important;
+    color: #FFFFFF !important;
+  }
+
+  .dark .metro-danger-item [data-part="item"],
+  .dark .metro-danger-item {
+    background-color: var(--metro-red) !important;
+    color: var(--metro-text-on-accent) !important;
+  }
+
+  .dark .metro-danger-item [data-part="item"]:hover,
+  .dark .metro-danger-item:hover {
+    background-color: var(--metro-red-dark) !important;
+    color: var(--metro-text-on-accent) !important;
+  }
+
+  .dark [data-scope="button"][data-part="base"] {
+    border-radius: 0 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    transition: background-color 150ms ease, color 150ms ease !important;
+  }
+
+  .dark [data-scope="badge"][data-part="base"] {
+    border-radius: 0 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    font-weight: 700 !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+    padding: 2px 8px !important;
+  }
+
+  .dark [data-scope="badge"][data-part="base"].bg-success-soft,
+  .dark [data-scope="badge"][data-part="base"][class*="bg-success-soft"] {
+    background-color: #107C10 !important;
+    color: #FFFFFF !important;
+  }
+  .dark [data-scope="badge"][data-part="base"].bg-danger-soft,
+  .dark [data-scope="badge"][data-part="base"][class*="bg-danger-soft"] {
+    background-color: #E81123 !important;
+    color: #FFFFFF !important;
+  }
+  .dark [data-scope="badge"][data-part="base"].bg-warning-soft,
+  .dark [data-scope="badge"][data-part="base"][class*="bg-warning-soft"] {
+    background-color: #D83B01 !important;
+    color: #FFFFFF !important;
+  }
+  .dark [data-scope="badge"][data-part="base"].bg-brand-softer,
+  .dark [data-scope="badge"][data-part="base"][class*="bg-brand-softer"] {
+    background-color: #0078D7 !important;
+    color: #FFFFFF !important;
+  }
+  .dark [data-scope="badge"][data-part="base"].bg-neutral-secondary-medium,
+  .dark [data-scope="badge"][data-part="base"][class*="bg-neutral-secondary-medium"] {
+    background-color: #333333 !important;
+    color: #FFFFFF !important;
+  }
+
+  .dark [data-scope="dialog"][data-part="backdrop"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .dark [data-scope="button"][data-part="base"]:focus-visible {
+    box-shadow: 0 0 0 2px #0078D7 !important;
+  }
+
+  .metro-card {
+    background-color: var(--metro-card);
+    border: 1px solid var(--metro-border);
+    border-radius: 0;
+  }
+
+  .metro-input {
+    background-color: var(--metro-input-bg) !important;
+    border: 1px solid var(--metro-input-border);
+    border-radius: 2px;
+    color: var(--metro-text) !important;
+    padding: 8px 12px;
+    font-size: 13px;
+    transition: border-color var(--metro-transition);
+    outline: none;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+
+  .metro-input::-webkit-inner-spin-button,
+  .metro-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .metro-input:focus {
+    border-color: var(--metro-focus);
+  }
+
+  .metro-input::placeholder {
+    color: var(--metro-text-muted);
+  }
+
+  .metro-btn-primary {
+    background: var(--metro-gradient);
+    color: var(--metro-text-on-accent);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background var(--metro-transition);
+  }
+
+  .metro-btn-primary:hover {
+    background: var(--metro-gradient-hover);
+  }
+
+  .metro-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .metro-btn-secondary {
+    background-color: transparent;
+    border: 1px solid var(--metro-input-border);
+    color: var(--metro-text-secondary);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background-color var(--metro-transition), color var(--metro-transition);
+  }
+
+  .metro-btn-secondary:hover {
+    background-color: var(--metro-hover);
+    color: var(--metro-text);
+  }
+
+  .metro-btn-danger {
+    background-color: var(--metro-red);
+    color: var(--metro-text-on-accent);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background-color var(--metro-transition);
+  }
+
+  .metro-btn-danger:hover {
+    background-color: var(--metro-red-dark);
+  }
+
+  .metro-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    line-height: 1;
+  }
+
+  .metro-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 4px solid var(--metro-orange);
+    padding-left: 12px;
+  }
+
+  /* ── Hover states (global, replaces onmouseenter/leave JS handlers) ─── */
+
+  .metro-hover-bg:hover {
+    background-color: var(--metro-card-hover) !important;
+  }
+
+  .metro-hover-border:hover {
+    border-color: var(--metro-text-secondary) !important;
+    color: var(--metro-text) !important;
+  }
+
+  .metro-hover-text:hover {
+    color: var(--metro-text) !important;
+  }
+
+  .metro-btn-danger:hover {
+    background-color: var(--metro-red-dark) !important;
+  }
+}

@@ -1,0 +1,14 @@
+<Solution>
+  <Project Path="src/ME221.Comms/ME221.Comms.csproj" />
+  <Project Path="src/ME221.Data/ME221.Data.csproj" />
+  <Project Path="src/ME221Dashboard.Comms/ME221Dashboard.Comms.csproj" />
+  <Project Path="src/ME221.Emulator/ME221.Emulator.csproj" />
+  <Project Path="src/ME221.Comms.Cli/ME221.Comms.Cli.csproj" />
+  <Project Path="src/ME221Dashboard/ME221Dashboard.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="tests/ME221.Comms.IntegrationTests/ME221.Comms.IntegrationTests.csproj" />
+  <Project Path="tests/ME221.Comms.Tests/ME221.Comms.Tests.csproj" />
+  <Project Path="tests/ME221.Benchmarks/ME221.Benchmarks.csproj" />
+  <Project Path="tests/ME221.Data.Tests/ME221.Data.Tests.csproj" />
+</Solution>

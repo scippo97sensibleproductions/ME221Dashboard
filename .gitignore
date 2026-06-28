@@ -1,0 +1,59 @@
+## Build results
+**/bin/
+**/obj/
+dist/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+## NuGet
+nuget.config
+*.nupkg
+*.snupkg
+
+## Temporary / reference directories (do not commit)
+anchored-summary.md
+mantine/
+src/tabler-icons-avalonia/
+
+## Reference docs (do not commit)
+avalon-docs-main/
+OldMEITEWebFormsProjectReference/
+NETArchitectureEbook/
+AvaloniaDocumentation/
+docs/reference/
+.idea/
+
+## Runtime logs (do not commit)
+logs/
+
+## CLI test data (do not commit)
+results/
+
+## AI tooling files (do not commit)
+AGENTS.md
+SvelteDocsFull.txt
+docs/brainstorms/
+docs/plans/
+docs/solutions/
+docs/prototypes/
+docs/ui-style-guide.md
+
+## Build artifacts & binaries (do not commit)
+*.apk
+*.mefw
+dotnet-tools.json
+
+## Scripts & calibration data (do not commit)
+scripts/
+generate-tabler-icons.ps1
+**/calibration.json
+src/ME221Dashboard/dotnet
