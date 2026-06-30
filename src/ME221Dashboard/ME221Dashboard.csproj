@@ -14,12 +14,19 @@
 
         <ApplicationTitle>ME221 Dashboard</ApplicationTitle>
         <ApplicationId>com.scippo97sensibleproductions.me221dashboard</ApplicationId>
-        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
 
         <Authors>Scippo97 Sensible Productions</Authors>
         <Company>Scippo97 Sensible Productions</Company>
         <Copyright>© 2026 Scippo97 Sensible Productions</Copyright>
+        <Description>Real-time ME221 ECU sensor monitoring and tuning dashboard for Mazda MX-5. Connect over TCP or serial, view live data on configurable gauges, and edit fuel/ignition tables.</Description>
+        <PackageLicenseExpression>CC-BY-NC-SA-4.0</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/scippo97sensibleproductions/ME221Dashboard</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/scippo97sensibleproductions/ME221Dashboard</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <NeutralLanguage>en</NeutralLanguage>
+        <Product>ME221 Dashboard</Product>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
