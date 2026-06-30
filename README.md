@@ -58,16 +58,16 @@ dotnet test ME221.slnx
 
 The layering is pretty straightforward:
 
-- **ME221.Data** is pure domain. No dependencies except Serilog. Models for calibration, tables, sensors, gauges.
-- **ME221.Comms** is the protocol layer. Defines `IChannel` (abstract communication), `ProtocolService` (request/response, heartbeat, correlation), and 25 message types.
-- **ME221Dashboard.Comms** adds the concrete serial channel and a zero-allocation report parser for live data.
-- **ME221Dashboard** is the app. C# services handle ECU connection, calibration, GPS, persistence. The Svelte frontend renders gauges, tables, and connection UI. They talk through a `HybridWebView` bridge (`InvokeDotNet` / `SendRawMessage`).
+- ME221.Data is pure domain. No dependencies except Serilog. Models for calibration, tables, sensors, gauges.
+- ME221.Comms is the protocol layer. Defines `IChannel` (abstract communication), `ProtocolService` (request/response, heartbeat, correlation), and 25 message types.
+- ME221Dashboard.Comms adds the concrete serial channel and a zero-allocation report parser for live data.
+- ME221Dashboard is the app. C# services handle ECU connection, calibration, GPS, persistence. The Svelte frontend renders gauges, tables, and connection UI. They talk through a `HybridWebView` bridge (`InvokeDotNet` / `SendRawMessage`).
 
 The frontend uses Svelte 5 runes, Tailwind CSS, and Flowbite components. Gauges are free-form positioned on a canvas (no grid system). Table editors support 1D (curve + data grid) and 2D (heat-colored grid) tables with undo/redo, copy/paste, and batch transforms.
 
 ## License
 
-This project is licensed under [CC BY-NC-SA 4.0](LICENSE). Free for non-commercial use. If you use this code, libraries, or any of the protocol implementation, please credit the author and link back to this repository. Commercial use requires permission and is, unless explicitly granted, forbidden.
+This project is licensed under [CC BY-NC-SA 4.0](LICENSE). Free for non-commercial use. If you use this code, libraries, or any of the protocol implementation, credit the author and link back to this repository. Commercial use requires permission.
 
 ## Acknowledgements
 

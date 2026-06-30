@@ -8,12 +8,12 @@ Renders the dashboard app: connection screen, calibration loader, live gauge das
 
 ## Tech stack
 
-- **Svelte 5** with runes (`$state`, `$derived`, `$effect`, `$props`)
-- **Vite 8** for build and dev server
-- **TypeScript 6**
-- **Tailwind CSS 4** for styling
-- **Flowbite Svelte** for UI components (buttons, modals, dropdowns, inputs)
-- **Tabler Icons** via `@tabler/icons-svelte` (6000+ icons)
+- Svelte 5 with runes (`$state`, `$derived`, `$effect`, `$props`)
+- Vite 8 for build and dev server
+- TypeScript 6
+- Tailwind CSS 4 for styling
+- Flowbite Svelte for UI components (buttons, modals, dropdowns, inputs)
+- Tabler Icons via `@tabler/icons-svelte` (6000+ icons)
 
 ## Pages
 
@@ -39,10 +39,10 @@ welcome -> connection -> calibration -> config -> dashboard
 
 Four visual types, each with its own settings panel:
 
-- **Arc** -- sweep-angle gauge with needle, color stops, configurable arc position
-- **Bar** -- horizontal/vertical bar with thresholds
-- **Text** -- plain value display
-- **Digital** -- odometer, large-digit, 7-segment, or cluster style
+- Arc: sweep-angle gauge with needle, color stops, configurable arc position
+- Bar: horizontal/vertical bar with thresholds
+- Text: plain value display
+- Digital: odometer, large-digit, 7-segment, or cluster style
 
 Gauges are positioned freely on a canvas using percentage-based coordinates (fractionX/fractionY). Layout is saved to the backend on drag release.
 
@@ -50,12 +50,12 @@ Gauges are positioned freely on a canvas using percentage-based coordinates (fra
 
 Supports 1D (1x16, 1x32) and 2D (16x16) tuning tables.
 
-- **2D tables** -- heat-colored grid (blue to yellow to red), click cells to edit
-- **1D tables** -- read-only curve chart on the bottom, interactive data grid on top
-- **Transforms** -- scale, offset, set, fill, interpolate, smooth, clamp on range selections
-- **Undo/redo** -- full history with Ctrl+Z / Ctrl+Y
-- **Copy/paste** -- internal clipboard (no `navigator.clipboard` dependency)
-- **Import/export** -- CSV and YAML formats
+- 2D tables: heat-colored grid (blue to yellow to red), click cells to edit
+- 1D tables: read-only curve chart on the bottom, interactive data grid on top
+- Transforms: scale, offset, set, fill, interpolate, smooth, clamp on range selections
+- Undo/redo: full history with Ctrl+Z / Ctrl+Y
+- Copy/paste: internal clipboard (no `navigator.clipboard` dependency)
+- Import/export: CSV and YAML formats
 
 ## The bridge
 

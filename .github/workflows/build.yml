@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows (self-contained)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Install MAUI workloads
+        run: dotnet workload restore
+
+      - name: Install npm dependencies
+        working-directory: src/ME221Dashboard/SvelteApp
+        run: npm ci
+
+      - name: Build & publish
+        run: >
+          dotnet run scripts/build.cs --
+          -p windows -c Release --publish --no-install --no-clean
+          --msbuild SelfContained=true
+          --msbuild PublishSingleFile=true
+          --msbuild IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ME221Dashboard-win-x64
+          path: src/ME221Dashboard/bin/Release/net11.0-windows10.0.19041.0/win-x64/publish/
+
+  build-android:
+    name: Android (universal APK)
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Install MAUI workloads
+        run: dotnet workload restore
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode keystore
+        if: env.KEYSTORE_BASE64 != ''
+        run: echo "$KEYSTORE_BASE64" | base64 -d > /tmp/me221-release.keystore
+
+      - name: Install npm dependencies
+        working-directory: src/ME221Dashboard/SvelteApp
+        run: npm ci
+
+      - name: Build & publish
+        run: >
+          dotnet run scripts/build.cs --
+          -p android-all -c Release --publish --no-install --no-clean
+          --msbuild EnableWindowsTargeting=true
+          --msbuild AndroidKeyStore=true
+          --msbuild AndroidSigningKeyStore=/tmp/me221-release.keystore
+          --msbuild AndroidSigningKeyAlias=me221app
+          --msbuild AndroidSigningKeyPass=me221app
+          --msbuild AndroidSigningStorePass=me221app
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ME221Dashboard-android
+          path: src/ME221Dashboard/bin/Release/net11.0-android37.0/publish/*.apk

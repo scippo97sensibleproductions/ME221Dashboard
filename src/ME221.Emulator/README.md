@@ -25,9 +25,9 @@ dotnet run --project src\ME221.Emulator -- --calibration <path-to-calibration.js
 ```
 
 Arguments:
-- `--calibration <path>` -- calibration JSON file (required). Export this from the dashboard app.
-- `--port <port>` -- TCP port to listen on (default: 22100)
-- `--vehicle-config <path>` -- optional vehicle config file
+- `--calibration <path>`: calibration JSON file (required). Export this from the dashboard app.
+- `--port <port>`: TCP port to listen on (default: 22100)
+- `--vehicle-config <path>`: optional vehicle config file
 
 ## Architecture
 
@@ -63,6 +63,6 @@ In the dashboard app, go to Connection, pick TCP, enter `localhost:22100`, and h
 
 ## Dependencies
 
-- `ME221.Comms` -- protocol library (frame handling, message types)
-- `ME221.Data` -- calibration models
-- `Serilog` -- logging
+- ME221.Comms: protocol library (frame handling, message types)
+- ME221.Data: calibration models
+- Serilog: logging

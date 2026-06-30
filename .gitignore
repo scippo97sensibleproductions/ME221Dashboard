@@ -53,7 +53,8 @@ docs/ui-style-guide.md
 dotnet-tools.json
 
 ## Scripts & calibration data (do not commit)
-scripts/
+scripts/*
+!scripts/build.cs
 generate-tabler-icons.ps1
 **/calibration.json
 src/ME221Dashboard/dotnet

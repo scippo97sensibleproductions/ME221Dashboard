@@ -46,9 +46,9 @@ dotnet run --project src\ME221.Emulator -- --calibration calibration.json --port
 
 The CLI uses System.CommandLine for argument parsing. Commands are split into:
 
-- **Read commands** -- device info, drivers, tables, reporting status, logging, firmware info
-- **Write commands** -- table writes, driver config writes (executed before reporting to avoid serial bus contention)
-- **Stream mode** -- continuous reporting with live value display
+- Read commands: device info, drivers, tables, reporting status, logging, firmware info
+- Write commands: table writes, driver config writes (executed before reporting to avoid serial bus contention)
+- Stream mode: continuous reporting with live value display
 
 ## Output
 
@@ -56,12 +56,12 @@ Results are written as JSON files in a `results/` directory. Each file contains 
 
 ## Dependencies
 
-- `ME221.Comms` -- protocol library
-- `ME221.Data` -- calibration models
-- `ME221Dashboard.Comms` -- serial channel
-- `Microsoft.Extensions.Hosting` -- DI and configuration
-- `System.CommandLine` -- CLI argument parsing
-- `Serilog` -- logging (console + rolling file)
+- ME221.Comms: protocol library
+- ME221.Data: calibration models
+- ME221Dashboard.Comms: serial channel
+- Microsoft.Extensions.Hosting: DI and configuration
+- System.CommandLine: CLI argument parsing
+- Serilog: logging (console + rolling file)
 
 ## Configuration
 

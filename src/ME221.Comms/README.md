@@ -49,16 +49,16 @@ Sends periodic keepalive messages to the ECU. If three consecutive heartbeats go
 
 All in `src/ME221.Comms/Messages/`:
 
-- **Reporting**: V1/V2 live data streaming (enable/disable, parse entity values)
-- **Tables**: Read, write, enable/disable tuning tables
-- **Drivers**: Read/write ECU driver configuration
-- **Bootloader / Firmware**: Firmware update commands
-- **Device Info**: Product name, model, version
-- **Status**: ECU status queries
-- **Hash**: Firmware hash verification
-- **Logging**: ECU-side logging control
-- **Password**: Password protection commands
-- **Trigger Logger**: Trigger logger channel/sync commands
+- Reporting: V1/V2 live data streaming (enable/disable, parse entity values)
+- Tables: Read, write, enable/disable tuning tables
+- Drivers: Read/write ECU driver configuration
+- Bootloader / Firmware: Firmware update commands
+- Device Info: Product name, model, version
+- Status: ECU status queries
+- Hash: Firmware hash verification
+- Logging: ECU-side logging control
+- Password: Password protection commands
+- Trigger Logger: Trigger logger channel/sync commands
 
 ## Building
 

@@ -8,8 +8,8 @@ Connects to a ME221 ECU over TCP or serial (including Android USB serial), loads
 
 ## Platforms
 
-- **Windows** -- TCP and serial connections. Simulated GPS for testing.
-- **Android** -- TCP, serial, and USB serial (via UsbSerialForAndroid). Real GPS via MAUI Geolocation API. Min API 26, targets API 37.
+- Windows: TCP and serial connections. Simulated GPS for testing.
+- Android: TCP, serial, and USB serial (via UsbSerialForAndroid). Real GPS via MAUI Geolocation API. Min API 26, targets API 37.
 
 iOS and macOS are in the csproj but not actively developed.
 
@@ -116,9 +116,9 @@ This starts the Vite dev server. If you're running the MAUI app in DEBUG, it aut
 
 ## Dependencies
 
-- `ME221.Comms` -- protocol library
-- `ME221.Data` -- domain models
-- `ME221Dashboard.Comms` -- serial channel
-- `Microsoft.Maui.Controls` -- UI framework
-- `UsbSerialForAndroid` -- Android USB serial (Android only)
-- `Serilog` -- logging
+- ME221.Comms: protocol library
+- ME221.Data: domain models
+- ME221Dashboard.Comms: serial channel
+- Microsoft.Maui.Controls: UI framework
+- UsbSerialForAndroid: Android USB serial (Android only)
+- Serilog: logging

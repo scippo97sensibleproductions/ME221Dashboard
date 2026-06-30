@@ -11,7 +11,6 @@
   import DriverListPage from './pages/DriverListPage.svelte';
   import DriverEditorPage from './pages/DriverEditorPage.svelte';
   import LogsPage from './pages/LogsPage.svelte';
-  import MetroDemoPage from './pages/MetroDemoPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
   import type { NotificationType } from './lib/NotificationModal.svelte';
   import ToastContainer from './lib/ToastContainer.svelte';
@@ -38,7 +37,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'metroDemo';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs';
   let currentPage = $state<Page>('splash');
   let selectedTableId = $state<number>(0);
   let selectedDriverId = $state<number>(0);
@@ -497,8 +496,6 @@
         <DriverEditorPage driverId={selectedDriverId} onNavigate={navigateTo} />
       {:else if currentPage === 'logs'}
         <LogsPage onNavigate={navigateTo} />
-      {:else if currentPage === 'metroDemo'}
-        <MetroDemoPage />
       {/if}
     </main>
   </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconPalette } from '@tabler/icons-svelte';
+  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
 
   let { isConnected, dashboardNames, activeDashboard, currentPage, sidebarVisible, onSwitchDashboard, onDeleteDashboard, onNewDashboard, onNavigate, onDisconnect, onHideSidebar, onShowSidebar, onExportDashboard, onImportDashboard, onVehicleConfig }: {
@@ -31,7 +31,6 @@
     currentPage === 'logs' ? 'logs' :
     currentPage === 'dashboard' ? 'dashboard' :
     currentPage === 'driverList' || currentPage === 'driverEditor' ? 'drivers' :
-    currentPage === 'metroDemo' ? 'metroDemo' :
     ''
   );
 
@@ -41,7 +40,6 @@
     tables:    '#D83B01',
     drivers:   '#107C10',
     logs:      '#E81123',
-    metroDemo: '#D83B01',
   };
 
   let showBar = $derived(sidebarVisible && currentPage !== 'welcome' && currentPage !== 'calibration');
@@ -80,27 +78,11 @@
       </button>
       <button
         class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
-        style="color: {activePage === 'logs' ? pageAccents.logs : 'var(--metro-text-secondary, #A0A0A0)'};"
-        onclick={() => onNavigate('logs')}
+        style="color: var(--metro-text-secondary, #A0A0A0);"
         aria-label="Logs"
       >
         <IconMessage size={20} />
         <span class="text-[10px] leading-tight">Logs</span>
-        {#if activePage === 'logs'}
-          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.logs};"></span>
-        {/if}
-      </button>
-      <button
-        class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
-        style="color: {activePage === 'metroDemo' ? pageAccents.metroDemo : 'var(--metro-text-secondary, #A0A0A0)'};"
-        onclick={() => onNavigate('metroDemo')}
-        aria-label="Style Guide"
-      >
-        <IconPalette size={20} />
-        <span class="text-[10px] leading-tight">Style</span>
-        {#if activePage === 'metroDemo'}
-          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.metroDemo};"></span>
-        {/if}
       </button>
 
     {:else}
@@ -219,10 +201,6 @@
         <span class="text-[10px] leading-tight">More</span>
       </button>
       <Dropdown triggeredBy="#sidebar-more-btn" placement="top-end" class="w-48">
-        <DropdownItem onclick={() => onNavigate('metroDemo')} class="flex items-center gap-2.5 text-[13px]">
-          <IconPalette size={15} class="shrink-0" />
-          <span>Style Guide</span>
-        </DropdownItem>
         <DropdownItem onclick={onVehicleConfig} class="flex items-center gap-2.5 text-[13px]">
           <IconCar size={15} class="shrink-0" />
           <span>Vehicle</span>
