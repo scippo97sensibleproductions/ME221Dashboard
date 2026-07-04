@@ -14,6 +14,10 @@ public partial class HybridBridgeService
     private int? _vssModeConfigIndex;
     private bool? _cachedVssSpeedInMph;
 
+    // ─── Odometer Throttle ──────────────────────────────────────────────────
+    private bool _odometerDirty;
+    private Timer? _odometerFlushTimer;
+
     // ─── GPS Methods ────────────────────────────────────────────────────────
 
     /// <summary>
@@ -252,8 +256,9 @@ public partial class HybridBridgeService
         else
             state.CurrentValue += distanceKm * 0.621371; // km to miles
 
-        // Persist immediately — odometer value must never be lost
-        PersistOdometerAsync(activeName, state).ConfigureAwait(false);
+        // Mark dirty — flush every 5 seconds or on disconnect/app-close
+        _odometerDirty = true;
+        _odometerFlushTimer ??= new Timer(_ => FlushOdometer(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private async Task PersistOdometerAsync(string dashboardName, OdometerConfig state)
@@ -272,6 +277,19 @@ public partial class HybridBridgeService
         {
             _logger.LogWarning(ex, "Failed to persist odometer for '{Dashboard}'", dashboardName);
         }
+    }
+
+    /// <summary>
+    /// Flush dirty odometer to disk. Called by the 5-second timer and on disconnect.
+    /// </summary>
+    internal void FlushOdometer()
+    {
+        if (!_odometerDirty) return;
+        _odometerDirty = false;
+        var activeName = _activeDashboardName;
+        if (activeName == null) return;
+        if (!_odometerByDashboard.TryGetValue(activeName, out var state)) return;
+        _ = PersistOdometerAsync(activeName, state);
     }
 
     // ─── VSS Driver Discovery ──────────────────────────────────────────────

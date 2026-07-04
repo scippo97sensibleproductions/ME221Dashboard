@@ -13,6 +13,8 @@
   let paused = $state(false);
   let scrollEl: HTMLDivElement | null = $state(null);
   let unsubscribe: (() => void) | null = null;
+  let mounted = false;
+  let streamingStarted = false;
 
   const levels = ['All', 'Trace', 'Debug', 'Information', 'Warning', 'Error', 'Critical'];
   const levelColors: Record<string, string> = {
@@ -57,13 +59,30 @@
   }
 
   onMount(async () => {
-    const existing = await HybridBridge.getRecentLogs(500);
-    if (existing.entries) {
-      logs = existing.entries;
+    mounted = true;
+    try {
+      const existing = await HybridBridge.getRecentLogs(500);
+      if (!mounted) return;
+      if (existing.entries) {
+        logs = existing.entries;
+      }
+      if (!mounted) return;
+      await HybridBridge.startLogStreaming();
+      if (!mounted) {
+        // We started streaming but the page was destroyed before the listener
+        // attached. Stop it back down so the C# side doesn't keep emitting for nothing.
+        HybridBridge.stopLogStreaming().catch(() => {});
+        return;
+      }
+      streamingStarted = true;
+    } catch (err) {
+      if (!mounted) return;
+      console.warn('Failed to start log streaming:', err);
+      return;
     }
-    await HybridBridge.startLogStreaming();
 
     unsubscribe = HybridBridge.onMessage((event) => {
+      if (!mounted || paused) return;
       if (event.event === 'logEntry') {
         const entry = event as LogEntryEvent;
         logs = [...logs.slice(-499), entry];
@@ -74,14 +93,26 @@
     requestAnimationFrame(scrollToBottom);
   });
 
-  onDestroy(async () => {
-    unsubscribe?.();
-    await HybridBridge.stopLogStreaming();
+  onDestroy(() => {
+    mounted = false;
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+    if (streamingStarted) {
+      // Fire-and-forget — onDestroy cannot await. Streaming on the C# side
+      // is idempotent (single _streaming flag) so a Stop is always safe even
+      // if Mount runs concurrently.
+      HybridBridge.stopLogStreaming().catch(() => {});
+      streamingStarted = false;
+    }
   });
 
   async function clearLogs() {
-    await HybridBridge.clearLogs();
     logs = [];
+    // Order matters: clear in JS before asking C# to clear so we don't see
+    // a race where C# clear arrives before we drop our local list.
+    await HybridBridge.clearLogs();
   }
 
   function copyAllLogs() {

@@ -15,6 +15,7 @@
   let favorites = $state<Set<number>>(new Set());
   let recentIds = $state<number[]>([]);
   let loading = $state(true);
+  let mounted = false;
 
   function loadFavorites() {
     try {
@@ -92,15 +93,17 @@
   }
 
   onMount(async () => {
+    mounted = true;
     loadFavorites();
     loadRecent();
     try {
       const result = await HybridBridge.getDriverDefinitions();
+      if (!mounted) return;
       drivers = result.drivers || [];
     } catch (e) {
       console.error('Failed to load driver definitions:', e);
     } finally {
-      loading = false;
+      if (mounted) loading = false;
     }
   });
 </script>

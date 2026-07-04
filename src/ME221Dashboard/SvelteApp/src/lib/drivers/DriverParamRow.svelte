@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DriverParamDefinition } from '../lib/HybridBridgeTypes';
+  import type { DriverParamDefinition } from '../HybridBridgeTypes';
 
   let { param, value, disabled = false, onValueChange, onOpenPrecisionModal, onOpenComboBox }: {
     param: DriverParamDefinition;

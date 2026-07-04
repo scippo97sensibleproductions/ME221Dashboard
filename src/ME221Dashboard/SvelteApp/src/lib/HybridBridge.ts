@@ -61,55 +61,102 @@ export type {
 
 // ─── Bridge Implementation ──────────────────────────────────────────────────
 
+let _bridgeAlive = true;
+let _pendingCalls = 0;
+const _activeCalls = new Map<string, { method: string; start: number }>();
+
+// Serial queue for ALL bridge calls — the WebView2 InvokeDotNet handler
+// processes one HTTP request at a time. Concurrent calls cause
+// ERR_ADDRESS_UNREACHABLE and permanently kill the bridge.
+let _bridgeQueue: Promise<any> = Promise.resolve();
+
 function isWebViewAvailable(): boolean {
   return typeof window !== 'undefined' && 'HybridWebView' in window;
+}
+
+/** Queue any bridge call through the serial queue. */
+function queuedInvoke<T>(fn: () => Promise<T>): Promise<T> {
+  const p = _bridgeQueue.then(fn, fn);
+  _bridgeQueue = p.catch(() => {});
+  return p;
+}
+
+async function invokeDotNetLogged(method: string, params?: any[]): Promise<any> {
+  return queuedInvoke(async () => {
+    const callId = `${method}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const start = performance.now();
+    _pendingCalls++;
+    _activeCalls.set(callId, { method, start });
+
+    if (!_bridgeAlive) {
+      console.warn(`[Bridge] SKIP ${method} — bridge is DEAD`);
+      _pendingCalls--;
+      _activeCalls.delete(callId);
+      throw new Error('Bridge is dead — invokeDotNet was called after a previous ERR_ADDRESS_UNREACHABLE');
+    }
+
+    try {
+      const result = await window.HybridWebView.InvokeDotNet(method, params);
+      return result;
+    } catch (err: any) {
+      const msg = err?.message ?? String(err);
+
+      if (msg.includes('ERR_ADDRESS_UNREACHABLE') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Maximum call stack size exceeded')) {
+        console.error(`[Bridge] ${method} FAILED — BRIDGE DIED: ${msg}`);
+        _bridgeAlive = false;
+      }
+      throw err;
+    } finally {
+      _pendingCalls--;
+      _activeCalls.delete(callId);
+    }
+  });
+}
+
+/** Reset bridge state (call after recovery) */
+export function resetBridgeState() {
+  _bridgeAlive = true;
+}
+
+export function isBridgeAlive() {
+  return _bridgeAlive;
 }
 
 export const HybridBridge = {
   connectTcp: async (host: string, port: number): Promise<ConnectionResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ConnectTcp', [host, port]);
+    const result = await invokeDotNetLogged('ConnectTcp', [host, port]);
     return JSON.parse(result);
   },
 
   connectSerial: async (portName: string, baudRate: number = 230400): Promise<ConnectionResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ConnectSerial', [portName, baudRate]);
+    const result = await invokeDotNetLogged('ConnectSerial', [portName, baudRate]);
     return JSON.parse(result);
   },
 
   disconnect: async (): Promise<ConnectionResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('Disconnect');
+    const result = await invokeDotNetLogged('Disconnect');
     return JSON.parse(result);
   },
 
   getConnectionState: async (): Promise<ConnectionStateInfo> => {
     if (!isWebViewAvailable()) return { state: 'Disconnected' };
-    const result = await window.HybridWebView.InvokeDotNet('GetConnectionState');
+    const result = await invokeDotNetLogged('GetConnectionState');
     return JSON.parse(result);
   },
 
   getAvailablePorts: async (): Promise<AvailablePortsResult> => {
     if (!isWebViewAvailable()) return { ports: [] };
-    const result = await window.HybridWebView.InvokeDotNet('GetAvailablePorts');
+    const result = await invokeDotNetLogged('GetAvailablePorts');
     return JSON.parse(result);
   },
 
   enableReporting: async (): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     try {
-      const result = await window.HybridWebView.InvokeDotNet('EnableReporting');
-      return JSON.parse(result);
-    } catch {
-      return { success: false, error: 'Bridge unavailable' };
-    }
-  },
-
-  disableReporting: async (): Promise<{ success: boolean; error?: string }> => {
-    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    try {
-      const result = await window.HybridWebView.InvokeDotNet('DisableReporting');
+      const result = await invokeDotNetLogged('EnableReporting');
       return JSON.parse(result);
     } catch {
       return { success: false, error: 'Bridge unavailable' };
@@ -118,31 +165,31 @@ export const HybridBridge = {
 
   getEcuInfo: async (): Promise<EcuInfoResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('GetEcuInfo');
+    const result = await invokeDotNetLogged('GetEcuInfo');
     return JSON.parse(result);
   },
 
   getPersistedCalibration: async (): Promise<PersistedCalibrationResult> => {
     if (!isWebViewAvailable()) return { type: 'Error', error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('GetPersistedCalibration');
+    const result = await invokeDotNetLogged('GetPersistedCalibration');
     return JSON.parse(result);
   },
 
   checkCalibrationMatch: async (product: string, model: string, version: string): Promise<CalibrationMatchResult> => {
     if (!isWebViewAvailable()) return { matched: false, hasSaved: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('CheckCalibrationMatch', [product, model, version]);
+    const result = await invokeDotNetLogged('CheckCalibrationMatch', [product, model, version]);
     return JSON.parse(result);
   },
 
   pickAndLoadCalibration: async (): Promise<PickCalibrationResult> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('PickAndLoadCalibration');
+    const result = await invokeDotNetLogged('PickAndLoadCalibration');
     return JSON.parse(result);
   },
 
   forceUseCalibration: async (): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ForceUseCalibration');
+    const result = await invokeDotNetLogged('ForceUseCalibration');
     return JSON.parse(result);
   },
 
@@ -150,7 +197,7 @@ export const HybridBridge = {
 
   getPlatform: async (): Promise<string> => {
     if (!isWebViewAvailable()) return 'Browser';
-    const result = await window.HybridWebView.InvokeDotNet('GetPlatform');
+    const result = await invokeDotNetLogged('GetPlatform');
     return JSON.parse(result).platform;
   },
 
@@ -163,31 +210,31 @@ export const HybridBridge = {
     allGranted: boolean;
   }> => {
     if (!isWebViewAvailable()) return { isAndroid: false, usbHostAvailable: false, usbPermissionGranted: false, locationGranted: true, storageGranted: true, allGranted: true };
-    const result = await window.HybridWebView.InvokeDotNet('GetPermissionStatus');
+    const result = await invokeDotNetLogged('GetPermissionStatus');
     return JSON.parse(result);
   },
 
   requestUsbPermission: async (): Promise<{ granted: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { granted: true };
-    const result = await window.HybridWebView.InvokeDotNet('RequestUsbPermission');
+    const result = await invokeDotNetLogged('RequestUsbPermission');
     return JSON.parse(result);
   },
 
   requestLocationPermission: async (): Promise<{ granted: boolean; status?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { granted: true };
-    const result = await window.HybridWebView.InvokeDotNet('RequestLocationPermission');
+    const result = await invokeDotNetLogged('RequestLocationPermission');
     return JSON.parse(result);
   },
 
   requestStoragePermission: async (): Promise<{ granted: boolean; action?: string; message?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { granted: true };
-    const result = await window.HybridWebView.InvokeDotNet('RequestStoragePermission');
+    const result = await invokeDotNetLogged('RequestStoragePermission');
     return JSON.parse(result);
   },
 
   getAvailableSensors: async (dashboardName: string = 'default'): Promise<AvailableSensorsResult> => {
     if (!isWebViewAvailable()) return { sensors: [], selectedCount: 0, totalCount: 0, gridRows: 4, gridColumns: 7, backgroundImagePath: null };
-    const result = await window.HybridWebView.InvokeDotNet('GetAvailableSensors', [dashboardName]);
+    const result = await invokeDotNetLogged('GetAvailableSensors', [dashboardName]);
     return JSON.parse(result);
   },
 
@@ -198,20 +245,27 @@ export const HybridBridge = {
     backgroundImagePath: string | null;
   }): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('SaveSensorSelection', [JSON.stringify(payload)]);
+    const result = await invokeDotNetLogged('SaveSensorSelection', [JSON.stringify(payload)]);
     return JSON.parse(result);
   },
 
   getDashboardConfig: async (dashboardName: string = 'default'): Promise<DashboardConfigResult> => {
     if (!isWebViewAvailable()) return { found: false, gauges: [], gridRows: 4, gridColumns: 7 };
-    const result = await window.HybridWebView.InvokeDotNet('GetDashboardConfig', [dashboardName]);
+    const result = await invokeDotNetLogged('GetDashboardConfig', [dashboardName]);
     return JSON.parse(result);
   },
 
-  saveDashboardLayout: async (dashboardName: string, gauges: SaveLayoutPayload[]): Promise<{ success: boolean; error?: string }> => {
+  saveDashboardLayout: async (dashboardName: string, gauges: SaveLayoutPayload[], tables?: { tableId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; zIndex: number; colorScheme?: string; showLabels?: boolean; showDimensionBadge?: boolean }[]): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const payload = JSON.stringify({ dashboardName, gauges });
-    const result = await window.HybridWebView.InvokeDotNet('SaveDashboardLayout', [payload]);
+    const payload = JSON.stringify({ dashboardName, gauges, tables });
+    const result = await invokeDotNetLogged('SaveDashboardLayout', [payload]);
+    return JSON.parse(result);
+  },
+
+  saveDashboardTables: async (dashboardName: string, tables: { tableId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; zIndex: number; colorScheme?: string; showLabels?: boolean; showDimensionBadge?: boolean }[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const payload = JSON.stringify({ dashboardName, tables });
+    const result = await invokeDotNetLogged('SaveDashboardTables', [payload]);
     return JSON.parse(result);
   },
 
@@ -219,31 +273,31 @@ export const HybridBridge = {
 
   getDashboardNames: async (): Promise<{ names: string[]; activeDashboard: string }> => {
     if (!isWebViewAvailable()) return { names: ['default'], activeDashboard: 'default' };
-    const result = await window.HybridWebView.InvokeDotNet('GetDashboardNames');
+    const result = await invokeDotNetLogged('GetDashboardNames');
     return JSON.parse(result);
   },
 
   createDashboard: async (name: string): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('CreateDashboard', [name]);
+    const result = await invokeDotNetLogged('CreateDashboard', [name]);
     return JSON.parse(result);
   },
 
   deleteDashboard: async (name: string): Promise<{ success: boolean; activeDashboard?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('DeleteDashboard', [name]);
+    const result = await invokeDotNetLogged('DeleteDashboard', [name]);
     return JSON.parse(result);
   },
 
   renameDashboard: async (oldName: string, newName: string): Promise<{ success: boolean; activeDashboard?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('RenameDashboard', [oldName, newName]);
+    const result = await invokeDotNetLogged('RenameDashboard', [oldName, newName]);
     return JSON.parse(result);
   },
 
   setActiveDashboard: async (name: string): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('SetActiveDashboard', [name]);
+    const result = await invokeDotNetLogged('SetActiveDashboard', [name]);
     return JSON.parse(result);
   },
 
@@ -251,19 +305,19 @@ export const HybridBridge = {
 
   pickDashboardBackground: async (): Promise<{ picked: boolean; path?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('PickDashboardBackground');
+    const result = await invokeDotNetLogged('PickDashboardBackground');
     return JSON.parse(result);
   },
 
   pickGaugeTexture: async (gaugeId: string): Promise<{ picked: boolean; path?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('PickGaugeTexture', [gaugeId]);
+    const result = await invokeDotNetLogged('PickGaugeTexture', [gaugeId]);
     return JSON.parse(result);
   },
 
   getImageBase64: async (path: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('GetImageBase64', [path]);
+    const result = await invokeDotNetLogged('GetImageBase64', [path]);
     return JSON.parse(result);
   },
 
@@ -277,20 +331,23 @@ export const HybridBridge = {
     incrementValue: number; defaultValue: number | null;
   }>; error?: string }> => {
     if (!isWebViewAvailable()) return { tables: [] };
-    const result = await window.HybridWebView.InvokeDotNet('GetTableDefinitions');
+    const result = await invokeDotNetLogged('GetTableDefinitions');
     return JSON.parse(result);
   },
 
   readTableData: async (tableId: number): Promise<{
     success: boolean;
     enabled?: boolean;
+    rows?: number;
+    cols?: number;
+    tableType?: string;
     input0?: number[];
     input1?: number[];
     output?: number[];
     error?: string;
   }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ReadTableData', [tableId]);
+    const result = await invokeDotNetLogged('ReadTableData', [tableId]);
     return JSON.parse(result);
   },
 
@@ -298,7 +355,7 @@ export const HybridBridge = {
     results: Record<number, { success: boolean; enabled?: boolean; input0?: number[]; input1?: number[]; output?: number[] }>;
   }> => {
     if (!isWebViewAvailable()) return { results: {} };
-    const result = await window.HybridWebView.InvokeDotNet('ReadTableDataBatch', [JSON.stringify(tableIds)]);
+    const result = await invokeDotNetLogged('ReadTableDataBatch', [JSON.stringify(tableIds)]);
     return JSON.parse(result);
   },
 
@@ -308,7 +365,7 @@ export const HybridBridge = {
   }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const payload = JSON.stringify({ tableId, input0, input1, output });
-    const result = await window.HybridWebView.InvokeDotNet('WriteTableData', [payload]);
+    const result = await invokeDotNetLogged('WriteTableData', [payload]);
     return JSON.parse(result);
   },
 
@@ -324,7 +381,19 @@ export const HybridBridge = {
     // which must be ISO-8859-1 — Unicode chars break it
     const b64 = btoa(unescape(encodeURIComponent(content)));
     const payload = JSON.stringify({ filename, content: b64, fileExtension, encoding: 'base64' });
-    const result = await window.HybridWebView.InvokeDotNet('SaveFile', [payload]);
+    const result = await invokeDotNetLogged('SaveFile', [payload]);
+    return JSON.parse(result);
+  },
+
+  saveBinaryFile: async (filename: string, base64Content: string, fileExtension: string): Promise<{
+    success: boolean;
+    path?: string;
+    error?: string;
+  }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    // content is already base64 — send directly without re-encoding
+    const payload = JSON.stringify({ filename, content: base64Content, fileExtension, encoding: 'base64' });
+    const result = await invokeDotNetLogged('SaveFile', [payload]);
     return JSON.parse(result);
   },
 
@@ -335,7 +404,7 @@ export const HybridBridge = {
   }> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
     try {
-      const result = await window.HybridWebView.InvokeDotNet('ImportYamlTable');
+      const result = await invokeDotNetLogged('ImportYamlTable');
       return JSON.parse(result);
     } catch (e) {
       return { picked: false, error: e instanceof Error ? e.message : 'Bridge call failed' };
@@ -349,7 +418,7 @@ export const HybridBridge = {
   }> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
     try {
-      const result = await window.HybridWebView.InvokeDotNet('ImportCsvTable');
+      const result = await invokeDotNetLogged('ImportCsvTable');
       return JSON.parse(result);
     } catch (e) {
       return { picked: false, error: e instanceof Error ? e.message : 'Bridge call failed' };
@@ -360,19 +429,19 @@ export const HybridBridge = {
 
   startGps: async (): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('StartGps');
+    const result = await invokeDotNetLogged('StartGps');
     return JSON.parse(result);
   },
 
   stopGps: async (): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('StopGps');
+    const result = await invokeDotNetLogged('StopGps');
     return JSON.parse(result);
   },
 
   getGpsStatus: async (): Promise<GpsStatus> => {
     if (!isWebViewAvailable()) return { available: false, isRunning: false };
-    const result = await window.HybridWebView.InvokeDotNet('GetGpsStatus');
+    const result = await invokeDotNetLogged('GetGpsStatus');
     return JSON.parse(result);
   },
 
@@ -380,13 +449,13 @@ export const HybridBridge = {
 
   exportDashboard: async (dashboardName: string): Promise<{ success: boolean; path?: string; message?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ExportDashboard', [dashboardName]);
+    const result = await invokeDotNetLogged('ExportDashboard', [dashboardName]);
     return JSON.parse(result);
   },
 
   importDashboard: async (): Promise<{ picked: boolean; success?: boolean; dashboardName?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
-    const result = await window.HybridWebView.InvokeDotNet('ImportDashboard');
+    const result = await invokeDotNetLogged('ImportDashboard');
     return JSON.parse(result);
   },
 
@@ -394,13 +463,13 @@ export const HybridBridge = {
 
   startLogStreaming: async (): Promise<{ success: boolean }> => {
     if (!isWebViewAvailable()) return { success: false };
-    const result = await window.HybridWebView.InvokeDotNet('StartLogStreaming');
+    const result = await invokeDotNetLogged('StartLogStreaming');
     return JSON.parse(result);
   },
 
   stopLogStreaming: async (): Promise<{ success: boolean }> => {
     if (!isWebViewAvailable()) return { success: false };
-    const result = await window.HybridWebView.InvokeDotNet('StopLogStreaming');
+    const result = await invokeDotNetLogged('StopLogStreaming');
     return JSON.parse(result);
   },
 
@@ -408,13 +477,13 @@ export const HybridBridge = {
     timestamp: string; level: string; category: string; message: string; exception?: string;
   }> }> => {
     if (!isWebViewAvailable()) return { entries: [] };
-    const result = await window.HybridWebView.InvokeDotNet('GetRecentLogs', count !== undefined ? [count] : []);
+    const result = await invokeDotNetLogged('GetRecentLogs', count !== undefined ? [count] : []);
     return JSON.parse(result);
   },
 
   clearLogs: async (): Promise<{ success: boolean }> => {
     if (!isWebViewAvailable()) return { success: false };
-    const result = await window.HybridWebView.InvokeDotNet('ClearLogs');
+    const result = await invokeDotNetLogged('ClearLogs');
     return JSON.parse(result);
   },
 
@@ -452,28 +521,28 @@ export const HybridBridge = {
 
   getOdometer: async (): Promise<{ value: number; unit: string; useKilometers: boolean; speedSource: string; vssSpeedInMph: boolean }> => {
     if (!isWebViewAvailable()) return { value: 0, unit: 'km', useKilometers: true, speedSource: 'gps', vssSpeedInMph: false };
-    const result = await window.HybridWebView.InvokeDotNet('GetOdometer');
+    const result = await invokeDotNetLogged('GetOdometer');
     return JSON.parse(result);
   },
 
   resetOdometer: async (): Promise<void> => {
     if (!isWebViewAvailable()) return;
-    await window.HybridWebView.InvokeDotNet('ResetOdometer');
+    await invokeDotNetLogged('ResetOdometer');
   },
 
   setOdometerValue: async (value: number): Promise<void> => {
     if (!isWebViewAvailable()) return;
-    await window.HybridWebView.InvokeDotNet('SetOdometerValue', [value]);
+    await invokeDotNetLogged('SetOdometerValue', [value]);
   },
 
   setOdometerUnit: async (useKilometers: boolean): Promise<void> => {
     if (!isWebViewAvailable()) return;
-    await window.HybridWebView.InvokeDotNet('SetOdometerUnit', [useKilometers]);
+    await invokeDotNetLogged('SetOdometerUnit', [useKilometers]);
   },
 
   setOdometerSpeedSource: async (source: 'gps' | 'vss'): Promise<void> => {
     if (!isWebViewAvailable()) return;
-    await window.HybridWebView.InvokeDotNet('SetOdometerSpeedSource', [source === 'vss' ? 1 : 0]);
+    await invokeDotNetLogged('SetOdometerSpeedSource', [source === 'vss' ? 1 : 0]);
   },
 
   // ─── Vehicle Config (global — not per-dashboard) ─────────────────────
@@ -485,7 +554,7 @@ export const HybridBridge = {
   getVehicleConfig: async (): Promise<VehicleConfig> => {
     if (HybridBridge._configCache) return HybridBridge._configCache;
     if (!isWebViewAvailable()) return defaultDerivedConfig();
-    const result = await window.HybridWebView.InvokeDotNet('GetVehicleConfig', []);
+    const result = await invokeDotNetLogged('GetVehicleConfig', []);
     const config: VehicleConfig = { ...defaultDerivedConfig(), ...JSON.parse(result) };
     HybridBridge._configCache = config;
     return config;
@@ -494,7 +563,7 @@ export const HybridBridge = {
   setVehicleConfig: async (config: VehicleConfig): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
     console.log('[VEHCFG] setVehicleConfig', JSON.parse(JSON.stringify(config)));
-    const result = await window.HybridWebView.InvokeDotNet('SetVehicleConfig', [JSON.stringify(config)]);
+    const result = await invokeDotNetLogged('SetVehicleConfig', [JSON.stringify(config)]);
     const parsed = JSON.parse(result);
     if (parsed.success) {
       HybridBridge._configCache = config;
@@ -509,7 +578,7 @@ export const HybridBridge = {
 
   setDebugSpeed: async (speedKmh: number | null): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('SetDebugSpeed', [speedKmh]);
+    const result = await invokeDotNetLogged('SetDebugSpeed', [speedKmh]);
     return JSON.parse(result);
   },
 
@@ -517,13 +586,13 @@ export const HybridBridge = {
 
   getDriverDefinitions: async (): Promise<DriverDefinitionsResult> => {
     if (!isWebViewAvailable()) return { drivers: [], error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('GetDriverDefinitions');
+    const result = await invokeDotNetLogged('GetDriverDefinitions');
     return JSON.parse(result);
   },
 
   readDriverData: async (driverId: number): Promise<DriverDataResult> => {
     if (!isWebViewAvailable()) return { configs: [], outputLinkIds: [], inputLinkIds: [], error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('ReadDriverData', [JSON.stringify({ driverId })]);
+    const result = await invokeDotNetLogged('ReadDriverData', [JSON.stringify({ driverId })]);
     return JSON.parse(result);
   },
 
@@ -534,7 +603,7 @@ export const HybridBridge = {
     inputLinkIds: number[],
   ): Promise<DriverSetResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('SetDriverConfig', [
+    const result = await invokeDotNetLogged('SetDriverConfig', [
       JSON.stringify({ driverId, configs, outputLinkIds, inputLinkIds }),
     ]);
     return JSON.parse(result);
@@ -542,13 +611,13 @@ export const HybridBridge = {
 
   storeDriver: async (driverId: number): Promise<DriverSetResult> => {
     if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('StoreDriver', [JSON.stringify({ driverId })]);
+    const result = await invokeDotNetLogged('StoreDriver', [JSON.stringify({ driverId })]);
     return JSON.parse(result);
   },
 
   getDataLinks: async (): Promise<DataLinksResult> => {
     if (!isWebViewAvailable()) return { dataLinks: [], error: 'No WebView' };
-    const result = await window.HybridWebView.InvokeDotNet('GetDataLinks');
+    const result = await invokeDotNetLogged('GetDataLinks');
     return JSON.parse(result);
   },
 };

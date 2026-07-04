@@ -218,15 +218,21 @@ public sealed class ProtocolService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         if (_logger is not null) LogDisposing(_logger);
         _isReportingActive = false;
+        if (_logger is not null) _logger.LogCritical("SHUTDOWN: ProtocolService — dispose heartbeat timer");
         await _heartbeatTimer.DisposeAsync().ConfigureAwait(false);
+        if (_logger is not null) _logger.LogCritical("SHUTDOWN: ProtocolService — cancel CTS ({Elapsed}ms)", sw.ElapsedMilliseconds);
         await _disposeCts.CancelAsync().ConfigureAwait(false);
         _correlator.CancelAll();
         _uncorrelatedFrames.Writer.TryComplete();
+        if (_logger is not null) _logger.LogCritical("SHUTDOWN: ProtocolService — close channel ({Elapsed}ms)", sw.ElapsedMilliseconds);
         await _channel.CloseAsync().ConfigureAwait(false);
+        if (_logger is not null) _logger.LogCritical("SHUTDOWN: ProtocolService — await receive loop ({Elapsed}ms)", sw.ElapsedMilliseconds);
         await _receiveLoop.ConfigureAwait(false);
         _disposeCts.Dispose();
+        if (_logger is not null) _logger.LogCritical("SHUTDOWN: ProtocolService — DONE ({Elapsed}ms)", sw.ElapsedMilliseconds);
         GC.SuppressFinalize(this);
     }
 }

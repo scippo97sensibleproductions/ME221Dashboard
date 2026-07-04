@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { IconArrowLeft, IconDeviceFloppy, IconRefresh, IconRotate2, IconRotateClockwise2, IconRotate, IconDotsVertical, IconFileExport, IconFileImport, IconArrowsDiff, IconNotebook } from '@tabler/icons-svelte';
+  import { IconArrowLeft, IconDeviceFloppy, IconRefresh, IconRotate2, IconRotateClockwise2, IconRotate, IconDotsVertical, IconFileExport, IconFileImport, IconArrowsDiff, IconNotebook, IconPalette, IconGridDots, IconHistory, IconActivity } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
 
-  let { tableName, dimensions, dirtyCount, undoCount = 0, redoCount = 0, writing = false, diffMode = false, hasNote = false, selecting = false, onToggleDiffMode, onWrite, onRead, onUndo, onRedo, onRevertAll, onBack, onExportCsv, onExportYaml, onImportCsv, onImportYaml, onOpenNotes }: {
+  let { tableName, dimensions, dirtyCount, undoCount = 0, redoCount = 0, writing = false, diffMode = false, hasNote = false, selecting = false, colorScheme = 'thermal', showContours = false, livePanelOpen = false, onToggleDiffMode, onWrite, onRead, onUndo, onRedo, onRevertAll, onBack, onExportCsv, onExportYaml, onImportCsv, onImportYaml, onOpenNotes, onColorSchemeChange, onTableNameClick, onToggleContours, onOpenHistory, onToggleLivePanel }: {
     tableName: string;
     dimensions: string;
     dirtyCount: number;
@@ -12,6 +12,8 @@
     diffMode?: boolean;
     hasNote?: boolean;
     selecting?: boolean;
+    colorScheme?: string;
+    showContours?: boolean;
     onToggleDiffMode?: () => void;
     onWrite: () => void;
     onRead: () => void;
@@ -24,6 +26,12 @@
     onImportCsv?: () => void;
     onImportYaml?: () => void;
     onOpenNotes?: () => void;
+    onColorSchemeChange?: (scheme: string) => void;
+    onTableNameClick?: () => void;
+    onToggleContours?: () => void;
+    onOpenHistory?: () => void;
+    livePanelOpen?: boolean;
+    onToggleLivePanel?: () => void;
   } = $props();
 </script>
 
@@ -39,8 +47,9 @@
     <IconArrowLeft size={16} />
   </button>
 
-  <div class="min-w-0 flex-1">
-    <div class="truncate text-[13px] font-bold text-white">{tableName}</div>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="min-w-0 flex-1 cursor-pointer" role="button" tabindex="0" onclick={onTableNameClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTableNameClick?.(); } }}>
+    <div class="truncate text-[13px] font-bold text-white hover:text-[var(--metro-orange)] transition-colors">{tableName}</div>
     <div class="text-[10px] uppercase tracking-wider text-[var(--metro-text-secondary)]">{dimensions}</div>
   </div>
 
@@ -148,6 +157,36 @@
           <IconFileImport size={14} />
           Import YAML
         </DropdownItem>
+      {/if}
+      {#if onToggleContours}
+        <DropdownItem onclick={onToggleContours} class="flex items-center gap-2 text-[13px] {showContours ? 'text-[var(--metro-orange)]' : 'text-[var(--metro-text-secondary)]'}">
+          <IconGridDots size={14} />
+          Contour Lines
+          {#if showContours}<span class="ml-auto text-[10px]">&#10003;</span>{/if}
+        </DropdownItem>
+      {/if}
+      {#if onOpenHistory}
+        <DropdownItem onclick={onOpenHistory} class="flex items-center gap-2 text-[13px] text-[var(--metro-text-secondary)]">
+          <IconHistory size={14} />
+          History
+        </DropdownItem>
+      {/if}
+      {#if onToggleLivePanel}
+        <DropdownItem onclick={onToggleLivePanel} class="flex items-center gap-2 text-[13px] {livePanelOpen ? 'text-[var(--metro-orange)]' : 'text-[var(--metro-text-secondary)]'}">
+          <IconActivity size={14} />
+          Live Data
+          {#if livePanelOpen}<span class="ml-auto text-[10px]">&#10003;</span>{/if}
+        </DropdownItem>
+      {/if}
+      {#if onColorSchemeChange}
+        <div class="border-t border-[var(--metro-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--metro-text-muted)]">Color Scheme</div>
+        {#each [{ id: 'thermal', label: 'Thermal' }, { id: 'viridis', label: 'Viridis' }, { id: 'grayscale', label: 'Grayscale' }, { id: 'ember', label: 'Ember' }] as scheme}
+          <DropdownItem onclick={() => onColorSchemeChange!(scheme.id)} class="flex items-center gap-2 text-[13px] {colorScheme === scheme.id ? 'text-[var(--metro-orange)]' : 'text-[var(--metro-text-secondary)]'}">
+            <IconPalette size={14} />
+            {scheme.label}
+            {#if colorScheme === scheme.id}<span class="ml-auto text-[10px]">&#10003;</span>{/if}
+          </DropdownItem>
+        {/each}
       {/if}
     </Dropdown>
   </div>

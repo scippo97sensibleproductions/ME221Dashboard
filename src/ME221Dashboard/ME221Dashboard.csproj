@@ -32,6 +32,8 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
         <WindowsPackageType>None</WindowsPackageType>
+        <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+        <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
 
         <!-- Android signing (Release) -->
         <AndroidKeyStore Condition="'$(Configuration)' == 'Release'">true</AndroidKeyStore>
@@ -48,6 +50,14 @@
         <MauiFont Include="Resources\Fonts\*" />
         <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
         <MauiAsset Include="wwwroot\**" LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Remove="SvelteApp\**" />
+        <Compile Remove="SvelteApp\**" />
+        <EmbeddedResource Remove="SvelteApp\**" />
+        <MauiAsset Remove="SvelteApp\**" />
+        <None Remove="SvelteApp\**" />
     </ItemGroup>
 
     <ItemGroup>

@@ -10,15 +10,24 @@ export interface UndoEntry {
   oldVal: number;
   newVal: number;
   groupId: string;
+  label?: string;
+  timestamp?: number;
+}
+
+export interface Bookmark {
+  groupId: string;
+  label: string;
+  timestamp: number;
 }
 
 export interface UndoRedoState {
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
+  bookmarks: Bookmark[];
 }
 
 export function createUndoRedoState(): UndoRedoState {
-  return { undoStack: [], redoStack: [] };
+  return { undoStack: [], redoStack: [], bookmarks: [] };
 }
 
 export function pushUndo(
@@ -133,12 +142,15 @@ interface TableSessionCache {
   undoStack: UndoEntry[];
   redoStack: UndoEntry[];
   originalData: TableData;
+  bookmarks: Bookmark[];
 }
 
 const _sessionCache = new Map<number, TableSessionCache>();
 
 export function loadSessionCache(tableId: number): TableSessionCache | undefined {
-  return _sessionCache.get(tableId);
+  const cached = _sessionCache.get(tableId);
+  if (cached) return cached;
+  return loadFromLocalStorage(tableId);
 }
 
 export function saveSessionCache(
@@ -146,10 +158,54 @@ export function saveSessionCache(
   undoStack: UndoEntry[],
   redoStack: UndoEntry[],
   originalData: TableData,
+  bookmarks: Bookmark[] = [],
 ): void {
-  _sessionCache.set(tableId, { undoStack, redoStack, originalData });
+  _sessionCache.set(tableId, { undoStack, redoStack, originalData, bookmarks });
+  saveToLocalStorage(tableId, undoStack, redoStack, originalData, bookmarks);
 }
 
 export function clearSessionCache(tableId: number): void {
   _sessionCache.delete(tableId);
+  try { localStorage.removeItem(`table-undo-${tableId}`); } catch {}
+}
+
+// ─── localStorage persistence (survives app restart) ───────────────────────
+
+const MAX_UNDO_GROUPS = 100;
+
+function saveToLocalStorage(
+  tableId: number,
+  undoStack: UndoEntry[],
+  redoStack: UndoEntry[],
+  originalData: TableData,
+  bookmarks: Bookmark[] = [],
+): void {
+  try {
+    let prunedUndo = undoStack;
+    const groupIds = [...new Set(undoStack.map(e => e.groupId))];
+    const bookmarkedGroupIds = new Set(bookmarks.map(b => b.groupId));
+    if (groupIds.length > MAX_UNDO_GROUPS) {
+      const keepIds = groupIds.slice(groupIds.length - MAX_UNDO_GROUPS);
+      prunedUndo = undoStack.filter(e => keepIds.includes(e.groupId) || bookmarkedGroupIds.has(e.groupId));
+    }
+    const payload = JSON.stringify({ undoStack: prunedUndo, redoStack, originalData, bookmarks });
+    localStorage.setItem(`table-undo-${tableId}`, payload);
+  } catch {}
+}
+
+function loadFromLocalStorage(tableId: number): TableSessionCache | undefined {
+  try {
+    const raw = localStorage.getItem(`table-undo-${tableId}`);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.undoStack) && parsed.originalData) {
+      return {
+        undoStack: parsed.undoStack,
+        redoStack: parsed.redoStack ?? [],
+        originalData: parsed.originalData,
+        bookmarks: parsed.bookmarks ?? [],
+      };
+    }
+  } catch {}
+  return undefined;
 }

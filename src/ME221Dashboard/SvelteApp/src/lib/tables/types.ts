@@ -29,6 +29,7 @@ export interface TableData {
 export interface OperatingPoint {
   rpm: number | null;
   map: number | null;
+  output: number | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -45,21 +46,61 @@ export function getOutputValue(data: TableData, row: number, col: number, cols: 
   return data.output[row * cols + col];
 }
 
-export function heatColor(value: number, min: number, max: number): string {
-  if (max === min) return 'rgb(34, 139, 230)';
-  const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
-  if (t < 0.5) {
-    const s = t * 2;
-    const r = Math.round(34 + (245 - 34) * s);
-    const g = Math.round(139 + (159 - 139) * s);
-    const b = Math.round(230 + (0 - 230) * s);
-    return `rgb(${r}, ${g}, ${b})`;
+// ─── Color Schemes ───────────────────────────────────────────────────────────
+
+export type ColorScheme = 'thermal' | 'viridis' | 'grayscale' | 'ember';
+
+interface ColorStop { pos: number; r: number; g: number; b: number; }
+
+const SCHEMES: Record<ColorScheme, ColorStop[]> = {
+  thermal: [
+    { pos: 0, r: 34, g: 139, b: 230 },
+    { pos: 0.5, r: 245, g: 159, b: 0 },
+    { pos: 1, r: 224, g: 49, b: 49 },
+  ],
+  viridis: [
+    { pos: 0, r: 68, g: 1, b: 84 },
+    { pos: 0.25, r: 59, g: 82, b: 139 },
+    { pos: 0.5, r: 33, g: 144, b: 140 },
+    { pos: 0.75, r: 94, g: 201, b: 98 },
+    { pos: 1, r: 253, g: 231, b: 37 },
+  ],
+  grayscale: [
+    { pos: 0, r: 20, g: 20, b: 20 },
+    { pos: 1, r: 220, g: 220, b: 220 },
+  ],
+  ember: [
+    { pos: 0, r: 10, g: 10, b: 10 },
+    { pos: 0.5, r: 200, g: 50, b: 0 },
+    { pos: 1, r: 255, g: 200, b: 100 },
+  ],
+};
+
+function interpolateStops(stops: ColorStop[], t: number): string {
+  if (!stops || stops.length === 0) return 'rgb(128, 128, 128)';
+  if (t <= stops[0].pos) return `rgb(${stops[0].r}, ${stops[0].g}, ${stops[0].b})`;
+  if (t >= stops[stops.length - 1].pos) {
+    const s = stops[stops.length - 1];
+    return `rgb(${s.r}, ${s.g}, ${s.b})`;
   }
-  const s = (t - 0.5) * 2;
-  const r = Math.round(245 + (224 - 245) * s);
-  const g = Math.round(159 + (49 - 159) * s);
-  const b = Math.round(0 + (49 - 0) * s);
-  return `rgb(${r}, ${g}, ${b})`;
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].pos && t <= stops[i + 1].pos) {
+      const range = stops[i + 1].pos - stops[i].pos;
+      const localT = range === 0 ? 0 : (t - stops[i].pos) / range;
+      const r = Math.round(stops[i].r + (stops[i + 1].r - stops[i].r) * localT);
+      const g = Math.round(stops[i].g + (stops[i + 1].g - stops[i].g) * localT);
+      const b = Math.round(stops[i].b + (stops[i + 1].b - stops[i].b) * localT);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  }
+  const last = stops[stops.length - 1];
+  return `rgb(${last.r}, ${last.g}, ${last.b})`;
+}
+
+export function heatColor(value: number, min: number, max: number, scheme: ColorScheme = 'thermal'): string {
+  if (max === min) return interpolateStops(SCHEMES[scheme], 0.5);
+  const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  return interpolateStops(SCHEMES[scheme], t);
 }
 
 export function findNearestIndex(value: number, axis: number[]): number {

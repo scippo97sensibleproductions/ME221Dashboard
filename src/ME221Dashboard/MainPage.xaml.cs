@@ -9,6 +9,7 @@ public partial class MainPage
 {
     private readonly HybridBridgeService _bridge;
     private readonly ILogger<MainPage> _logger;
+    private volatile bool _shutdownStarted;
 
 #if DEBUG
     private Process? _viteProcess;
@@ -46,7 +47,17 @@ public partial class MainPage
         _logger = logger;
 
 #if DEBUG
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => StopViteDevServer();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            if (_shutdownStarted) return;
+            _shutdownStarted = true;
+            _logger.LogCritical("SHUTDOWN: ProcessExit — disposing bridge before WebView2 COM teardown");
+            _bridge.Dispose();
+            StopViteDevServer();
+            _logger.LogCritical("SHUTDOWN: ProcessExit — done, forcing exit");
+            // Force exit to avoid WebView2 COM deadlock on shutdown
+            Environment.Exit(0);
+        };
         _ = StartViteDevServerAsync();
         hybridWebView.WebResourceRequested += OnWebResourceRequested;
 #endif
@@ -133,28 +144,38 @@ public partial class MainPage
 
     private void OnWebResourceRequested(object? sender, WebViewWebResourceRequestedEventArgs e)
     {
-        // Let HybridWebView runtime handle its internal paths natively
-        var p = e.Uri.AbsolutePath;
-        if (p.StartsWith("/_framework/") || p == "/__hwvInvokeDotNet")
-            return;
-
-        e.Handled = true;
-
-        if (!_viteReady)
+        try
         {
-            var html = "<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;background:#1a1b1e;color:#f8f9fa'><h2>Starting Vite dev server...</h2></body></html>";
-            var bytes = Encoding.UTF8.GetBytes(html);
-            e.SetResponse(200, "OK", "text/html", Task.FromResult<Stream?>(new MemoryStream(bytes)));
-            return;
-        }
+            // Let HybridWebView runtime handle its internal paths natively
+            var p = e.Uri.AbsolutePath;
+            if (p.StartsWith("/_framework/") || p == "/__hwvInvokeDotNet")
+            {
+                return;
+            }
 
-        var ext2 = Path.GetExtension(e.Uri.AbsolutePath);
-        string ct2;
-        if (string.IsNullOrEmpty(ext2))
-            ct2 = e.Uri.AbsolutePath.StartsWith("/@") ? "application/javascript" : "text/html";
-        else
-            ct2 = MimeTypes.TryGetValue(ext2, out var mime2) ? mime2 : "application/octet-stream";
-        e.SetResponse(200, "OK", ct2, ProxyToViteAsync(e.Uri));
+            e.Handled = true;
+
+            if (!_viteReady)
+            {
+                var html = "<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;background:#1a1b1e;color:#f8f9fa'><h2>Starting Vite dev server...</h2></body></html>";
+                var bytes = Encoding.UTF8.GetBytes(html);
+                e.SetResponse(200, "OK", "text/html", Task.FromResult<Stream?>(new MemoryStream(bytes)));
+                return;
+            }
+
+            var ext2 = Path.GetExtension(e.Uri.AbsolutePath);
+            string ct2;
+            if (string.IsNullOrEmpty(ext2))
+                ct2 = e.Uri.AbsolutePath.StartsWith("/@") ? "application/javascript" : "text/html";
+            else
+                ct2 = MimeTypes.TryGetValue(ext2, out var mime2) ? mime2 : "application/octet-stream";
+            e.SetResponse(200, "OK", ct2, ProxyToViteAsync(e.Uri));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OnWebResourceRequested EXCEPTION for {Uri}", e.Uri);
+            System.Diagnostics.Debug.WriteLine($"[MainPage] EXCEPTION: {ex}");
+        }
     }
 
     private static async Task<Stream?> ProxyToViteAsync(Uri uri)
@@ -247,17 +268,29 @@ public partial class MainPage
     {
         if (_viteProcess is not null && !_viteProcess.HasExited)
         {
+            _logger.LogCritical("SHUTDOWN: Killing Vite dev server PID={Pid}", _viteProcess.Id);
             _viteProcess.Kill(entireProcessTree: true);
             _viteProcess.Dispose();
             _viteProcess = null;
-            _logger.LogInformation("Vite dev server stopped");
+            _logger.LogCritical("SHUTDOWN: Vite dev server stopped");
         }
     }
+#endif
 
     protected override void OnDisappearing()
     {
+        _logger.LogCritical("SHUTDOWN: MainPage.OnDisappearing");
         base.OnDisappearing();
+#if DEBUG
         StopViteDevServer();
-    }
 #endif
+        // Dispose bridge before WebView2 native COM teardown can deadlock the process.
+        // The DI container dispose runs too late — WebView2 COM blocks it.
+        if (!_shutdownStarted)
+        {
+            _shutdownStarted = true;
+            _logger.LogCritical("SHUTDOWN: Disposing bridge service");
+            _bridge.Dispose();
+        }
+    }
 }

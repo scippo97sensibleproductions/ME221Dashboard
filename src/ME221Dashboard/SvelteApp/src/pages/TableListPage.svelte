@@ -19,6 +19,7 @@
   let favorites = $state<Set<number>>(new Set());
   let recentIds = $state<number[]>([]);
   let loading = $state(true);
+  let mounted = false;
 
   // Load favorites from localStorage
   function loadFavorites() {
@@ -122,6 +123,7 @@
       const batch = toLoad.slice(i, i + batchSize);
       try {
         const batchResult = await HybridBridge.readTableDataBatch(batch);
+        if (!mounted) return;
         if (batchResult.results) {
           const newCache = { ...tableDataCache };
           for (const [idStr, data] of Object.entries(batchResult.results)) {
@@ -138,18 +140,20 @@
   }
 
   onMount(async () => {
+    mounted = true;
     loadFavorites();
     loadRecent();
     try {
       const result = await HybridBridge.getTableDefinitions();
+      if (!mounted) return;
       tables = (result.tables as TableDefinition[]) || [];
     } catch (e) {
       console.error('Failed to load table definitions:', e);
     } finally {
-      loading = false;
+      if (mounted) loading = false;
     }
     // Load all thumbnails in one batch call after initial render
-    setTimeout(() => loadThumbnails(), 100);
+    setTimeout(() => { if (mounted) loadThumbnails(); }, 100);
   });
 </script>
 

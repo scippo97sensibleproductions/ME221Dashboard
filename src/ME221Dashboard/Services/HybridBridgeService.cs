@@ -143,6 +143,12 @@ public partial class HybridBridgeService : IDisposable
             Platforms.Android.Services.EcuForegroundService.Stop(context);
 #endif
 
+        // Force-persist odometer on disconnect/error — don't wait for the flush timer
+        if (e.NewState is ConnectionState.Disconnected or ConnectionState.Error)
+        {
+            FlushOdometer();
+        }
+
         // Refresh VSS entity ID cache on reconnect if VSS source is active
         if (e.NewState == ConnectionState.Connected && _activeDashboardName != null &&
             _odometerByDashboard.TryGetValue(_activeDashboardName, out var odoState) &&
@@ -261,17 +267,28 @@ public partial class HybridBridgeService : IDisposable
 
     public void Dispose()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogCritical("SHUTDOWN: HybridBridgeService.Dispose START");
+
         // Force-persist odometer on shutdown
         if (_activeDashboardName != null && _odometerByDashboard.TryGetValue(_activeDashboardName, out var odoState))
         {
-            try { PersistOdometerAsync(_activeDashboardName, odoState).GetAwaiter().GetResult(); }
+            try
+            {
+                _logger.LogCritical("SHUTDOWN: Persisting odometer for {Dashboard}", _activeDashboardName);
+                PersistOdometerAsync(_activeDashboardName, odoState).GetAwaiter().GetResult();
+                _logger.LogCritical("SHUTDOWN: Odometer persisted in {Elapsed}ms", sw.ElapsedMilliseconds);
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to persist odometer on dispose"); }
         }
 
+        _logger.LogCritical("SHUTDOWN: Unsubscribing events");
         _connection.ConnectionStateChanged -= OnConnectionStateChanged;
         _liveData.EntitiesUpdated -= OnEntitiesUpdated;
         if (_gps is not null)
             _gps.LocationUpdated -= OnGpsLocationUpdated;
+        _webView = null;
+        _logger.LogCritical("SHUTDOWN: HybridBridgeService.Dispose DONE in {Elapsed}ms", sw.ElapsedMilliseconds);
         GC.SuppressFinalize(this);
     }
 }

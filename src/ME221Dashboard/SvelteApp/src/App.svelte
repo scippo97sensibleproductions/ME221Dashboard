@@ -39,9 +39,13 @@
 
   type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs';
   let currentPage = $state<Page>('splash');
+  let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
   let selectedDriverId = $state<number>(0);
-  let gpsLocation = $state<GpsLocation | null>(null);
+  import { liveDataStore } from './lib/stores/LiveDataStore.svelte';
+
+  // Remove local gpsLocation — use liveDataStore.gps instead
+  let gpsLocation = $derived(liveDataStore.gps);
 
   // ─── Dashboard management ──────────────────────────────────────────────
 
@@ -77,21 +81,24 @@
       if (result.activeDashboard && result.activeDashboard !== activeDashboard) {
         activeDashboard = result.activeDashboard;
       }
-    } catch {}
+    } catch {
+      // ignore — will retry on next connect
+    }
   }
 
   async function switchDashboard(name: string) {
-    if (name === activeDashboard && currentPage === 'dashboard') return;
-    activeDashboard = name;
-    await HybridBridge.setActiveDashboard(name);
-    if (currentPage === 'dashboard' || currentPage === 'config') {
-      const p = currentPage;
-      currentPage = 'splash';
-      await tick();
-      currentPage = p;
-    } else {
-      currentPage = 'dashboard';
+    // Always set active on the C# side if the name actually changed
+    if (name !== activeDashboard) {
+      try {
+        await HybridBridge.setActiveDashboard(name);
+      } catch {
+        // proceed anyway — set active locally
+      }
+      activeDashboard = name;
     }
+    // Always navigate to the dashboard page — user tapped the dashboard
+    // selector, they expect to see that dashboard regardless of current page.
+    navigateTo('dashboard');
   }
 
   async function createDashboard(name: string) {
@@ -196,26 +203,48 @@
     if (page === 'driverEditor' && params?.driverId != null) {
       selectedDriverId = params.driverId as number;
     }
-    currentPage = page as Page;
-    if (page === 'dashboard') {
-      HybridBridge.setActiveDashboard(activeDashboard).catch(() => {});
+    // Track where we came from for sub-pages that need proper back navigation
+    if (currentPage === 'dashboard' || currentPage === 'config' || currentPage === 'tableList' || currentPage === 'driverList') {
+      pageSource = currentPage;
     }
+    currentPage = page as Page;
+  }
+
+  function navigateBack() {
+    const target = pageSource ?? 'dashboard';
+    pageSource = null;
+    navigateTo(target);
+  }
+
+  function navigateToWithSource(page: string, params?: Record<string, unknown>) {
+    navigateTo(page, params);
   }
 
   const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor'];
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_BASE_DELAY_MS = 1500;
 
-  function handleConnectionChange(state: ConnectionStateInfo) {
+  async function handleConnectionChange(state: ConnectionStateInfo) {
+    const wasConnected = connectionState.state === 'Connected';
     connectionState = state;
     if (state.state === 'Connected') {
       // Cancel any pending reconnect — we're back
       cancelReconnect();
-      loadDashboardNames();
-      if (hasCalibratedThisSession) {
-        navigateTo('dashboard');
-      } else {
-        navigateTo('calibration');
+      // Only act on the FIRST Connected transition.
+      // Duplicate events (e.g. from C# after tryReconnect already handled it)
+      // must NOT navigate — they'd clobber the page restore.
+      if (!wasConnected) {
+        // Serialize: dashboard names → reporting → navigate.
+        // The bridge queue handles concurrency, but awaiting here
+        // ensures calibration page doesn't mount and fire getEcuInfo()
+        // before enableReporting() has finished.
+        await loadDashboardNames();
+        await liveDataStore.enableReporting();
+        if (hasCalibratedThisSession) {
+          navigateTo('dashboard');
+        } else {
+          navigateTo('calibration');
+        }
       }
     } else if (state.state === 'Disconnected') {
       // Manual disconnect: go straight to connection page, no retry
@@ -312,17 +341,18 @@
       }
 
       if (result.success) {
-        // Reconnected — re-enable reporting if we were on a dashboard page
+        // Reconnected — serialize: reporting → names → restore page
+        const restorePage = pageBeforeDisconnect;
+        pageBeforeDisconnect = 'connection';
         connectionState = { state: 'Connected' };
-        loadDashboardNames();
-
-        if (DASHBOARD_PAGES.includes(pageBeforeDisconnect)) {
-          try {
-            await HybridBridge.enableReporting();
-          } catch {}
+        await liveDataStore.enableReporting();
+        await loadDashboardNames();
+        // Restore the page the user was on (skip pre-connection pages)
+        if (restorePage !== 'connection' && restorePage !== 'splash' && restorePage !== 'welcome' && restorePage !== 'calibration') {
+          currentPage = restorePage as Page;
+        } else {
+          currentPage = 'dashboard';
         }
-
-        currentPage = pageBeforeDisconnect;
         cancelReconnect();
       } else {
         // Retry with exponential backoff
@@ -353,7 +383,9 @@
       connectionState = state;
       if (state.state === 'Connected') {
         hasCalibratedThisSession = true;
-        loadDashboardNames();
+        // Cold-start connected — serialize: names → reporting → navigate
+        await loadDashboardNames();
+        await liveDataStore.enableReporting();
         navigateTo('dashboard');
         initializing = false;
         return;
@@ -381,28 +413,19 @@
 
   onMount(() => {
     startup();
+    liveDataStore.start();
 
+    // App.svelte still monitors connection changes for reconnect logic
     const unsubscribe = HybridBridge.onMessage((event: BridgeEvent) => {
       if (event.event === 'connectionStateChanged') {
         handleConnectionChange({ state: event.state, error: event.error });
-      } else if (event.event === 'gpsUpdate') {
-        gpsLocation = {
-          latitude: event.latitude,
-          longitude: event.longitude,
-          altitude: event.altitude,
-          speed: event.speed,
-          course: event.course,
-          accuracy: event.accuracy,
-          timestamp: event.timestamp,
-          odometer: event.odometer,
-          odometerUnit: event.odometerUnit,
-        };
       }
     });
 
     return () => {
       cancelReconnect();
       unsubscribe();
+      liveDataStore.stop();
     };
   });
 </script>
@@ -489,7 +512,7 @@
       {:else if currentPage === 'tableList'}
         <TableListPage onNavigate={navigateTo} />
       {:else if currentPage === 'tableEditor'}
-        <TableEditorPage tableId={selectedTableId} onNavigate={navigateTo} />
+        <TableEditorPage tableId={selectedTableId} onNavigate={navigateTo} onBack={navigateBack} />
       {:else if currentPage === 'driverList'}
         <DriverListPage onNavigate={navigateTo} />
       {:else if currentPage === 'driverEditor'}

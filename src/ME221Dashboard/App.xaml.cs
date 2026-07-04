@@ -5,6 +5,8 @@ public partial class App
     public App()
     {
         InitializeComponent();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            System.Diagnostics.Trace.WriteLine("[SHUTDOWN] ProcessExit event fired");
     }
 
     protected override Window CreateWindow(IActivationState? activationState)

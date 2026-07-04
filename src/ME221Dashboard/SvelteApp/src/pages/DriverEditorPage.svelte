@@ -26,6 +26,7 @@
   let loading = $state(true);
   let saving = $state(false);
   let showConfirmDiscard = $state(false);
+  let mounted = false;
 
   let undoState = $state(createDriverUndoRedoState());
 
@@ -190,12 +191,14 @@
   }
 
   onMount(async () => {
+    mounted = true;
     try {
       const [defsResult, dataResult, linksResult] = await Promise.all([
         HybridBridge.getDriverDefinitions(),
         HybridBridge.readDriverData(driverId),
         HybridBridge.getDataLinks(),
       ]);
+      if (!mounted) return;
 
       driverDef = defsResult.drivers.find(d => d.id === driverId) || null;
       if (!driverDef) {
@@ -217,10 +220,12 @@
       dataLinks = linksResult.dataLinks || [];
     } catch (e) {
       console.error('Failed to load driver data:', e);
-      toast('Failed to load driver data', 'error');
-      onNavigate('driverList');
+      if (mounted) {
+        toast('Failed to load driver data', 'error');
+        onNavigate('driverList');
+      }
     } finally {
-      loading = false;
+      if (mounted) loading = false;
     }
   });
 </script>

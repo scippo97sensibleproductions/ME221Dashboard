@@ -18,12 +18,26 @@ public sealed class DashboardConfig
 public sealed class DashboardDefinition
 {
     public Collection<GaugeConfigEntry> Gauges { get; init; } = [];
+    public Collection<DashboardTableEntry> Tables { get; set; } = [];
     public Dictionary<int, SensorCustomization> Customizations { get; init; } = [];
     public string? BackgroundImagePath { get; set; }
     public Dictionary<string, double>? ExtraData { get; init; }
     public bool HeaderVisible { get; set; } = true;
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
+}
+
+public sealed class DashboardTableEntry
+{
+    public int TableId { get; set; }
+    public double FractionX { get; set; } = 0.025;
+    public double FractionY { get; set; } = 0.075;
+    public double WidthFraction { get; set; } = 0.40;
+    public double HeightFraction { get; set; } = 0.40;
+    public int ZIndex { get; set; }
+    public string? ColorScheme { get; set; }
+    public bool? ShowLabels { get; set; }
+    public bool? ShowDimensionBadge { get; set; }
 }
 
 public enum OdometerSpeedSource { Gps = 0, Vss = 1 }

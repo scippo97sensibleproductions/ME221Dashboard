@@ -185,6 +185,7 @@ public partial class HybridBridgeService
                     id = dl.Id,
                     name = dl.Name,
                     category = dl.Category,
+                    measureUnit = dl.MeasureUnit,
                 }),
             }, SJsonOptions);
         }

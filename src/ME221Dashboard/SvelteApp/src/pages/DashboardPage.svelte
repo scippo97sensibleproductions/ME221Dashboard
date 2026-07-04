@@ -2,12 +2,16 @@
   import { onMount, onDestroy, untrack } from 'svelte';
   import GaugeCard from '../lib/gauges/GaugeCard.svelte';
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
-  import { HybridBridge, type BridgeEvent, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
+  import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
+  import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
   import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
   import { computeDerived, type ComputationInputs } from '../lib/derived/compute';
   import { DERIVED_ENTITIES } from '../lib/derived/types';
+  import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
+  import TableWidget from '../lib/tables/TableWidget.svelte';
+  import TableSettingsModal from '../lib/tables/TableSettingsModal.svelte';
 
   let { dashboardName, onNavigate, gpsLocation }: {
     dashboardName: string;
@@ -20,7 +24,7 @@
   let containerHeight = $state(600);
   let gaugeDefs = $state<GaugeConfigEntry[]>([]);
   let entityLookup = $state<Record<string, EntityInfo>>({});
-  let entityValues = $state<Record<string, number | null>>({});
+  let entityValues = liveDataStore.values;
   let dragging = $state<{
     entityId: number;
     startFracX: number;
@@ -30,6 +34,19 @@
     startClientX: number;
     startClientY: number;
   } | null>(null);
+  let tableDragging = $state<{
+    tableId: number;
+    startFracX: number;
+    startFracY: number;
+    deltaFracX: number;
+    deltaFracY: number;
+    startClientX: number;
+    startClientY: number;
+  } | null>(null);
+  // Table settings modal state
+  let tableSettingsOpen = $state(false);
+  let tableSettingsEntry = $state<DashboardTableEntry | null>(null);
+  let tableSettingsName = $state('');
   let loaded = $state(false);
   let loadError = $state<string | null>(null);
   let gridRows = $state(4);
@@ -57,11 +74,13 @@
         [GPS_COURSE]: gpsLocation.course ?? null,
         [GPS_ACC]: gpsLocation.accuracy ?? null,
       };
-      for (const [idStr, val] of Object.entries(gpsValues)) {
-        entityValues[idStr] = val;
-        updateGaugeValue(Number(idStr), val);
-      }
-      computeAndInjectDerived();
+      untrack(() => {
+        for (const [idStr, val] of Object.entries(gpsValues)) {
+          entityValues[idStr] = val;
+          updateGaugeValue(Number(idStr), val);
+        }
+        computeAndInjectDerived();
+      });
     }
   });
 
@@ -144,6 +163,7 @@
 
   // Debounced save timer
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let layoutDirty = false;
 
   const defaultGaugeName = (id: number) => `Entity ${id}`;
   const defaultGaugeUnit = (id: number) => '';
@@ -252,6 +272,32 @@
     untrack(rebuildGaugeStates);
   });
 
+  // ─── Live data hot path ───
+  // Drives gauge updates whenever the store has new data. Iterates ONLY gauges on this dashboard
+  // (small N), not all entities (large K). O(N_gauges) per frame at ~10Hz = no measurable cost.
+  $effect(() => {
+    if (gaugeStates.length === 0) return;
+    void liveDataStore.frameCount;
+    const states = gaugeStates;
+    const v = entityValues;
+    for (let i = 0; i < states.length; i++) {
+      const g = states[i];
+      const rawKv = v[g.entityId];
+      const raw = rawKv == null ? 0 : rawKv;
+      let val = raw;
+      if (g.smoothingEnabled && g.smoothingFactor > 0 && g.smoothingFactor < 1) {
+        const prev = _smoothedValues.get(g.entityId) ?? raw;
+        val = prev + g.smoothingFactor * (raw - prev);
+        _smoothedValues.set(g.entityId, val);
+      }
+      if (g.value !== val) {
+        g.value = val;
+        g.formattedValue = formatValue(val, g.name, g.unit);
+      }
+    }
+    computeAndInjectDerived();
+  });
+
   function loadRealConfig() {
     HybridBridge.getDashboardConfig(dashboardName).then(async result => {
       if (result.error) {
@@ -259,6 +305,16 @@
         return;
       }
       gaugeDefs = result.gauges;
+      tableDefs = result.tables ?? [];
+      if (tableDefs.length > 0) {
+        HybridBridge.getTableDefinitions().then(defs => {
+          const names: Record<number, string> = {};
+          for (const t of defs.tables ?? []) {
+            names[t.id] = t.name;
+          }
+          tableNames = names;
+        }).catch(() => {});
+      }
       gridRows = result.gridRows;
       gridColumns = result.gridColumns;
       if (result.entities) {
@@ -296,27 +352,61 @@
     });
   }
 
-  let unsubBridge: () => void;
-  let lastLiveDataTime = 0;
+  // ── Tables ──────────────────────────────────────────────────────
+  let tableDefs = $state<DashboardTableEntry[]>([]);
+  let tableNames = $state<Record<number, string>>({});
 
-  function handleBridgeEvent(event: BridgeEvent) {
-    if (event.event === 'liveDataUpdate' && event.values) {
-      const now = performance.now();
-      if (now - lastLiveDataTime < 33) return; // throttle to ~10Hz (ECU rate)
-      lastLiveDataTime = now;
+  // ── Drag refcount: report ref retained while this component is mounted ──
+  // (no longer needed — reporting is owned by App shell)
 
-      // Per-key mutations: O(changed_keys) through existing proxy.
-      for (const key in event.values) {
-        entityValues[key] = event.values[key]!;
-        updateGaugeValue(Number(key), event.values[key]);
-      }
-      computeAndInjectDerived();
-    } else if (event.event === 'odometerUpdate') {
-      entityValues[String(ODOMETER)] = event.odometer;
-      updateGaugeValue(ODOMETER, event.odometer);
-      if (entityLookup[String(ODOMETER)]) {
-        entityLookup[String(ODOMETER)].unit = event.odometerUnit;
-      }
+  let pendingDrag = $state<{
+    type: 'gauge' | 'table';
+    id: number;
+    startFracX: number;
+    startFracY: number;
+    startClientX: number;
+    startClientY: number;
+    thresholdMet: boolean;
+    target: HTMLElement;
+    pointerId: number;
+  } | null>(null);
+
+  const DRAG_THRESHOLD = 4;
+
+  function tryActivateDrag(dx: number, dy: number) {
+    if (!pendingDrag) return;
+    if (pendingDrag.thresholdMet) return;
+    if (dx < DRAG_THRESHOLD && dy < DRAG_THRESHOLD) return;
+    pendingDrag.thresholdMet = true;
+    if (pendingDrag.type === 'gauge') {
+      const def = gaugeDefs.find(d => d.entityId === pendingDrag!.id);
+      if (!def) return;
+      dragging = {
+        entityId: pendingDrag.id,
+        startFracX: def.fractionX,
+        startFracY: def.fractionY,
+        deltaFracX: 0,
+        deltaFracY: 0,
+        startClientX: pendingDrag.startClientX,
+        startClientY: pendingDrag.startClientY,
+      };
+    } else {
+      const def = tableDefs.find(d => d.tableId === pendingDrag!.id);
+      if (!def) return;
+      tableDragging = {
+        tableId: pendingDrag.id,
+        startFracX: def.fractionX,
+        startFracY: def.fractionY,
+        deltaFracX: 0,
+        deltaFracY: 0,
+        startClientX: pendingDrag.startClientX,
+        startClientY: pendingDrag.startClientY,
+      };
+    }
+    try {
+      pendingDrag.target.setPointerCapture(pendingDrag.pointerId);
+    } catch {
+      // ignore
     }
   }
 
@@ -324,16 +414,34 @@
     if (!e.target || (e.target as HTMLElement).closest('input, button, a')) return;
     const def = gaugeDefs.find(d => d.entityId === entityId);
     if (!def) return;
-    dragging = {
-      entityId,
+    pendingDrag = {
+      type: 'gauge',
+      id: entityId,
       startFracX: def.fractionX,
       startFracY: def.fractionY,
-      deltaFracX: 0,
-      deltaFracY: 0,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      thresholdMet: false,
+      target: e.currentTarget as HTMLElement,
+      pointerId: e.pointerId,
     };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function handleTablePointerDown(e: PointerEvent, tableId: number) {
+    if (!e.target || (e.target as HTMLElement).closest('input, button, a, td, th, table')) return;
+    const def = tableDefs.find(d => d.tableId === tableId);
+    if (!def) return;
+    pendingDrag = {
+      type: 'table',
+      id: tableId,
+      startFracX: def.fractionX,
+      startFracY: def.fractionY,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      thresholdMet: false,
+      target: e.currentTarget as HTMLElement,
+      pointerId: e.pointerId,
+    };
   }
 
   let pendingDragDx = 0;
@@ -341,24 +449,64 @@
   let dragRaf: number | null = null;
 
   function handlePointerMove(e: PointerEvent) {
-    if (!dragging) return;
-    pendingDragDx = (e.clientX - dragging.startClientX) / containerWidth;
-    pendingDragDy = (e.clientY - dragging.startClientY) / containerHeight;
-    if (dragRaf === null) {
-      dragRaf = requestAnimationFrame(() => {
-        dragRaf = null;
-        dragging.deltaFracX = pendingDragDx;
-        dragging.deltaFracY = pendingDragDy;
-      });
+    if (pendingDrag && !pendingDrag.thresholdMet) {
+      const dx = Math.abs(e.clientX - pendingDrag.startClientX);
+      const dy = Math.abs(e.clientY - pendingDrag.startClientY);
+      tryActivateDrag(dx, dy);
+      if (!pendingDrag.thresholdMet) return;
+    }
+    if (dragging) {
+      pendingDragDx = (e.clientX - dragging.startClientX) / containerWidth;
+      pendingDragDy = (e.clientY - dragging.startClientY) / containerHeight;
+      if (dragRaf === null) {
+        dragRaf = requestAnimationFrame(() => {
+          dragRaf = null;
+          dragging.deltaFracX = pendingDragDx;
+          dragging.deltaFracY = pendingDragDy;
+        });
+      }
+    } else if (tableDragging) {
+      pendingDragDx = (e.clientX - tableDragging.startClientX) / containerWidth;
+      pendingDragDy = (e.clientY - tableDragging.startClientY) / containerHeight;
+      if (dragRaf === null) {
+        dragRaf = requestAnimationFrame(() => {
+          dragRaf = null;
+          tableDragging.deltaFracX = pendingDragDx;
+          tableDragging.deltaFracY = pendingDragDy;
+        });
+      }
     }
   }
 
   function persistLayout() {
+    if (!layoutDirty) return;
+    layoutDirty = false;
     const gauges = gaugeDefs.map(def => toSavePayload(def));
-    HybridBridge.saveDashboardLayout(dashboardName, gauges);
+    const tables = tableDefs.map(t => ({
+      tableId: t.tableId,
+      fractionX: t.fractionX,
+      fractionY: t.fractionY,
+      widthFraction: t.widthFraction,
+      heightFraction: t.heightFraction,
+      zIndex: t.zIndex,
+      colorScheme: t.colorScheme,
+      showLabels: t.showLabels,
+      showDimensionBadge: t.showDimensionBadge,
+    }));
+    HybridBridge.saveDashboardLayout(dashboardName, gauges, tables);
+  }
+
+  function schedulePersist() {
+    layoutDirty = true;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      persistLayout();
+    }, 1500);
   }
 
   function handlePointerUp() {
+    pendingDrag = null;
     if (dragging) {
       if (dragRaf !== null) {
         cancelAnimationFrame(dragRaf);
@@ -366,8 +514,7 @@
         dragging.deltaFracX = pendingDragDx;
         dragging.deltaFracY = pendingDragDy;
       }
-      // Commit final clamped position to gaugeDefs
-      const def = gaugeDefs.find(d => d.entityId === dragging.entityId);
+      const def = gaugeDefs.find(d => d.entityId === dragging!.entityId);
       if (def) {
         const s = def.scale ?? 1.0;
         const pxW = containerWidth * def.widthFraction * s;
@@ -382,10 +529,29 @@
         def.fractionX = Math.max(0, Math.min(1 - visual.w / containerWidth, dragging.startFracX + dragging.deltaFracX));
         def.fractionY = Math.max(0, Math.min(1 - visual.h / containerHeight, dragging.startFracY + dragging.deltaFracY));
         gaugeDefs = gaugeDefs;
+        layoutDirty = true;
+        persistLayout();
+      }
+    } else if (tableDragging) {
+      if (dragRaf !== null) {
+        cancelAnimationFrame(dragRaf);
+        dragRaf = null;
+        tableDragging.deltaFracX = pendingDragDx;
+        tableDragging.deltaFracY = pendingDragDy;
+      }
+      const def = tableDefs.find(d => d.tableId === tableDragging!.tableId);
+      if (def) {
+        const pxW = containerWidth * def.widthFraction;
+        const pxH = containerHeight * def.heightFraction;
+        def.fractionX = Math.max(0, Math.min(1 - pxW / containerWidth, tableDragging.startFracX + tableDragging.deltaFracX));
+        def.fractionY = Math.max(0, Math.min(1 - pxH / containerHeight, tableDragging.startFracY + tableDragging.deltaFracY));
+        tableDefs = tableDefs;
+        layoutDirty = true;
         persistLayout();
       }
     }
     dragging = null;
+    tableDragging = null;
   }
 
   function handleContextMenu(e: MouseEvent, entityId: number) {
@@ -397,13 +563,30 @@
     settingsOpen = true;
   }
 
+  function handleTableContextMenu(e: MouseEvent, tableId: number) {
+    e.preventDefault();
+    const def = tableDefs.find(d => d.tableId === tableId);
+    if (!def) return;
+    tableSettingsEntry = { ...def };
+    tableSettingsName = tableNames[tableId] ?? `Table ${tableId}`;
+    tableSettingsOpen = true;
+  }
+
+  function handleTableSettingsChange(updated: DashboardTableEntry) {
+    tableSettingsEntry = updated;
+    tableDefs = tableDefs.map(t => t.tableId === updated.tableId ? updated : t);
+    schedulePersist();
+  }
+
+  function handleTableSettingsClose() {
+    tableSettingsOpen = false;
+    tableSettingsEntry = null;
+  }
+
   function handleSettingsChange(updated: GaugeConfigEntry) {
     settingsDef = updated;
     gaugeDefs = gaugeDefs.map(d => d.entityId === updated.entityId ? updated : d);
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      persistLayout();
-    }, 1500);
+    schedulePersist();
   }
 
   function handleSettingsClose() {
@@ -436,16 +619,13 @@
 
   onMount(() => {
     loadRealConfig();
-    unsubBridge = HybridBridge.onMessage(handleBridgeEvent);
-    HybridBridge.enableReporting();
+    const od = liveDataStore.odometer;
+    if (od != null) entityValues[String(ODOMETER)] = od;
   });
 
-  onDestroy(async () => {
+  onDestroy(() => {
     if (saveTimer) clearTimeout(saveTimer);
-    persistLayout();
-    if (unsubBridge) unsubBridge();
     if (resizeObserver) resizeObserver.disconnect();
-    await HybridBridge.disableReporting();
   });
 </script>
 
@@ -460,7 +640,7 @@
     <div class="flex h-full w-full items-center justify-center">
       <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-cyan-400"></span>
     </div>
-  {:else if gaugeStates.length === 0}
+  {:else if gaugeStates.length === 0 && tableDefs.length === 0}
     <div class="flex h-full w-full flex-col items-center justify-center gap-2">
       <p class="text-sm text-gray-400">No gauges configured</p>
       <p class="text-xs text-gray-500">Open the sidebar and go to Configure to add gauges</p>
@@ -520,6 +700,44 @@
           <GaugeCard {gauge} pixelWidth={pxW} pixelHeight={pxH} />
         </div>
       {/each}
+      {#each tableDefs as tw (tw.tableId)}
+        {const w = $derived(Math.round(containerWidth * tw.widthFraction))}
+        {const h = $derived(Math.round(containerHeight * tw.heightFraction))}
+        {const offsetX = $derived(tableDragging?.tableId === tw.tableId ? tableDragging.deltaFracX : 0)}
+        {const offsetY = $derived(tableDragging?.tableId === tw.tableId ? tableDragging.deltaFracY : 0)}
+        {const pxL = $derived(Math.round(containerWidth * (tw.fractionX + offsetX)))}
+        {const pxT = $derived(Math.round(containerHeight * (tw.fractionY + offsetY)))}
+        {const maxL = $derived(containerWidth - w)}
+        {const maxT = $derived(containerHeight - h)}
+        {const clampedL = $derived(Math.max(0, Math.min(pxL, maxL)))}
+        {const clampedT = $derived(Math.max(0, Math.min(pxT, maxT)))}
+        <div
+          class="absolute cursor-grab"
+          style:transform="translate({clampedL}px, {clampedT}px)"
+          style:width="{w}px"
+          style:height="{h}px"
+          style:touch-action="none"
+          style:will-change="transform"
+          style:z-index={tw.zIndex}
+          onpointerdown={(e) => handleTablePointerDown(e, tw.tableId)}
+          oncontextmenu={(e) => handleTableContextMenu(e, tw.tableId)}
+          role="button" tabindex="0"
+        >
+          <TableWidget
+            tableId={tw.tableId}
+            tableName={tableNames[tw.tableId] ?? `Table ${tw.tableId}`}
+            colorScheme={tw.colorScheme}
+            showLabels={tw.showLabels}
+            showDimensionBadge={tw.showDimensionBadge}
+            onTap={(id) => onNavigate('tableEditor', { tableId: id })}
+            onSettings={(id) => {
+              tableSettingsEntry = { ...tw };
+              tableSettingsName = tableNames[id] ?? `Table ${id}`;
+              tableSettingsOpen = true;
+            }}
+          />
+        </div>
+      {/each}
     </div>
   {/if}
 </div>
@@ -532,5 +750,15 @@
     entityInfo={entityLookup[String(settingsDef.entityId)] ?? null}
     onclose={handleSettingsClose}
     onchange={handleSettingsChange}
+  />
+{/if}
+
+{#if tableSettingsOpen && tableSettingsEntry}
+  <TableSettingsModal
+    open={true}
+    {tableSettingsName}
+    entry={tableSettingsEntry}
+    onclose={handleTableSettingsClose}
+    onchange={handleTableSettingsChange}
   />
 {/if}

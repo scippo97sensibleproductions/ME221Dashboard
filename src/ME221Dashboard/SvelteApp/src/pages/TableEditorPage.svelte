@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { HybridBridge, type BridgeEvent } from '../lib/HybridBridge';
+  import { HybridBridge } from '../lib/HybridBridge';
+  import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
   import type { TableDefinition, TableData, OperatingPoint } from '../lib/tables/types';
   import { is1DTable, cellKey, getOutputValue, heatColor, getDataRange, findNearestIndex } from '../lib/tables/types';
+  import type { ColorScheme } from '../lib/tables/types';
   import TableGrid from '../lib/tables/TableGrid.svelte';
   import CurveEditor from '../lib/tables/CurveEditor.svelte';
   import CellEditor from '../lib/tables/CellEditor.svelte';
@@ -10,24 +12,43 @@
   import ConfirmDialog from '../lib/ConfirmDialog.svelte';
   import SelectionToolbar from '../lib/tables/SelectionToolbar.svelte';
   import OpsSheet from '../lib/tables/OpsSheet.svelte';
+  import ContextContextMenu from '../lib/tables/ContextContextMenu.svelte';
   import { toast } from '../lib/toasts.svelte';
   import { buildExportBundle, generateYamlString, parseImportBundle } from '../lib/tableExport';
   import TableNotesSheet from '../lib/TableNotesSheet.svelte';
   import { handleSelectionComplete as calcSelectionComplete } from '../lib/tables/tableSelection';
   import { selBounds as calcSelBounds, applyTransform } from '../lib/tables/tableTransforms';
   import { recalculateDirty as calcDirty, loadSessionCache, saveSessionCache, clearSessionCache } from '../lib/tables/tableUndoRedo';
+  import type { Bookmark } from '../lib/tables/tableUndoRedo';
+  import HistoryViewer from '../lib/tables/HistoryViewer.svelte';
+  import LiveSidePanel from '../lib/tables/LiveSidePanel.svelte';
+  import type { DataLinkDefinition } from '../lib/HybridBridgeTypes';
 
-  let { tableId, onNavigate }: {
+  let { tableId, onNavigate, onBack }: {
     tableId: number;
     onNavigate: (page: string, params?: Record<string, unknown>) => void;
+    onBack?: () => void;
   } = $props();
 
   let tableDef = $state<TableDefinition | null>(null);
   let tableData = $state<TableData | null>(null);
   let originalData = $state<TableData | null>(null);
-  let operatingPoint = $state<OperatingPoint>({ rpm: null, map: null });
+  let is1D = $derived(tableDef ? is1DTable(tableDef) : false);
+  let operatingPoint = $derived.by(() => {
+    if (!tableDef) return { rpm: null, map: null, output: null } as OperatingPoint;
+    const v = liveDataStore.values;
+    const rpmVal = v[String(tableDef.input0LinkId)] ?? null;
+    const mapVal = tableDef.input1LinkId ? (v[String(tableDef.input1LinkId)] ?? null) : null;
+    const outVal = tableDef.outputLinkId ? (v[String(tableDef.outputLinkId)] ?? null) : null;
+    return {
+      rpm: rpmVal,
+      map: is1D ? null : mapVal,
+      output: outVal,
+    };
+  });
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let mounted = false;
 
   // Selection
   let selectedRow = $state(0);
@@ -74,6 +95,106 @@
   // Diff mode
   let diffMode = $state(false);
 
+  // Color scheme
+  function loadColorScheme(): ColorScheme {
+    try {
+      const stored = localStorage.getItem('table-color-scheme');
+      if (stored === 'thermal' || stored === 'viridis' || stored === 'grayscale' || stored === 'ember') return stored;
+    } catch {}
+    return 'thermal';
+  }
+
+  let colorScheme = $state<ColorScheme>(loadColorScheme());
+
+  function handleColorSchemeChange(scheme: string) {
+    colorScheme = scheme as ColorScheme;
+    try { localStorage.setItem('table-color-scheme', colorScheme); } catch {}
+  }
+
+  let showContours = $state(false);
+
+  // Context menu
+  let contextMenuOpen = $state(false);
+  let contextMenuX = $state(0);
+  let contextMenuY = $state(0);
+  let contextMenuTarget = $state<{ row: number; col: number; type: 'output' | 'input0' | 'input1' } | null>(null);
+
+  function handleContextMenu(e: MouseEvent, row: number, col: number, type: 'output' | 'input0' | 'input1') {
+    e.preventDefault();
+    contextMenuX = e.clientX;
+    contextMenuY = e.clientY;
+    contextMenuTarget = { row, col, type };
+    contextMenuOpen = true;
+  }
+
+  function handleContextMenuAction(action: string) {
+    if (!contextMenuTarget) return;
+    const { row, col, type } = contextMenuTarget;
+    switch (action) {
+      case 'selectCell':
+        if (anchor && !selection) {
+          // Anchor exists, no range yet → complete the range
+          selection = { startRow: anchor.row, startCol: anchor.col, endRow: row, endCol: col };
+          selectionType = type;
+        } else if (selection) {
+          // Range already selected → reset to single cell
+          clearSelection();
+          handleAnchorSet(row, col, type);
+        } else {
+          // Nothing selected → anchor on this cell
+          handleAnchorSet(row, col, type);
+        }
+        break;
+      case 'copy':
+        // Set single-cell selection and copy
+        handleAnchorSet(row, col, type);
+        selection = { startRow: row, startCol: col, endRow: row, endCol: col };
+        selectionType = type;
+        handleCopy();
+        clearSelection();
+        break;
+      case 'paste':
+        handleAnchorSet(row, col, type);
+        selection = { startRow: row, startCol: col, endRow: row, endCol: col };
+        selectionType = type;
+        handlePaste();
+        clearSelection();
+        break;
+      case 'transform':
+        handleAnchorSet(row, col, type);
+        selection = { startRow: row, startCol: col, endRow: row, endCol: col };
+        selectionType = type;
+        opsSheetOpen = true;
+        break;
+      case 'selectRow':
+        if (tableDef) {
+          anchor = { row, col: 0 };
+          selection = { startRow: row, startCol: 0, endRow: row, endCol: tableDef.cols - 1 };
+          selectionType = 'output';
+        }
+        break;
+      case 'selectCol':
+        if (tableDef) {
+          anchor = { row: 0, col };
+          selection = { startRow: 0, startCol: col, endRow: tableDef.rows - 1, endCol: col };
+          selectionType = 'output';
+        }
+        break;
+      case 'selectAll':
+        selectAll();
+        break;
+      case 'jumpToOp':
+        if (opRow >= 0 && opCol >= 0) {
+          selectedRow = opRow;
+          selectedCol = opCol;
+          const cellEl = document.querySelector(`[data-cell="${opRow},${opCol}"]`);
+          cellEl?.scrollIntoView({ block: 'center', inline: 'center' });
+        }
+        break;
+    }
+    contextMenuTarget = null;
+  }
+
   // Notes
   let notesOpen = $state(false);
   let hasNote = $derived.by(() => {
@@ -94,8 +215,46 @@
   let dirtyInput1 = $state(new Set<number>());
   let undoStack = $state<Array<{ type: string; key: string; row?: number; col?: number; idx?: number; oldVal: number; newVal: number; groupId: string }>>([]);
   let redoStack = $state<Array<{ type: string; key: string; row?: number; col?: number; idx?: number; oldVal: number; newVal: number; groupId: string }>>([]);
+  let bookmarks = $state<Bookmark[]>([]);
+  let historyOpen = $state(false);
 
-  let is1D = $derived(tableDef ? is1DTable(tableDef) : false);
+  // Live side panel
+  let livePanelOpen = $state(false);
+  let livePanelSensorIds = $state<number[]>([]);
+  let allDataLinks = $state<DataLinkDefinition[]>([]);
+  let liveValues = $derived(liveDataStore.values);
+
+  function loadLivePanelState() {
+    try {
+      const raw = localStorage.getItem(`table-live-panel-${tableId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        livePanelOpen = parsed.visible ?? false;
+        livePanelSensorIds = parsed.sensorIds ?? [];
+      }
+    } catch {}
+  }
+
+  function saveLivePanelState() {
+    try {
+      localStorage.setItem(`table-live-panel-${tableId}`, JSON.stringify({
+        visible: livePanelOpen,
+        sensorIds: livePanelSensorIds,
+      }));
+    } catch {}
+  }
+
+  function handleAddLiveSensor(id: number) {
+    if (!livePanelSensorIds.includes(id)) {
+      livePanelSensorIds = [...livePanelSensorIds, id];
+      saveLivePanelState();
+    }
+  }
+
+  function handleRemoveLiveSensor(id: number) {
+    livePanelSensorIds = livePanelSensorIds.filter(i => i !== id);
+    saveLivePanelState();
+  }
 
   let minVal = $derived(tableData ? getDataRange(tableData.output).min : 0);
   let maxVal = $derived(tableData ? getDataRange(tableData.output).max : 100);
@@ -113,6 +272,11 @@
     if (!tableData || operatingPoint.rpm === null) return -1;
     return findNearestIndex(operatingPoint.rpm, tableData.input0);
   });
+
+  // Live values for side panel and cell overlay
+  let liveInput0Value = $derived(operatingPoint.rpm);
+  let liveInput1Value = $derived(is1D ? null : operatingPoint.map);
+  let liveOutputValue = $derived(operatingPoint.output);
 
   // Undo/redo helpers
   let lastGroupId = '';
@@ -151,6 +315,7 @@
     redoStack = [...redoStack, ...entries];
     tableData = { ...tableData, output: newOutput, input0: newInput0, input1: newInput1 };
     recalculateDirty();
+    persistUndo();
   }
 
   function handleRedo() {
@@ -175,6 +340,48 @@
     undoStack = [...undoStack, ...entries];
     tableData = { ...tableData, output: newOutput, input0: newInput0, input1: newInput1 };
     recalculateDirty();
+    persistUndo();
+  }
+
+  function persistUndo() {
+    if (tableDef && tableData && originalData) {
+      saveSessionCache(tableId, undoStack, redoStack, originalData, bookmarks);
+    }
+  }
+
+  // ─── Bookmarks & History ─────────────────────────────────────────────────
+
+  function handleBookmark(groupId: string, label: string) {
+    if (bookmarks.some(b => b.groupId === groupId)) return;
+    bookmarks = [...bookmarks, { groupId, label, timestamp: Date.now() }];
+    persistUndo();
+    toast('Bookmark saved', 'success');
+  }
+
+  function handleRemoveBookmark(groupId: string) {
+    bookmarks = bookmarks.filter(b => b.groupId !== groupId);
+    persistUndo();
+  }
+
+  function handleJumpToGroup(groupId: string, direction: 'undo' | 'redo') {
+    if (!tableData || !tableDef) return;
+
+    if (direction === 'undo') {
+      // Undo groups until we reach the target groupId
+      while (undoStack.length > 0) {
+        const topGroupId = undoStack[undoStack.length - 1].groupId;
+        handleUndo();
+        if (topGroupId === groupId) break;
+      }
+    } else {
+      // Redo groups until we reach the target groupId
+      while (redoStack.length > 0) {
+        const topGroupId = redoStack[redoStack.length - 1].groupId;
+        handleRedo();
+        if (topGroupId === groupId) break;
+      }
+    }
+    historyOpen = false;
   }
 
   // ─── Data loading ───────────────────────────────────────────────────────
@@ -184,6 +391,7 @@
     error = null;
     try {
       const defs = await HybridBridge.getTableDefinitions();
+      if (!mounted) return;
       const def = (defs.tables as TableDefinition[]).find(t => t.id === tableId);
       if (!def) {
         error = 'Table not found';
@@ -192,6 +400,7 @@
       tableDef = def;
 
       const data = await HybridBridge.readTableData(tableId);
+      if (!mounted) return;
       if (!data.success || !data.input0 || !data.output) {
         error = data.error || 'Failed to read table data';
         return;
@@ -210,10 +419,12 @@
         undoStack = cached.undoStack;
         redoStack = cached.redoStack;
         originalData = cached.originalData;
+        bookmarks = cached.bookmarks ?? [];
       } else {
         originalData = JSON.parse(JSON.stringify(tableData));
         undoStack = [];
         redoStack = [];
+        bookmarks = [];
       }
 
       dirtyCells = new Set();
@@ -221,9 +432,10 @@
       dirtyInput1 = new Set();
       recalculateDirty();
     } catch (e) {
+      if (!mounted) return;
       error = e instanceof Error ? e.message : 'Unknown error';
     } finally {
-      loading = false;
+      if (mounted) loading = false;
     }
   }
 
@@ -237,6 +449,7 @@
   }
 
   function handleAxis0Click(col: number) {
+    selectedRow = 0;
     selectedCol = col;
     editMode = 'input0';
     editorOpen = true;
@@ -244,6 +457,7 @@
 
   function handleAxis1Click(row: number) {
     selectedRow = row;
+    selectedCol = 0;
     editMode = 'input1';
     editorOpen = true;
   }
@@ -279,6 +493,7 @@
       redoStack = [];
     }
     recalculateDirty();
+    persistUndo();
   }
 
   function handleRevertCell() {
@@ -321,10 +536,52 @@
 
   // ─── Copy/Paste ──────────────────────────────────────────────────────
 
+  function getHeaderValue(type: 'input0' | 'input1', idx: number): number {
+    if (!tableData) return 0;
+    return type === 'input0' ? tableData.input0[idx] : tableData.input1[idx];
+  }
+
+  function setHeaderValue(type: 'input0' | 'input1', idx: number, val: number) {
+    if (!tableData) return;
+    if (type === 'input0') {
+      const newInput0 = [...tableData.input0];
+      newInput0[idx] = val;
+      tableData = { ...tableData, input0: newInput0 };
+    } else {
+      const newInput1 = [...tableData.input1];
+      newInput1[idx] = val;
+      tableData = { ...tableData, input1: newInput1 };
+    }
+  }
+
   function handleCopy() {
     if (!selection || !tableData || !tableDef) return;
     const b = selBounds();
     if (!b) return;
+
+    if (selectionType === 'input0') {
+      const vals: string[] = [];
+      for (let c = b.minCol; c <= b.maxCol; c++) {
+        vals.push(tableData.input0[c].toFixed(1));
+      }
+      const tsv = vals.join('\t');
+      clipboard = tsv;
+      try { navigator.clipboard?.writeText(tsv); } catch {}
+      toast('Copied header values', 'info');
+      return;
+    }
+    if (selectionType === 'input1') {
+      const vals: string[] = [];
+      for (let r = b.minRow; r <= b.maxRow; r++) {
+        vals.push(tableData.input1[r].toFixed(1));
+      }
+      const tsv = vals.join('\t');
+      clipboard = tsv;
+      try { navigator.clipboard?.writeText(tsv); } catch {}
+      toast('Copied header values', 'info');
+      return;
+    }
+
     const rows: string[] = [];
     for (let r = b.minRow; r <= b.maxRow; r++) {
       const cols: string[] = [];
@@ -345,8 +602,54 @@
     if (!b) return;
     const text = clipboard;
     if (!text) { toast('Nothing to paste', 'warning'); return; }
-    const rows = text.split('\n').filter(r => r.length > 0);
     const groupId = newGroupId();
+
+    if (selectionType === 'input0') {
+      const cells = text.split('\t').filter(c => c.length > 0);
+      const newInput0 = [...tableData.input0];
+      const entries: typeof undoStack = [];
+      for (let c = 0; c < cells.length && (b.minCol + c) <= b.maxCol; c++) {
+        const idx = b.minCol + c;
+        const newVal = parseFloat(cells[c]);
+        if (isNaN(newVal)) continue;
+        const oldVal = newInput0[idx];
+        if (oldVal === newVal) continue;
+        newInput0[idx] = newVal;
+        entries.push({ type: 'input0', key: `input0-${idx}`, idx, oldVal, newVal, groupId });
+      }
+      if (entries.length > 0) {
+        tableData = { ...tableData, input0: newInput0 };
+        undoStack = [...undoStack, ...entries];
+        redoStack = [];
+        recalculateDirty();
+        toast(`Pasted ${entries.length} header values`, 'success');
+      }
+      return;
+    }
+    if (selectionType === 'input1') {
+      const cells = text.split('\t').filter(c => c.length > 0);
+      const newInput1 = [...tableData.input1];
+      const entries: typeof undoStack = [];
+      for (let r = 0; r < cells.length && (b.minRow + r) <= b.maxRow; r++) {
+        const idx = b.minRow + r;
+        const newVal = parseFloat(cells[r]);
+        if (isNaN(newVal)) continue;
+        const oldVal = newInput1[idx];
+        if (oldVal === newVal) continue;
+        newInput1[idx] = newVal;
+        entries.push({ type: 'input1', key: `input1-${idx}`, idx, oldVal, newVal, groupId });
+      }
+      if (entries.length > 0) {
+        tableData = { ...tableData, input1: newInput1 };
+        undoStack = [...undoStack, ...entries];
+        redoStack = [];
+        recalculateDirty();
+        toast(`Pasted ${entries.length} header values`, 'success');
+      }
+      return;
+    }
+
+    const rows = text.split('\n').filter(r => r.length > 0);
     const newOutput = [...tableData.output];
     const entries: typeof undoStack = [];
     for (let r = 0; r < rows.length && (b.minRow + r) <= b.maxRow; r++) {
@@ -384,6 +687,7 @@
       redoStack = [];
       recalculateDirty();
       toast(`${operation}: ${result.entries.length} ${selectionType === 'output' ? 'cells' : 'axis values'} modified`, 'success');
+      persistUndo();
     }
   }
 
@@ -694,35 +998,50 @@
     return delta;
   });
 
-  // ─── Live operating point ──────────────────────────────────────────────
+  // Quick-jump table switcher
+  let allTables = $state<{ id: number; name: string; category: string }[]>([]);
+  let quickJumpOpen = $state(false);
 
-  let unsubscribe: (() => void) | null = null;
-  let lastOpUpdate = 0;
+  async function loadAllTables() {
+    try {
+      const defs = await HybridBridge.getTableDefinitions();
+      if (!mounted) return;
+      allTables = (defs.tables as TableDefinition[]).map(t => ({ id: t.id, name: t.name, category: t.category }));
+    } catch {}
+  }
+
+  function handleQuickJump(tableId: number) {
+    if (tableId === tableId) return;
+    if (dirtyCount > 0) {
+      openConfirm('Switch Table', `You have ${dirtyCount} unsaved change${dirtyCount !== 1 ? 's' : ''}. Discard and switch?`, 'warning', () => {
+        quickJumpOpen = false;
+        onNavigate('tableEditor', { tableId });
+      });
+    } else {
+      quickJumpOpen = false;
+      onNavigate('tableEditor', { tableId });
+    }
+  }
 
   onMount(() => {
+    mounted = true;
     loadTable();
+    loadAllTables();
+    loadLivePanelState();
 
-    unsubscribe = HybridBridge.onMessage((event: BridgeEvent) => {
-      if (event.event === 'liveDataUpdate') {
-        const now = performance.now();
-        if (now - lastOpUpdate < 100) return; // 10fps throttle
-        lastOpUpdate = now;
-        const vals = event.values;
-        const rpm = vals['rpm'] ?? vals['RPM'] ?? null;
-        const map = vals['map'] ?? vals['MAP'] ?? null;
-        if (rpm !== null || map !== null) {
-          operatingPoint = { rpm, map };
-        }
-      }
-    });
+    // Load data links for side panel sensor picker
+    HybridBridge.getDataLinks().then(result => {
+      if (!mounted) return;
+      allDataLinks = result.dataLinks ?? [];
+    }).catch(() => {});
   });
 
   onDestroy(() => {
+    mounted = false;
     // Persist undo/redo + original data so it survives page navigation
     if (tableDef && tableData && originalData) {
       saveSessionCache(tableId, undoStack, redoStack, originalData);
     }
-    unsubscribe?.();
   });
 
   // ─── Keyboard shortcuts ────────────────────────────────────────────────
@@ -735,15 +1054,118 @@
       } else {
         editorOpen = false;
       }
+      return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
       handleUndo();
+      return;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault();
       handleRedo();
+      return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault();
+      selectAll();
+      return;
+    }
+    // Arrow key navigation (only when editor is closed)
+    if (!editorOpen && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+
+      let newMode = editMode;
+      let newRow = selectedRow;
+      let newCol = selectedCol;
+
+      if (editMode === 'output') {
+        // In data cells — allow moving to headers at edges
+        if (e.key === 'ArrowUp' && selectedRow === 0) {
+          newMode = 'input1';
+          newRow = selectedCol; // row header tracks the column we were on
+        } else if (e.key === 'ArrowLeft' && selectedCol === 0) {
+          newMode = 'input0';
+          newCol = selectedRow; // column header tracks the row we were on
+        } else {
+          if (e.key === 'ArrowUp') newRow = Math.max(0, selectedRow - 1);
+          else if (e.key === 'ArrowDown') newRow = Math.min(tableDef.rows - 1, selectedRow + 1);
+          else if (e.key === 'ArrowLeft') newCol = Math.max(0, selectedCol - 1);
+          else if (e.key === 'ArrowRight') newCol = Math.min(tableDef.cols - 1, selectedCol + 1);
+        }
+      } else if (editMode === 'input1') {
+        // On a row header — ArrowDown goes to output, ArrowLeft/Right moves between headers
+        if (e.key === 'ArrowDown') {
+          newMode = 'output';
+          newRow = 0;
+          newCol = selectedRow; // the row header index was stored as selectedRow
+        } else if (e.key === 'ArrowLeft') {
+          newRow = Math.max(0, selectedRow - 1);
+        } else if (e.key === 'ArrowRight') {
+          newRow = Math.min(tableDef.cols - 1, selectedRow + 1);
+        }
+      } else if (editMode === 'input0') {
+        // On a column header — ArrowRight goes to output, ArrowUp/Down moves between headers
+        if (e.key === 'ArrowRight') {
+          newMode = 'output';
+          newRow = selectedCol; // the col header index was stored as selectedCol
+          newCol = 0;
+        } else if (e.key === 'ArrowUp') {
+          newCol = Math.max(0, selectedCol - 1);
+        } else if (e.key === 'ArrowDown') {
+          newCol = Math.min(tableDef.rows - 1, selectedCol + 1);
+        }
+      }
+
+      if (e.shiftKey) {
+        // Extend selection from anchor
+        if (!anchor) {
+          anchor = { row: selectedRow, col: selectedCol };
+          selectionType = editMode;
+        }
+        selection = { startRow: anchor.row, startCol: anchor.col, endRow: newRow, endCol: newCol };
+        selectionType = newMode;
+      } else {
+        if (anchor || selection) clearSelection();
+        editorOpen = false;
+      }
+
+      editMode = newMode;
+      if (newMode === 'output') {
+        selectedRow = newRow;
+        selectedCol = newCol;
+      } else if (newMode === 'input1') {
+        selectedRow = newRow;
+      } else if (newMode === 'input0') {
+        selectedCol = newCol;
+      }
+
+      // Scroll into view
+      const cellEl = document.querySelector(`[data-cell="${newRow},${newCol}"]`);
+      cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      return;
+    }
+    if (!editorOpen && e.key === 'Enter') {
+      e.preventDefault();
+      editorOpen = true;
+      return;
+    }
+    if (editorOpen && e.key === 'Tab') {
+      e.preventDefault();
+      // Tab applies and moves right
+      if (selectedCol < tableDef.cols - 1) {
+        selectedCol++;
+      }
+      return;
+    }
+  }
+
+  function selectAll() {
+    if (!tableDef) return;
+    anchor = { row: 0, col: 0 };
+    selection = { startRow: 0, startCol: 0, endRow: tableDef.rows - 1, endCol: tableDef.cols - 1 };
+    selectionType = 'output';
+    editorOpen = false;
   }
 </script>
 
@@ -760,9 +1182,9 @@
         <p class="mb-3 text-[13px] text-[var(--metro-red)]">{error}</p>
         <button
           class="metro-btn-secondary"
-          onclick={() => onNavigate('tableList')}
+          onclick={() => onBack ? onBack() : onNavigate('tableList')}
         >
-          Back to Tables
+          Back
         </button>
       </div>
     </div>
@@ -777,19 +1199,27 @@
       {writing}
       {diffMode}
       {hasNote}
+      {colorScheme}
+      {showContours}
       selecting={anchor !== null && selection === null}
       onToggleDiffMode={() => { diffMode = !diffMode; }}
+      onToggleContours={() => { showContours = !showContours; }}
       onOpenNotes={() => { notesOpen = true; }}
       onWrite={handleWriteToEcu}
       onRead={handleReadFromEcu}
       onUndo={handleUndo}
       onRedo={handleRedo}
       onRevertAll={handleRevertAll}
-      onBack={() => onNavigate('tableList')}
+      onBack={onBack ?? (() => onNavigate('tableList'))}
       onExportCsv={handleExportCsv}
       onExportYaml={handleExportYaml}
       onImportCsv={handleImportCsv}
       onImportYaml={handleImportYaml}
+      onColorSchemeChange={handleColorSchemeChange}
+      onTableNameClick={() => { quickJumpOpen = true; }}
+      onOpenHistory={() => { historyOpen = true; }}
+      {livePanelOpen}
+      onToggleLivePanel={() => { livePanelOpen = !livePanelOpen; saveLivePanelState(); }}
     />
 
     <!-- Selection hint -->
@@ -822,8 +1252,9 @@
       </div>
     {/if}
 
-    <!-- Editor area -->
-    <div class="relative flex-1 min-h-0 overflow-hidden">
+    <!-- Editor area + Live side panel -->
+    <div class="flex flex-1 min-h-0 overflow-hidden">
+      <div class="relative flex-1 min-h-0 overflow-hidden">
       {#if is1D}
         <CurveEditor
           {tableDef}
@@ -839,55 +1270,73 @@
           {dirtyInput0}
           {diffMode}
           {originalData}
+          {colorScheme}
+          {liveOutputValue}
           onCellClick={handleCellClick}
           onAxis0Click={handleAxis0Click}
           onAnchorSet={handleAnchorSet}
           onSelectionComplete={handleSelectionComplete}
           onSelectionClear={clearSelection}
+          onContextMenu={handleContextMenu}
         />
       {:else}
-        <TableGrid
-          {tableDef}
-          {tableData}
-          {selectedRow}
-          {selectedCol}
-          {editMode}
-          {opRow}
-          {opCol}
-          {dirtyCells}
-          {dirtyInput0}
-          {dirtyInput1}
-          {minVal}
-          {maxVal}
-          {anchor}
-          {selection}
-          {selectionType}
-          {diffMode}
-          {originalData}
-          onCellClick={handleCellClick}
+  <TableGrid
+    {tableDef}
+    {tableData}
+    {selectedRow}
+    {selectedCol}
+    {editMode}
+    {opRow}
+    {opCol}
+    {dirtyCells}
+    {dirtyInput0}
+    {dirtyInput1}
+    {minVal}
+    {maxVal}
+    {anchor}
+    {selection}
+    {selectionType}
+    {diffMode}
+    {originalData}
+    {colorScheme}
+    {showContours}
+    {liveOutputValue}
+    onCellClick={handleCellClick}
           onAxis0Click={handleAxis0Click}
           onAxis1Click={handleAxis1Click}
           onAnchorSet={handleAnchorSet}
           onSelectionComplete={handleSelectionComplete}
           onSelectionClear={clearSelection}
+          onContextMenu={handleContextMenu}
         />
       {/if}
+
+      <CellEditor
+        open={editorOpen}
+        tableName={tableDef.name}
+        label={editorLabel}
+        value={editorValue}
+        originalValue={editorOriginalValue}
+        increment={tableDef.incrementValue}
+        {editMode}
+        axisName={editMode === 'input0' ? tableDef.input0Name : editMode === 'input1' ? tableDef.input1Name : ''}
+        onApply={handleApplyValue}
+        onRevert={handleRevertCell}
+        onClose={() => { editorOpen = false; }}
+      />
     </div>
 
-    <!-- Cell editor -->
-    <CellEditor
-      open={editorOpen}
-      tableName={tableDef.name}
-      label={editorLabel}
-      value={editorValue}
-      originalValue={editorOriginalValue}
-      increment={tableDef.incrementValue}
-      {editMode}
-      axisName={editMode === 'input0' ? tableDef.input0Name : editMode === 'input1' ? tableDef.input1Name : ''}
-      onApply={handleApplyValue}
-      onRevert={handleRevertCell}
-      onClose={() => { editorOpen = false; }}
+    <LiveSidePanel
+      open={livePanelOpen}
+      {tableDef}
+      {liveValues}
+      dataLinks={allDataLinks}
+      sensorIds={livePanelSensorIds}
+      onAddSensor={handleAddLiveSensor}
+      onRemoveSensor={handleRemoveLiveSensor}
+      onClose={() => { livePanelOpen = false; saveLivePanelState(); }}
     />
+  </div>
   {/if}
 </div>
 
@@ -934,3 +1383,60 @@
     onclose={() => { notesOpen = false; hasNote = !!localStorage.getItem(`me221-note-${tableDef!.id}`); }}
   />
 {/if}
+
+<ContextContextMenu
+  open={contextMenuOpen}
+  x={contextMenuX}
+  y={contextMenuY}
+  items={[
+    { label: 'Select Cell', action: 'selectCell' },
+    { label: 'Copy', action: 'copy' },
+    { label: 'Paste', action: 'paste' },
+    { label: 'Transform', action: 'transform' },
+    { label: 'Select Row', action: 'selectRow' },
+    { label: 'Select Column', action: 'selectCol' },
+    { label: 'Select All', action: 'selectAll' },
+    { label: 'Jump to Operating Point', action: 'jumpToOp', disabled: opRow < 0 || opCol < 0 },
+  ]}
+  onSelect={handleContextMenuAction}
+  onClose={() => { contextMenuOpen = false; }}
+/>
+
+{#if quickJumpOpen}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div class="fixed inset-0 z-[80]" style="background-color: rgba(0,0,0,0.8);" role="button" tabindex="-1" onclick={() => { quickJumpOpen = false; }}></div>
+  <div class="fixed inset-x-0 bottom-0 z-[81] border-t max-h-[60vh] overflow-auto" style="background-color: var(--metro-card); border-color: var(--metro-border);">
+    <div class="mx-auto max-w-lg p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <h3 class="text-[13px] font-bold uppercase tracking-wider text-white">Switch Table</h3>
+        <button class="flex h-8 w-8 items-center justify-center text-[var(--metro-text-secondary)] hover:text-white" onclick={() => { quickJumpOpen = false; }}>&#x2715;</button>
+      </div>
+      {#each allTables as t (t.id)}
+        <button
+          class="flex w-full items-center gap-3 px-3 py-2 text-left text-[12px] transition-colors duration-100 {t.id === tableId ? 'text-[var(--metro-orange)]' : 'text-[var(--metro-text-secondary)]'}"
+          style="border-bottom: 1px solid var(--metro-border-subtle);"
+          onclick={() => handleQuickJump(t.id)}
+          onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--metro-hover)'; }}
+          onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        >
+          <span class="flex-1 truncate">{t.name}</span>
+          <span class="text-[10px] uppercase text-[var(--metro-text-muted)]">{t.category}</span>
+          {#if t.id !== tableId}
+            <span class="text-[10px] text-[var(--metro-text-muted)]">{allTables.find(x => x.id === t.id) ? '' : ''}</span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<HistoryViewer
+  open={historyOpen}
+  {undoStack}
+  {redoStack}
+  {bookmarks}
+  onJumpToGroup={handleJumpToGroup}
+  onBookmark={handleBookmark}
+  onRemoveBookmark={handleRemoveBookmark}
+  onClose={() => { historyOpen = false; }}
+/>

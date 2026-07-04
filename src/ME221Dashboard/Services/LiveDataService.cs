@@ -190,6 +190,7 @@ public sealed class LiveDataService(ILogger<LiveDataService>? logger = null) : I
 
     public void Dispose()
     {
+        System.Diagnostics.Trace.WriteLine("[SHUTDOWN] LiveDataService.Dispose");
         lock (_lock)
         {
             _cts?.Cancel();

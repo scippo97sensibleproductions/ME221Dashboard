@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { TableDefinition, TableData } from './types';
+  import type { TableDefinition, TableData, ColorScheme } from './types';
   import { cellKey, heatColor } from './types';
+  import { IconDownload } from '@tabler/icons-svelte';
+  import { HybridBridge } from '../HybridBridge';
 
-  let { tableDef, tableData, selectedCol, opCol, minVal, maxVal, anchor, selection, selectionType = 'output', dirtyCells, dirtyInput0, diffMode = false, originalData = null, onCellClick, onAxis0Click, onAnchorSet, onSelectionComplete, onSelectionClear }: {
+  let { tableDef, tableData, selectedCol, opCol, minVal, maxVal, anchor, selection, selectionType = 'output', dirtyCells, dirtyInput0, diffMode = false, originalData = null, colorScheme = 'thermal', liveOutputValue = null, onCellClick, onAxis0Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
     tableData: TableData;
     selectedCol: number;
@@ -16,11 +18,14 @@
     dirtyInput0: Set<number>;
     diffMode?: boolean;
     originalData?: TableData | null;
+    colorScheme?: ColorScheme;
+    liveOutputValue?: number | null;
     onCellClick: (row: number, col: number) => void;
     onAxis0Click: (col: number) => void;
     onAnchorSet: (row: number, col: number, type?: 'output' | 'input0') => void;
     onSelectionComplete: (row: number, col: number) => void;
     onSelectionClear: () => void;
+    onContextMenu?: (e: MouseEvent, row: number, col: number, type: 'output' | 'input0') => void;
   } = $props();
 
   let isMobile = $state(false);
@@ -38,6 +43,7 @@
   });
 
   let containerEl = $state<HTMLDivElement>();
+  let svgEl = $state<SVGSVGElement>();
   let w = $state(0);
   let h = $state(0);
 
@@ -134,6 +140,190 @@
   });
 
   let hoverIndex = $state(-1);
+
+  function exportChartAsPng() {
+    if (!svgEl || !containerEl) return;
+    const scale = 2;
+    const cw = w * scale;
+    const chPx = h * scale;
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = chPx;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(scale, scale);
+
+    // Resolve CSS variables
+    const cs = getComputedStyle(document.documentElement);
+    const metroBg = cs.getPropertyValue('--metro-bg').trim() || '#0A0A0A';
+    const metroBorder = cs.getPropertyValue('--metro-border').trim() || '#333333';
+    const metroText = cs.getPropertyValue('--metro-text').trim() || '#FFFFFF';
+    const metroTextSec = cs.getPropertyValue('--metro-text-secondary').trim() || '#A0A0A0';
+    const metroTextMuted = cs.getPropertyValue('--metro-text-muted').trim() || '#666666';
+    const metroOrange = cs.getPropertyValue('--metro-orange').trim() || '#D83B01';
+    const metroYellow = cs.getPropertyValue('--metro-yellow').trim() || '#E5A100';
+    const metroCard = cs.getPropertyValue('--metro-card').trim() || '#1A1A1A';
+
+    // Background
+    ctx.fillStyle = metroBg;
+    ctx.fillRect(0, 0, w, h);
+
+    // Chart area
+    const pL = pad.left, pT = pad.top, pR = pad.right, pB = pad.bottom;
+    const cW = w - pL - pR;
+    const cH = h - pT - pB;
+
+    // Y-axis grid lines + labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (const tick of yTicks) {
+      ctx.strokeStyle = metroBorder;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(pL, tick.px);
+      ctx.lineTo(w - pR, tick.px);
+      ctx.stroke();
+
+      ctx.fillStyle = metroTextSec;
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText(tick.val.toFixed(1), pL - 8, tick.px + 1);
+    }
+
+    // X-axis labels
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (let i = 0; i < values.length; i++) {
+      const pt = values[i];
+      const px = pL + (pt.x - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+      const isCurrent = i === selectedCol;
+      ctx.fillStyle = isCurrent ? metroOrange : metroTextSec;
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText(typeof pt.x === 'number' ? pt.x.toFixed(0) : String(pt.x), px, pT + cH + 6);
+    }
+
+    // Operating point line
+    if (opCol >= 0 && opCol < axis.length) {
+      const opX = pL + (axis[opCol] - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(opX, pT);
+      ctx.lineTo(opX, pT + cH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Diff mode original curve
+    if (diffMode && origValues && origValues.length > 1) {
+      ctx.strokeStyle = metroTextMuted;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 3]);
+      ctx.beginPath();
+      for (let i = 0; i < origValues.length; i++) {
+        const px = pL + (origValues[i].x - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+        const py = pT + cH - (origValues[i].y - yMin) / (yMax - yMin) * cH;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Curve path
+    if (values.length > 1) {
+      ctx.strokeStyle = metroOrange;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < values.length; i++) {
+        const px = pL + (values[i].x - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+        const py = pT + cH - (values[i].y - yMin) / (yMax - yMin) * cH;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    // Data points
+    for (let i = 0; i < values.length; i++) {
+      const pt = values[i];
+      const px = pL + (pt.x - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+      const py = pT + cH - (pt.y - yMin) / (yMax - yMin) * cH;
+      const isCurrent = i === selectedCol;
+      const isOp = i === opCol;
+      const inSel = isSelectedOutput(i);
+      const isDirty = dirtyCells.has(cellKey(0, i));
+      const r = isCurrent ? 7 : isOp ? 6 : inSel ? 6 : 4;
+
+      // Dirty indicator
+      if (isDirty && !isCurrent && !inSel) {
+        ctx.fillStyle = metroYellow;
+        ctx.beginPath();
+        ctx.arc(px, py + 10, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Point
+      ctx.fillStyle = isCurrent ? metroOrange : isOp ? '#ffffff' : inSel ? metroOrange : '#B83201';
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (isCurrent) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      } else if (isOp) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    // Operating point indicator
+    if (opCol >= 0 && opCol < values.length) {
+      const opX = pL + (axis[opCol] - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+      const opY = pT + cH - ((values[opCol]?.y ?? 0) - yMin) / (yMax - yMin) * cH;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(opX, opY, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Y-axis label
+    ctx.save();
+    ctx.fillStyle = metroTextMuted;
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.translate(12, pT + cH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(tableDef.outputName, 0, 0);
+    ctx.restore();
+
+    // Title
+    ctx.fillStyle = metroText;
+    ctx.font = 'bold 13px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(tableDef.name, pL, 6);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const result = await HybridBridge.saveBinaryFile(`${tableDef.name}_chart.png`, base64, '.png');
+        if (!result.success && result.error !== 'Save cancelled') {
+          console.error('Export PNG failed:', result.error);
+        }
+      };
+      reader.readAsDataURL(blob);
+    }, 'image/png');
+  }
 
   let cellW = $derived(isMobile ? 42 : 64);
   let gridStyle = $derived(
@@ -251,6 +441,7 @@
             role="columnheader"
             tabindex="-1"
             onclick={() => handleCellTap(c, 'input0')}
+            oncontextmenu={(e) => onContextMenu?.(e, 0, c, 'input0')}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCellTap(c, 'input0'); } }}
             onpointerdown={(e) => handlePointerDown(e, c, 'input0')}
             onpointerup={(e) => handlePointerUp(e, c)}
@@ -277,7 +468,7 @@
           {@const delta = diffMode ? val - origVal : 0}
           {@const color = diffMode
             ? (Math.abs(delta) < 0.001 ? 'rgb(100, 100, 100)' : delta > 0 ? 'rgb(34, 139, 80)' : 'rgb(200, 50, 50)')
-            : heatColor(val, minVal, maxVal)}
+            : heatColor(val, minVal, maxVal, colorScheme)}
           {@const isAnc = selectionType === 'output' && anchor?.row === 0 && anchor?.col === c}
           {@const inSel = isSelectedOutput(c)}
           {@const isCurrent = c === selectedCol && selectionType === 'output'}
@@ -292,6 +483,7 @@
             role="gridcell"
             tabindex="-1"
             onclick={() => handleCellTap(c, 'output')}
+            oncontextmenu={(e) => onContextMenu?.(e, 0, c, 'output')}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCellTap(c, 'output'); } }}
             onpointerdown={(e) => handlePointerDown(e, c, 'output')}
             onpointerup={(e) => handlePointerUp(e, c)}
@@ -306,6 +498,16 @@
             {/if}
             {#if isOp}
               <div class="pointer-events-none absolute -left-1 -top-1 h-2 w-2 rounded-full bg-white" style="filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));"></div>
+              {#if liveOutputValue !== null}
+                {@const liveDelta = liveOutputValue - val}
+                {@const absDelta = Math.abs(liveDelta)}
+                <div class="pointer-events-none absolute inset-x-0 -bottom-4 flex items-center justify-center">
+                  <span class="rounded px-1 text-[8px] font-bold tabular-nums whitespace-nowrap"
+                    style="background-color: {absDelta < 2 ? 'rgba(34,139,80,0.9)' : absDelta < 10 ? 'rgba(216,59,1,0.9)' : 'rgba(200,50,50,0.9)'}; color: #fff;">
+                    {liveOutputValue.toFixed(1)} ({liveDelta > 0 ? '+' : ''}{liveDelta.toFixed(1)})
+                  </span>
+                </div>
+              {/if}
             {/if}
           </div>
         {/each}
@@ -316,7 +518,15 @@
   <!-- SVG Chart -->
   <div bind:this={containerEl} class="flex-1 min-h-0 relative">
     {#if w > 0 && h > 0}
-      <svg width={w} height={h} viewBox="0 0 {w} {h}" class="block">
+      <button
+        class="absolute right-2 top-2 z-10 flex h-7 items-center gap-1 border px-2 text-[10px] font-bold uppercase tracking-wider transition-colors duration-150"
+        style="background-color: var(--metro-card); border-color: var(--metro-border); color: var(--metro-text-secondary);"
+        onclick={exportChartAsPng}
+      >
+        <IconDownload size={12} />
+        Export PNG
+      </button>
+      <svg bind:this={svgEl} width={w} height={h} viewBox="0 0 {w} {h}" class="block">
         {#each yTicks as tick}
           <line x1={pad.left} y1={tick.px} x2={w - pad.right} y2={tick.px}
                 stroke="var(--metro-border)" stroke-width="0.5" />

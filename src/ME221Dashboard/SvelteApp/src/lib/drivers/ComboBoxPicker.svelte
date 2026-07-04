@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Modal } from 'flowbite-svelte';
   import { IconSearch, IconCheck } from '@tabler/icons-svelte';
-  import type { ComboOption } from '../lib/HybridBridgeTypes';
+  import type { ComboOption } from '../HybridBridgeTypes';
 
   let { open, title, options, currentValue, onSelect, onClose }: {
     open: boolean;

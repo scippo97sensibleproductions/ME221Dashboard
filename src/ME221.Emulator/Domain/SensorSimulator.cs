@@ -10,6 +10,7 @@ public sealed class SensorSimulator
     private readonly Random _random = new();
     private readonly Dictionary<string, ushort> _dataKeyToId;
     private readonly Dictionary<string, (ushort Id, Func<SimContext, float> Sim)> _nameSim;
+    private readonly Dictionary<ushort, List<TableDefinition>> _outputLinkToTables;
     private VehicleConfigData _vehicleConfig;
     private double _tireCircumferenceMeters;
     private string? _sharedConfigPath;
@@ -69,8 +70,21 @@ public sealed class SensorSimulator
 
         _nameSim = BuildNameSimulation(calibration.DataLinks);
 
-        _logger.LogInformation("SensorSimulator: initialized — {DataKeyCount} data-key links, {NameCount} name-based sims, {Gears} gears, final={Final:F2}, tire={Tire:F1}\", configPath={ConfigPath}",
-            _dataKeyToId.Count, _nameSim.Count, _vehicleConfig.GearRatios.Length, _vehicleConfig.FinalDriveRatio, _vehicleConfig.TireDiameterInches, _sharedConfigPath);
+        // Build lookup: output data link ID → tables that produce it
+        _outputLinkToTables = new Dictionary<ushort, List<TableDefinition>>();
+        foreach (var table in calibration.Tables)
+        {
+            if (table.OutputLinkId == 0) continue;
+            if (!_outputLinkToTables.TryGetValue(table.OutputLinkId, out var list))
+            {
+                list = [];
+                _outputLinkToTables[table.OutputLinkId] = list;
+            }
+            list.Add(table);
+        }
+
+        _logger.LogInformation("SensorSimulator: initialized — {DataKeyCount} data-key links, {NameCount} name-based sims, {TableOutputCount} table output links, {Gears} gears, final={Final:F2}, tire={Tire:F1}\", configPath={ConfigPath}",
+            _dataKeyToId.Count, _nameSim.Count, _outputLinkToTables.Count, _vehicleConfig.GearRatios.Length, _vehicleConfig.FinalDriveRatio, _vehicleConfig.TireDiameterInches, _sharedConfigPath);
     }
 
     public void Tick()
@@ -212,6 +226,22 @@ public sealed class SensorSimulator
 
         foreach (var (_, (id, sim)) in _nameSim)
             _entityStore.SetDataLinkValue(id, sim(ctx));
+
+        // ── Table output interpolation ──
+        // For each table, look up current input data link values and interpolate the table
+        // to produce the actual output data link value. This ensures table outputs are
+        // consistent with the table data, not just hardcoded formulas.
+        foreach (var (outputLinkId, tables) in _outputLinkToTables)
+        {
+            // Use first table that produces this output (usually there's only one)
+            var table = tables[0];
+            var input0Value = _entityStore.GetDataLinkValue(table.Input0LinkId);
+            var input1Value = _entityStore.GetDataLinkValue(table.Input1LinkId);
+
+            var interpolated = _entityStore.InterpolateTable(table.Id, input0Value, input1Value);
+            if (interpolated.HasValue)
+                _entityStore.SetDataLinkValue(outputLinkId, interpolated.Value);
+        }
 
         _prevTps = tps;
 

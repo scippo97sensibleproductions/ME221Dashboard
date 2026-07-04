@@ -301,6 +301,15 @@ public partial class HybridBridgeService
                     textColor = g.TextColor,
                     zIndex = g.ZIndex,
                 }).ToList(),
+                tables = (dashboard.Tables ?? []).Select(t => new
+                {
+                    tableId = t.TableId,
+                    fractionX = t.FractionX,
+                    fractionY = t.FractionY,
+                    widthFraction = t.WidthFraction,
+                    heightFraction = t.HeightFraction,
+                    zIndex = t.ZIndex,
+                }).ToList(),
                 gridRows = config.GridRows,
                 gridColumns = config.GridColumns,
                 entities = entityLookup,
@@ -437,6 +446,45 @@ public partial class HybridBridgeService
                     if (g["chartPrecision"] is JsonValue) existing.ChartPrecision = g["chartPrecision"]!.GetValue<int>();
                     if (g["textColor"] is JsonValue) existing.TextColor = g["textColor"]!.GetValue<string>();
                     if (g["zIndex"] is JsonValue) existing.ZIndex = g["zIndex"]!.GetValue<int>();
+                }
+            }
+
+            // Handle table layout updates
+            var tableUpdates = data["tables"]?.AsArray();
+            if (tableUpdates != null && tableUpdates.Count > 0)
+            {
+                dashboard.Tables ??= [];
+                foreach (var t in tableUpdates)
+                {
+                    if (t is null) continue;
+                    var tableId = t["tableId"]?.GetValue<int>() ?? 0;
+                    var existing = dashboard.Tables.FirstOrDefault(x => x.TableId == tableId);
+                    if (existing != null)
+                    {
+                        if (t["fractionX"] is JsonValue) existing.FractionX = t["fractionX"]!.GetValue<double>();
+                        if (t["fractionY"] is JsonValue) existing.FractionY = t["fractionY"]!.GetValue<double>();
+                        if (t["widthFraction"] is JsonValue) existing.WidthFraction = t["widthFraction"]!.GetValue<double>();
+                        if (t["heightFraction"] is JsonValue) existing.HeightFraction = t["heightFraction"]!.GetValue<double>();
+                        if (t["zIndex"] is JsonValue) existing.ZIndex = t["zIndex"]!.GetValue<int>();
+                        if (t["colorScheme"] is JsonValue cs) existing.ColorScheme = cs.GetValue<string>();
+                        if (t["showLabels"] is JsonValue sl) existing.ShowLabels = sl.GetValue<bool>();
+                        if (t["showDimensionBadge"] is JsonValue sdb) existing.ShowDimensionBadge = sdb.GetValue<bool>();
+                    }
+                    else
+                    {
+                        dashboard.Tables.Add(new DashboardTableEntry
+                        {
+                            TableId = tableId,
+                            FractionX = t["fractionX"]?.GetValue<double>() ?? 0.1,
+                            FractionY = t["fractionY"]?.GetValue<double>() ?? 0.1,
+                            WidthFraction = t["widthFraction"]?.GetValue<double>() ?? 0.25,
+                            HeightFraction = t["heightFraction"]?.GetValue<double>() ?? 0.25,
+                            ZIndex = t["zIndex"]?.GetValue<int>() ?? 0,
+                            ColorScheme = t["colorScheme"]?.GetValue<string>(),
+                            ShowLabels = t["showLabels"]?.GetValue<bool>(),
+                            ShowDimensionBadge = t["showDimensionBadge"]?.GetValue<bool>(),
+                        });
+                    }
                 }
             }
 
@@ -607,6 +655,57 @@ public partial class HybridBridgeService
         catch (Exception ex)
         {
             _logger.LogError(ex, "SaveSensorSelection failed");
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Save dashboard table entries (add/remove tables from dashboard).
+    /// Called from JS: window.HybridWebView.InvokeDotNet('SaveDashboardTables', [jsonPayload])
+    /// payload contains: { dashboardName, tables: [{ tableId, fractionX, fractionY, widthFraction, heightFraction, zIndex }] }
+    /// </summary>
+    public async Task<string> SaveDashboardTables(string jsonPayload)
+    {
+        _logger.LogInformation("SaveDashboardTables called");
+        try
+        {
+            var data = JsonNode.Parse(jsonPayload)!;
+            var dashboardName = data["dashboardName"]?.GetValue<string>() ?? "default";
+
+            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            config ??= new DashboardConfig();
+
+            if (!config.Dashboards.TryGetValue(dashboardName, out var dashboard))
+            {
+                dashboard = new DashboardDefinition();
+                config.Dashboards[dashboardName] = dashboard;
+            }
+
+            var tableArray = data["tables"]?.AsArray();
+            dashboard.Tables = [];
+            if (tableArray != null)
+            {
+                foreach (var t in tableArray)
+                {
+                    if (t is null) continue;
+                    dashboard.Tables.Add(new DashboardTableEntry
+                    {
+                        TableId = t["tableId"]?.GetValue<int>() ?? 0,
+                        FractionX = t["fractionX"]?.GetValue<double>() ?? 0.1,
+                        FractionY = t["fractionY"]?.GetValue<double>() ?? 0.1,
+                        WidthFraction = t["widthFraction"]?.GetValue<double>() ?? 0.25,
+                        HeightFraction = t["heightFraction"]?.GetValue<double>() ?? 0.25,
+                        ZIndex = t["zIndex"]?.GetValue<int>() ?? 0,
+                    });
+                }
+            }
+
+            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            return JsonSerializer.Serialize(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveDashboardTables failed");
             return JsonSerializer.Serialize(new { success = false, error = ex.Message });
         }
     }

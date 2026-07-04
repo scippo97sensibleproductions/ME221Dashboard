@@ -2,6 +2,10 @@
  * HybridWebView Bridge - TypeScript types for C# <-> Svelte communication
  */
 
+import type { ColorScheme } from './tables/types';
+
+export type { ColorScheme };
+
 // ─── Connection Types ────────────────────────────────────────────────────────
 
 export interface ConnectionStateInfo {
@@ -87,6 +91,7 @@ export interface PickCalibrationResult {
 export interface DashboardConfigResult {
   found: boolean;
   gauges: GaugeConfigEntry[];
+  tables: DashboardTableEntry[];
   gridRows: number;
   gridColumns: number;
   entities?: Record<string, EntityInfo>;
@@ -141,6 +146,18 @@ export interface GaugeConfigEntry {
   chartPrecision: number;
   textColor: string;
   zIndex: number;
+}
+
+export interface DashboardTableEntry {
+  tableId: number;
+  fractionX: number;
+  fractionY: number;
+  widthFraction: number;
+  heightFraction: number;
+  zIndex: number;
+  colorScheme?: ColorScheme;
+  showLabels?: boolean;
+  showDimensionBadge?: boolean;
 }
 
 export interface EntityInfo {
@@ -357,6 +374,7 @@ export interface DataLinkDefinition {
   id: number;
   name: string;
   category: string;
+  measureUnit: string;
 }
 
 export interface DataLinksResult {

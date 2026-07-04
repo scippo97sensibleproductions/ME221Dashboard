@@ -37,7 +37,8 @@ public sealed class TableCommandHandler(EntityStore entityStore, EcuState state)
     private MessageFrame HandleSetTable(MessageFrame request)
     {
         var payload = request.Payload;
-        if (payload.Length < 6) // id:2 + type:1 + enabled:1 + rows:1 + cols:1 = 6
+        // Wire format (from SetTableRequest): [id:2] [dataSize:2] [type:1] [enabled:1] [rows:1] [cols:1] [...]
+        if (payload.Length < 8) // id:2 + dataSize:2 + type:1 + enabled:1 + rows:1 + cols:1 = 8
             return new StatusResponse(WireFormat.ClassTables, WireFormat.TablesSetTable, MessageStatus.InvalidParameter);
 
         var tableId = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
@@ -46,6 +47,7 @@ public sealed class TableCommandHandler(EntityStore entityStore, EcuState state)
             return new StatusResponse(WireFormat.ClassTables, WireFormat.TablesSetTable, MessageStatus.InvalidParameter);
 
         var offset = 2;
+        offset += 2; // skip dataSize (LE uint16)
         offset++; // skip type byte
         var enabled = payload.Span[offset++] != 0;
         var rows = payload.Span[offset++];

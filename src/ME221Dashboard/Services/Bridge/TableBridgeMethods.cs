@@ -74,6 +74,9 @@ public partial class HybridBridgeService
             {
                 success = true,
                 enabled = wireData.Enabled,
+                rows = tableDef.Rows,
+                cols = tableDef.Cols,
+                tableType = tableDef.TableType,
                 input0 = wireData.Input0,
                 input1 = wireData.Input1,
                 output = wireData.Output,

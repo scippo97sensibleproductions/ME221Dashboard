@@ -79,6 +79,7 @@
       <button
         class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
         style="color: var(--metro-text-secondary, #A0A0A0);"
+        onclick={() => onNavigate('logs')}
         aria-label="Logs"
       >
         <IconMessage size={20} />

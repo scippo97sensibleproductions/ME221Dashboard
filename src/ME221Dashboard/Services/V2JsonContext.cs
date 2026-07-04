@@ -18,6 +18,7 @@ namespace ME221Dashboard.Services;
 [JsonSerializable(typeof(TextValueMapping))]
 [JsonSerializable(typeof(DeviceInfoMetadata))]
 [JsonSerializable(typeof(GaugeConfigEntry))]
+[JsonSerializable(typeof(DashboardTableEntry))]
 [JsonSerializable(typeof(SensorCustomization))]
 [JsonSerializable(typeof(DashboardConfig))]
 [JsonSerializable(typeof(DashboardDefinition))]

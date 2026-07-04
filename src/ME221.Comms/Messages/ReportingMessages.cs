@@ -21,7 +21,7 @@ public sealed class SendAckRequest : Request
 {
     public static readonly SendAckRequest Instance = new();
 
-    private SendAckRequest()
+    internal SendAckRequest()
         : base(WireFormat.ClassReporting, WireFormat.ReportingSendAck, Array.Empty<byte>()) { }
 }
 

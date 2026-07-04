@@ -196,9 +196,17 @@ public sealed class EcuConnectionService(
 
     public async ValueTask DisposeAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogCritical("SHUTDOWN: EcuConnectionService.DisposeAsync START");
         await _lock.WaitAsync().ConfigureAwait(false);
-        try { await CleanupAsync().ConfigureAwait(false); }
+        try
+        {
+            _logger.LogCritical("SHUTDOWN: CleanupAsync START (state={State})", _state);
+            await CleanupAsync().ConfigureAwait(false);
+            _logger.LogCritical("SHUTDOWN: CleanupAsync DONE in {Elapsed}ms", sw.ElapsedMilliseconds);
+        }
         finally { _lock.Release(); _lock.Dispose(); loggerFactory?.Dispose(); }
+        _logger.LogCritical("SHUTDOWN: EcuConnectionService.DisposeAsync DONE in {Elapsed}ms", sw.ElapsedMilliseconds);
     }
 
     private static async Task<(string Product, string Model, string Version)> GetEcuInfoAsync(ProtocolService protocol)
@@ -276,12 +284,16 @@ public sealed class EcuConnectionService(
 
     private async Task CleanupAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _logger.LogCritical("SHUTDOWN: CleanupAsync — StopMonitor");
         StopMonitor();
         if (_protocolService is not null)
         {
+            _logger.LogCritical("SHUTDOWN: CleanupAsync — DisposeAsync ProtocolService");
             _protocolService.HeartbeatFailed -= OnHeartbeatFailed;
             await _protocolService.DisposeAsync().ConfigureAwait(false);
             _protocolService = null;
+            _logger.LogCritical("SHUTDOWN: CleanupAsync — ProtocolService disposed in {Elapsed}ms", sw.ElapsedMilliseconds);
         }
         ProtocolInfo = null;
     }

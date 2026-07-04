@@ -1,12 +1,14 @@
 <script lang="ts">
+  import type { ColorScheme } from './types';
   import { heatColor } from './types';
 
-  let { data, rows, cols, minVal, maxVal }: {
+  let { data, rows, cols, minVal, maxVal, colorScheme = 'thermal' }: {
     data: number[];
     rows: number;
     cols: number;
     minVal: number;
     maxVal: number;
+    colorScheme?: ColorScheme;
   } = $props();
 
   let canvasW = 80;
@@ -63,7 +65,7 @@
           y={r * cellH}
           width={cellW + 0.5}
           height={cellH + 0.5}
-          fill={heatColor(val, minVal, maxVal)}
+          fill={heatColor(val, minVal, maxVal, colorScheme)}
         />
       {/each}
     </svg>
