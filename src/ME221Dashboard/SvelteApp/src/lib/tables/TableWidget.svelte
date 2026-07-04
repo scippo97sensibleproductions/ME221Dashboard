@@ -136,7 +136,7 @@
     }
     const rows = tableDef.rows;
     const cols = tableDef.cols;
-    const headerH = 22; // table-name row at top
+    const headerH = 26; // table-name row at top
     const labelW = is1D ? 0 : 28;
     const labelH = is1D ? 0 : 20;
     const availW = Math.max(20, widgetW - labelW - 4);
@@ -156,10 +156,13 @@
     };
   });
 
-  // Decide which cells get rendered labels (only when wide enough)
-  let cellLabelThreshold2D = $derived(layout.cellW >= 18 && layout.cellH >= 14 ? 5 : layout.cellW >= 14 ? 4 : 0);
-  let cellLabel1DThreshold = $derived(layout.cellW >= 16 ? 7 : layout.cellW >= 10 ? 5 : 0);
-  let showAxisLabelsThreshold = $derived(widgetW >= 200 && layout.cellW >= 14);
+  // Font sizes computed from cell dimensions — fill the cell minus 1px padding each side
+  let cellFont2D = $derived(Math.floor(Math.min((layout.cellW - 4) * 0.82, (layout.cellH - 4) * 0.72)));
+  let cellFont1D = $derived(Math.floor(Math.min((layout.cellW - 4) * 0.82, (layout.gridH - 4) * 0.72)));
+  let showCellLabels2D = $derived(cellFont2D >= 6);
+  let showCellLabels1D = $derived(cellFont1D >= 6);
+  let axisFontSize = $derived(Math.max(8, Math.floor(Math.min(layout.cellW * 0.7, 11))));
+  let showAxisLabelsThreshold = $derived(widgetW >= 60);
 
   function formatVal(v: number, cols: number): string {
     if (!isFinite(v)) return '—';
@@ -239,8 +242,8 @@
 >
   <!-- Header -->
   <div class="flex shrink-0 items-center justify-between border-b px-2 py-1" style="border-color: var(--metro-border); height: {layout.headerH}px;">
-    <span class="truncate text-[10px] font-bold uppercase tracking-wider {liveOutputVal != null ? 'text-white' : ''}" style="color: {liveOutputVal != null ? '#fff' : 'var(--metro-text-secondary)'};">
-      {tableName}{#if liveOutputVal != null}<span class="ml-1 text-[10px] tabular-nums" style="color: var(--metro-orange);">{formatAxis(liveOutputVal)}</span>{/if}
+    <span class="truncate text-[11px] font-bold uppercase tracking-wider {liveOutputVal != null ? 'text-white' : ''}" style="color: {liveOutputVal != null ? '#fff' : 'var(--metro-text-secondary)'};">
+      {tableName}{#if liveOutputVal != null}<span class="ml-1 text-[11px] tabular-nums" style="color: var(--metro-orange);">{formatAxis(liveOutputVal)}</span>{/if}
     </span>
     <div class="flex items-center gap-1.5">
       {#if onSettings}
@@ -255,7 +258,7 @@
         </button>
       {/if}
       {#if showDimensionBadge && tableDef}
-        <span class="text-[9px]" style="color: var(--metro-text-muted);">{tableDef.rows}×{tableDef.cols}</span>
+        <span class="text-[10px]" style="color: var(--metro-text-muted);">{tableDef.rows}×{tableDef.cols}</span>
       {/if}
     </div>
   </div>
@@ -303,9 +306,9 @@
                          border: 1px solid {isOp ? 'rgba(255,255,255,0.85)' : 'var(--metro-border)'};
                          outline: {isOp ? '2px solid rgba(255,255,255,0.95)' : 'none'}; outline-offset: -2px;"
                 >
-                  {#if showLabels && layout.cellW >= cellLabel1DThreshold}
-                    <span class="block truncate text-center text-[8px] font-mono tabular-nums leading-none"
-                          style="color: rgba(0,0,0,0.85); padding: 1px; font-size: {cellLabel1DThreshold}px;">
+                  {#if showLabels && showCellLabels1D}
+                    <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none"
+                          style="color: #000; font-size: {cellFont1D}px;">
                       {formatVal(val, layout.cols)}
                     </span>
                   {/if}
@@ -329,15 +332,15 @@
         {#if showAxisLabelsThreshold && tableData.input0.length > 0}
           <div class="absolute left-0 right-0 mt-0.5" style="height: {layout.labelH}px;">
             <div class="flex" style="width: {layout.cellW * layout.cols}px;">
-              <div class="flex-1 text-center text-[8px] font-mono tabular-nums truncate" style="color: var(--metro-text-muted); font-size: 8px;">
-                {formatAxis(tableData.input0[0])}
-              </div>
-              <div class="flex-1 text-center text-[8px] font-mono tabular-nums truncate" style="color: var(--metro-text-muted); font-size: 8px;">
-                {formatAxis(tableData.input0[Math.floor(layout.cols / 2)])}
-              </div>
-              <div class="flex-1 text-center text-[8px] font-mono tabular-nums truncate" style="color: var(--metro-text-muted); font-size: 8px;">
-                {formatAxis(tableData.input0[layout.cols - 1])}
-              </div>
+              <div class="flex-1 text-center font-mono tabular-nums truncate" style="color: var(--metro-text-primary); font-size: {axisFontSize}px;">
+                 {formatAxis(tableData.input0[0])}
+               </div>
+               <div class="flex-1 text-center font-mono tabular-nums truncate" style="color: var(--metro-text-primary); font-size: {axisFontSize}px;">
+                 {formatAxis(tableData.input0[Math.floor(layout.cols / 2)])}
+               </div>
+               <div class="flex-1 text-center font-mono tabular-nums truncate" style="color: var(--metro-text-primary); font-size: {axisFontSize}px;">
+                 {formatAxis(tableData.input0[layout.cols - 1])}
+               </div>
             </div>
           </div>
         {/if}
@@ -368,9 +371,9 @@
                            border: 1px solid {isOpCell ? 'rgba(255,255,255,0.95)' : isOpRow || isOpCol ? 'rgba(255,255,255,0.18)' : 'var(--metro-border)'};
                            outline: {isOpCell ? '2px solid rgba(255,255,255,0.95)' : 'none'}; outline-offset: -2px;"
                   >
-                    {#if showLabels && layout.cellW >= cellLabelThreshold2D && layout.cellH >= cellLabelThreshold2D}
-                      <span class="block truncate text-center leading-none tabular-nums"
-                            style="font-size: {cellLabelThreshold2D}px; color: rgba(0,0,0,0.78); padding: 1px;">
+                    {#if showLabels && showCellLabels2D}
+                      <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none"
+                            style="font-size: {cellFont2D}px; color: #000;">
                         {formatVal(val, layout.cols)}
                       </span>
                     {/if}
@@ -396,8 +399,8 @@
           <div class="flex" style="width: {layout.gridW}px; height: {layout.labelH}px;">
             {#each Array.from({ length: Math.min(layout.cols, 5) }, (_, i) => i) as ti}
               {@const colIdx = Math.round((ti / Math.max(1, Math.min(layout.cols, 5) - 1)) * (layout.cols - 1))}
-              <div class="flex-1 text-center text-[7px] font-mono tabular-nums truncate"
-                   style="color: var(--metro-text-muted); font-size: 7px; line-height: {layout.labelH}px;">
+              <div class="flex-1 text-center text-[9px] font-mono tabular-nums truncate"
+                   style="color: var(--metro-text-primary); font-size: 9px; line-height: {layout.labelH}px;">
                 {formatAxis(tableData.input0[colIdx])}
               </div>
             {/each}
@@ -411,8 +414,8 @@
           <div class="flex flex-col" style="width: {layout.labelW}px; height: {layout.gridH}px;">
             {#each Array.from({ length: Math.min(layout.rows, 5) }, (_, i) => i) as ti}
               {@const rowIdx = Math.round((ti / Math.max(1, Math.min(layout.rows, 5) - 1)) * (layout.rows - 1))}
-              <div class="flex-1 text-right text-[7px] font-mono tabular-nums truncate pr-1"
-                   style="color: var(--metro-text-muted); font-size: 7px; line-height: {layout.cellH}px;">
+              <div class="flex-1 text-right text-[9px] font-mono tabular-nums truncate pr-1"
+                   style="color: var(--metro-text-primary); font-size: 9px; line-height: {layout.cellH}px;">
                 {formatAxis(tableData.input1[rowIdx])}
               </div>
             {/each}
