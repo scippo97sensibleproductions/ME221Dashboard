@@ -11,6 +11,7 @@
   import DriverListPage from './pages/DriverListPage.svelte';
   import DriverEditorPage from './pages/DriverEditorPage.svelte';
   import LogsPage from './pages/LogsPage.svelte';
+  import EcuMonitorPage from './pages/EcuMonitorPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
   import type { NotificationType } from './lib/NotificationModal.svelte';
   import ToastContainer from './lib/ToastContainer.svelte';
@@ -37,7 +38,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -220,7 +221,7 @@
     navigateTo(page, params);
   }
 
-  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor'];
+  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor'];
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_BASE_DELAY_MS = 1500;
 
@@ -519,6 +520,8 @@
         <DriverEditorPage driverId={selectedDriverId} onNavigate={navigateTo} />
       {:else if currentPage === 'logs'}
         <LogsPage onNavigate={navigateTo} />
+      {:else if currentPage === 'ecuMonitor'}
+        <EcuMonitorPage onNavigate={navigateTo} {connectionState} />
       {/if}
     </main>
   </div>

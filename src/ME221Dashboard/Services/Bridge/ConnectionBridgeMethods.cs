@@ -10,6 +10,7 @@ namespace ME221Dashboard.Services;
 
 public partial class HybridBridgeService
 {
+    private ConnectionTarget? _lastTarget;
     /// <summary>
     /// Connect to an ECU via TCP. Called from JS: window.HybridWebView.InvokeDotNet('ConnectTcp', [host, port])
     /// </summary>
@@ -19,6 +20,7 @@ public partial class HybridBridgeService
         {
             _logger.LogInformation("Connecting to TCP {Host}:{Port}", host, port);
             var target = new ConnectionTarget.Tcp(host, port);
+            _lastTarget = target;
             var success = await _connection.ConnectAsync(target).ConfigureAwait(false);
             if (!success)
             {
@@ -107,6 +109,7 @@ public partial class HybridBridgeService
 #endif
 
             var target = new ConnectionTarget.Serial(portName, baudRate);
+            _lastTarget = target;
             _logger.LogInformation("ConnectSerial: calling _connection.ConnectAsync");
             var success = await _connection.ConnectAsync(target).ConfigureAwait(false);
             if (!success)
@@ -141,6 +144,7 @@ public partial class HybridBridgeService
             }
 
             await _connection.DisconnectAsync().ConfigureAwait(false);
+            _lastTarget = null;
             return JsonSerializer.Serialize(new { success = true });
         }
         catch (Exception ex)
@@ -158,6 +162,18 @@ public partial class HybridBridgeService
         return JsonSerializer.Serialize(new
         {
             state = _connection.State.ToString(),
+            connectionType = _lastTarget switch
+            {
+                ConnectionTarget.Tcp => "tcp",
+                ConnectionTarget.Serial => "serial",
+                _ => (string?)null
+            },
+            connectionDetail = _lastTarget switch
+            {
+                ConnectionTarget.Tcp t => $"{t.Host}:{t.Port}",
+                ConnectionTarget.Serial s => s.PortName,
+                _ => (string?)null
+            },
             protocolInfo = _connection.ProtocolInfo != null ? new
             {
                 product = _connection.ProtocolInfo.ProductName,

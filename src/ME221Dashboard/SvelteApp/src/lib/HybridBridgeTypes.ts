@@ -10,6 +10,8 @@ export type { ColorScheme };
 
 export interface ConnectionStateInfo {
   state: string;
+  connectionType?: 'tcp' | 'serial';
+  connectionDetail?: string;
   error?: string;
   protocolInfo?: {
     product: string;

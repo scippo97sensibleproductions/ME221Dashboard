@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected } from '@tabler/icons-svelte';
+  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
 
   let { isConnected, dashboardNames, activeDashboard, currentPage, sidebarVisible, onSwitchDashboard, onDeleteDashboard, onNewDashboard, onNavigate, onDisconnect, onHideSidebar, onShowSidebar, onExportDashboard, onImportDashboard, onVehicleConfig }: {
@@ -31,6 +31,7 @@
     currentPage === 'logs' ? 'logs' :
     currentPage === 'dashboard' ? 'dashboard' :
     currentPage === 'driverList' || currentPage === 'driverEditor' ? 'drivers' :
+    currentPage === 'ecuMonitor' ? 'monitor' :
     ''
   );
 
@@ -40,6 +41,7 @@
     tables:    '#D83B01',
     drivers:   '#107C10',
     logs:      '#E81123',
+    monitor:   '#0ea5e9',
   };
 
   let showBar = $derived(sidebarVisible && currentPage !== 'welcome' && currentPage !== 'calibration');
@@ -177,17 +179,17 @@
         {/if}
       </button>
 
-      <!-- Logs -->
+      <!-- Monitor Hub -->
       <button
         class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
-        style="color: {activePage === 'logs' ? pageAccents.logs : 'var(--metro-text-secondary, #A0A0A0)'};"
-        onclick={() => onNavigate('logs')}
-        aria-label="Logs"
+        style="color: {activePage === 'monitor' ? pageAccents.monitor : 'var(--metro-text-secondary, #A0A0A0)'};"
+        onclick={() => onNavigate('ecuMonitor')}
+        aria-label="Monitor Hub"
       >
-        <IconMessage size={20} />
-        <span class="text-[10px] leading-tight">Logs</span>
-        {#if activePage === 'logs'}
-          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.logs};"></span>
+        <IconActivity size={20} />
+        <span class="text-[10px] leading-tight">Monitor</span>
+        {#if activePage === 'monitor'}
+          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.monitor};"></span>
         {/if}
       </button>
 
@@ -202,6 +204,10 @@
         <span class="text-[10px] leading-tight">More</span>
       </button>
       <Dropdown triggeredBy="#sidebar-more-btn" placement="top-end" class="w-48">
+        <DropdownItem onclick={() => onNavigate('logs')} class="flex items-center gap-2.5 text-[13px]">
+          <IconMessage size={15} class="shrink-0" />
+          <span>Logs</span>
+        </DropdownItem>
         <DropdownItem onclick={onVehicleConfig} class="flex items-center gap-2.5 text-[13px]">
           <IconCar size={15} class="shrink-0" />
           <span>Vehicle</span>
