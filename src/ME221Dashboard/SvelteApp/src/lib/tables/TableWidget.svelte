@@ -12,7 +12,7 @@
   import { IconSettings } from '@tabler/icons-svelte';
   import type { TableDefinition, TableData } from './types';
 
-  let { tableId, tableName, onTap, onSettings, colorScheme = 'thermal', showLabels = true, showDimensionBadge = true }: {
+  let { tableId, tableName, onTap, onSettings, colorScheme = 'thermal', showLabels = true, showDimensionBadge = true, maxFontSize }: {
     tableId: number;
     tableName: string;
     onTap: (tableId: number) => void;
@@ -20,6 +20,7 @@
     colorScheme?: string;
     showLabels?: boolean;
     showDimensionBadge?: boolean;
+    maxFontSize?: number;
   } = $props();
 
   let tableDef = $state<TableDefinition | null>(null);
@@ -105,20 +106,21 @@
     applyLatestLive();
   });
 
-  // Initial load + ResizeObserver
+  // Initial load
   onMount(() => {
     loadData();
-    if (widgetEl) {
-      widgetW = widgetEl.clientWidth;
-      widgetH = widgetEl.clientHeight;
-    }
+  });
+
+  // ResizeObserver via $effect (idiomatic Svelte 5, properly reactive)
+  $effect(() => {
+    if (!widgetEl) return;
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
         widgetW = entry.contentRect.width;
         widgetH = entry.contentRect.height;
       }
     });
-    if (widgetEl) ro.observe(widgetEl);
+    ro.observe(widgetEl);
     return () => ro.disconnect();
   });
 
@@ -143,7 +145,7 @@
     const availH = Math.max(20, widgetH - headerH - labelH - 4);
     const cellW = Math.max(2, availW / cols);
     const cellH = Math.max(2, is1D ? availH : availH / rows);
-    return {
+    const result = {
       rows,
       cols,
       cellW,
@@ -154,11 +156,18 @@
       gridW: cellW * cols,
       gridH: cellH * (is1D ? 1 : rows),
     };
+    return result;
   });
 
-  // Font sizes computed from cell dimensions — fill the cell minus 1px padding each side
-  let cellFont2D = $derived(Math.floor(Math.min((layout.cellW - 4) * 0.82, (layout.cellH - 4) * 0.72)));
-  let cellFont1D = $derived(Math.floor(Math.min((layout.cellW - 4) * 0.82, (layout.gridH - 4) * 0.72)));
+  // Font sizes: monospace chars are ~0.6×fontSize wide. For N chars to fit in cellW:
+  // fontSize = (cellW - padding) / (N × 0.6). Using N=5 worst case → multiplier ~0.33.
+  // Using N=4 average → multiplier ~0.42. Splitting the difference at 0.38.
+  let cellFont2D = $derived(maxFontSize != null
+    ? Math.min(Math.floor(Math.min((layout.cellW - 4) * 0.38, (layout.cellH - 4) * 0.85)), maxFontSize)
+    : Math.floor(Math.min((layout.cellW - 4) * 0.38, (layout.cellH - 4) * 0.85)));
+  let cellFont1D = $derived(maxFontSize != null
+    ? Math.min(Math.floor((layout.cellW - 4) * 0.38), maxFontSize)
+    : Math.floor((layout.cellW - 4) * 0.38));
   let showCellLabels2D = $derived(cellFont2D >= 6);
   let showCellLabels1D = $derived(cellFont1D >= 6);
   let axisFontSize = $derived(Math.max(8, Math.floor(Math.min(layout.cellW * 0.7, 11))));
@@ -301,14 +310,14 @@
                 {@const color = heatColor(val, range.min, range.max, colorScheme)}
                 {@const isOp = c === opCol}
                 <td
-                  class="relative"
+                  class="relative overflow-hidden"
                   style="padding: 0; width: {layout.cellW}px; height: {layout.gridH}px; background: {color};
                          border: 1px solid {isOp ? 'rgba(255,255,255,0.85)' : 'var(--metro-border)'};
                          outline: {isOp ? '2px solid rgba(255,255,255,0.95)' : 'none'}; outline-offset: -2px;"
                 >
                   {#if showLabels && showCellLabels1D}
-                    <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none"
-                          style="color: #000; font-size: {cellFont1D}px;">
+                    <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none whitespace-nowrap"
+                          style="left: 2px; right: 2px; color: #000; font-size: {cellFont1D}px;">
                       {formatVal(val, layout.cols)}
                     </span>
                   {/if}

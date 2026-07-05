@@ -4,7 +4,7 @@
   import { HybridBridge } from '../lib/HybridBridge';
   import type { DriverDefinition, DriverParamDefinition, DataLinkDefinition } from '../lib/HybridBridgeTypes';
   import DriverParamRow from '../lib/drivers/DriverParamRow.svelte';
-  import DataLinkRow from '../lib/drivers/DataLinkRow.svelte';
+  import DriverCompanionPanel from '../lib/drivers/DriverCompanionPanel.svelte';
   import PrecisionNumberModal from '../lib/drivers/PrecisionNumberModal.svelte';
   import ComboBoxPicker from '../lib/drivers/ComboBoxPicker.svelte';
   import { createDriverUndoRedoState, pushDriverUndo, canDriverUndo, canDriverRedo, driverUndo, driverRedo, nextDriverGroupId, type DriverUndoResult } from '../lib/drivers/driverUndoRedo';
@@ -23,6 +23,7 @@
   let originalOutputLinkIds = $state<number[]>([]);
   let originalInputLinkIds = $state<number[]>([]);
   let dataLinks = $state<DataLinkDefinition[]>([]);
+  let tableDefinitions = $state<{ id: number; name: string; category: string; rows: number; cols: number; tableType: string }[]>([]);
   let loading = $state(true);
   let saving = $state(false);
   let showConfirmDiscard = $state(false);
@@ -190,95 +191,101 @@
     }
   }
 
-  onMount(async () => {
-    mounted = true;
-    try {
-      const [defsResult, dataResult, linksResult] = await Promise.all([
-        HybridBridge.getDriverDefinitions(),
-        HybridBridge.readDriverData(driverId),
-        HybridBridge.getDataLinks(),
-      ]);
-      if (!mounted) return;
+  onMount(() => {
+    const init = async () => {
+      mounted = true;
+      try {
+        const [defsResult, dataResult, linksResult, tablesResult] = await Promise.all([
+          HybridBridge.getDriverDefinitions(),
+          HybridBridge.readDriverData(driverId),
+          HybridBridge.getDataLinks(),
+          HybridBridge.getTableDefinitions(),
+        ]);
+        if (!mounted) return;
 
-      driverDef = defsResult.drivers.find(d => d.id === driverId) || null;
-      if (!driverDef) {
-        toast('Driver not found', 'error');
-        onNavigate('driverList');
-        return;
-      }
+        driverDef = defsResult.drivers.find(d => d.id === driverId) || null;
+        if (!driverDef) {
+          toast('Driver not found', 'error');
+          onNavigate('driverList');
+          return;
+        }
 
-      configs = [...dataResult.configs];
-      // Pad link ID arrays to match expected slot counts from driver definition
-      // Link IDs are ECU state — the ECU may return fewer than numberOfOutputs/Inputs if slots are unassigned
-      outputLinkIds = [...dataResult.outputLinkIds];
-      while (outputLinkIds.length < driverDef.numberOfOutputs) outputLinkIds.push(0);
-      inputLinkIds = [...dataResult.inputLinkIds];
-      while (inputLinkIds.length < driverDef.numberOfInputs) inputLinkIds.push(0);
-      originalConfigs = [...dataResult.configs];
-      originalOutputLinkIds = [...outputLinkIds];
-      originalInputLinkIds = [...inputLinkIds];
-      dataLinks = linksResult.dataLinks || [];
-    } catch (e) {
-      console.error('Failed to load driver data:', e);
-      if (mounted) {
-        toast('Failed to load driver data', 'error');
-        onNavigate('driverList');
+        configs = [...dataResult.configs];
+        outputLinkIds = [...dataResult.outputLinkIds];
+        while (outputLinkIds.length < driverDef.numberOfOutputs) outputLinkIds.push(0);
+        inputLinkIds = [...dataResult.inputLinkIds];
+        while (inputLinkIds.length < driverDef.numberOfInputs) inputLinkIds.push(0);
+        originalConfigs = [...dataResult.configs];
+        originalOutputLinkIds = [...outputLinkIds];
+        originalInputLinkIds = [...inputLinkIds];
+        dataLinks = linksResult.dataLinks || [];
+        tableDefinitions = (tablesResult.tables || []) as unknown as { id: number; name: string; category: string; rows: number; cols: number; tableType: string }[];
+      } catch (e) {
+        console.error('Failed to load driver data:', e);
+        if (mounted) {
+          toast('Failed to load driver data', 'error');
+          onNavigate('driverList');
+        }
+      } finally {
+        if (mounted) loading = false;
       }
-    } finally {
-      if (mounted) loading = false;
-    }
+    };
+    init();
+    return () => { mounted = false; };
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="mx-auto max-w-4xl">
+<div class="flex flex-col h-full">
   {#if loading}
-    <div class="flex items-center justify-center py-12">
-      <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-cyan-400"></span>
+    <div class="flex flex-1 items-center justify-center py-12">
+      <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-emerald-400"></span>
     </div>
   {:else if driverDef}
     <!-- Header bar -->
-    <div class="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
-      <button
-        class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-200"
-        onclick={handleBack}
-      >
-        <IconChevronLeft size={18} />
-      </button>
-      <div class="min-w-0 flex-1">
-        <h1 class="text-lg font-bold text-gray-100 truncate">{driverDef.name}</h1>
-        <div class="text-xs text-gray-500">{driverDef.category}</div>
-      </div>
-
-      <div class="flex items-center gap-2">
-        {#if canDriverUndo(undoState)}
-          <button
-            class="rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-            onclick={handleUndo}
-            title="Undo (Ctrl+Z)"
-          >Undo</button>
-        {/if}
-        {#if canDriverRedo(undoState)}
-          <button
-            class="rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-            onclick={handleRedo}
-            title="Redo (Ctrl+Y)"
-          >Redo</button>
-        {/if}
-        <button
-          class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors {isDirty && !saving ? 'bg-rose-600 text-white hover:bg-rose-500' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}"
-          onclick={handleSave}
-          disabled={!isDirty || saving}
-        >
-          <IconDeviceFloppy size={14} />
-          {saving ? 'Saving...' : 'Save to ECU'}
-        </button>
-      </div>
+  <div class="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-700 bg-gray-900 px-3 py-2.5">
+    <button
+      class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-200"
+      onclick={handleBack}
+    >
+      <IconChevronLeft size={18} />
+    </button>
+    <div class="min-w-0 flex-1">
+      <h1 class="text-lg font-bold text-gray-100 truncate">{driverDef.name}</h1>
+      <div class="text-xs text-gray-500">{driverDef.category}</div>
     </div>
 
-    <!-- Sections -->
-    <div class="px-3 py-2">
+    <div class="flex items-center gap-2">
+      {#if canDriverUndo(undoState)}
+        <button
+          class="rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+          onclick={handleUndo}
+          title="Undo (Ctrl+Z)"
+        >Undo</button>
+      {/if}
+      {#if canDriverRedo(undoState)}
+        <button
+          class="rounded-lg px-2 py-1.5 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+          onclick={handleRedo}
+          title="Redo (Ctrl+Y)"
+        >Redo</button>
+      {/if}
+      <button
+        class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors {isDirty && !saving ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}"
+        onclick={handleSave}
+        disabled={!isDirty || saving}
+      >
+        <IconDeviceFloppy size={14} />
+        {saving ? 'Saving...' : 'Save to ECU'}
+      </button>
+    </div>
+  </div>
+
+  <!-- Two-column layout -->
+  <div class="flex flex-col md:flex-row flex-1 min-h-0">
+    <!-- Left column: params — compact width, the form doesn't need full space -->
+    <div class="overflow-y-auto px-3 py-2 md:w-[420px] md:flex-shrink-0 md:border-r border-gray-700/40">
       {#if sections.length === 0 && driverDef.numberOfConfigs === 0}
         <div class="py-8 text-center text-sm text-gray-500">
           This driver has no configurable parameters.
@@ -316,38 +323,22 @@
           </div>
         {/each}
       {/if}
-
-      <!-- Data links -->
-      {#if driverDef.numberOfOutputs > 0 || driverDef.numberOfInputs > 0}
-        <div class="mb-4">
-          <h3 class="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-400 px-3">Data Links</h3>
-          <div class="rounded-lg border border-gray-700/50 bg-gray-800/30 divide-y divide-gray-700/30">
-            {#each outputLinkIds as linkId, i}
-              <DataLinkRow
-                slotType="output"
-                slotIndex={i}
-                slotName={driverDef.outputNames[i] || `Output ${i + 1}`}
-                currentLinkId={linkId}
-                editable={driverDef.editableOutputs}
-                {dataLinks}
-                onAssign={(newId) => handleOutputLinkChange(i, newId)}
-              />
-            {/each}
-            {#each inputLinkIds as linkId, i}
-              <DataLinkRow
-                slotType="input"
-                slotIndex={i}
-                slotName={driverDef.inputNames[i] || `Input ${i + 1}`}
-                currentLinkId={linkId}
-                editable={driverDef.editableInputs}
-                {dataLinks}
-                onAssign={(newId) => handleInputLinkChange(i, newId)}
-              />
-            {/each}
-          </div>
-        </div>
-      {/if}
     </div>
+
+    <!-- Right column: companion panel — gets remaining space -->
+    <div class="w-full md:flex-1 md:overflow-hidden md:h-full">
+      <DriverCompanionPanel
+        driverDefinition={driverDef}
+        {outputLinkIds}
+        {inputLinkIds}
+        {dataLinks}
+        {tableDefinitions}
+        onOutputLinkChange={handleOutputLinkChange}
+        onInputLinkChange={handleInputLinkChange}
+        onNavigate={onNavigate}
+      />
+    </div>
+  </div>
   {/if}
 </div>
 

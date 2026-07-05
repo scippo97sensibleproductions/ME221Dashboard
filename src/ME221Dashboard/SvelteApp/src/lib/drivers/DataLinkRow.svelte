@@ -22,13 +22,13 @@
   }
 </script>
 
-<div class="flex items-center justify-between py-2 px-3 {editable ? '' : 'opacity-40'}">
+<div class="flex items-center justify-between py-2 px-3 transition-colors rounded-lg {editable ? 'hover:bg-gray-800/30' : 'opacity-50'}">
   <div class="min-w-0 flex-1 mr-3">
     <div class="text-xs text-gray-400 uppercase tracking-wide">{slotName}</div>
   </div>
   {#if editable}
     <button
-      class="rounded-lg border border-gray-600 bg-gray-700/50 px-3 py-1.5 text-sm transition-colors hover:border-gray-500 hover:bg-gray-700 {currentLink ? 'text-gray-100' : 'text-gray-500 italic'}"
+      class="rounded-lg border border-gray-600/60 bg-gray-700/50 px-3 py-1.5 text-sm transition-colors hover:border-gray-500 hover:bg-gray-700 {currentLink ? 'text-gray-100' : 'text-gray-500 italic'}"
       onclick={() => { showPicker = !showPicker; }}
     >
       {currentLink ? currentLink.name : 'Unassigned'}
@@ -39,16 +39,16 @@
 </div>
 
 {#if showPicker}
-  <div class="mx-3 mb-2 rounded-lg border border-gray-600 bg-gray-800 p-2 max-h-48 overflow-y-auto">
+  <div class="mx-3 mb-2 rounded-lg border border-gray-600/60 bg-gray-800 p-2 max-h-48 overflow-y-auto">
     <button
       class="w-full rounded px-2 py-1.5 text-left text-sm text-gray-400 hover:bg-gray-700 hover:text-gray-200"
       onclick={() => { onAssign(0); showPicker = false; }}
     >
-      None
+      — Unassigned —
     </button>
     {#each filteredLinks as link (link.id)}
       <button
-        class="w-full rounded px-2 py-1.5 text-left text-sm transition-colors {link.id === currentLinkId ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-200 hover:bg-gray-700'}"
+        class="w-full rounded px-2 py-1.5 text-left text-sm transition-colors {link.id === currentLinkId ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-200 hover:bg-gray-700'}"
         onclick={() => handleSelect(link)}
       >
         <span class="truncate">{link.name}</span>

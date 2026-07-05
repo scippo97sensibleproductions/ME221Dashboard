@@ -116,7 +116,7 @@
     >
       <IconChevronLeft size={18} />
     </button>
-    <IconAdjustments size={20} class="text-rose-400" />
+    <IconAdjustments size={20} class="text-emerald-400" />
     <h1 class="text-xl font-bold text-gray-100">ECU Drivers</h1>
   </div>
 
@@ -126,7 +126,7 @@
       type="text"
       placeholder="Search drivers..."
       bind:value={searchQuery}
-      class="w-full rounded-lg border border-gray-700 bg-gray-800 py-2.5 pl-10 pr-4 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+      class="w-full rounded-lg border border-gray-700 bg-gray-800 py-2.5 pl-10 pr-4 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
     />
   </div>
 
@@ -144,7 +144,7 @@
     </div>
     {#each categories as cat}
       <button
-        class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-rose-500/20 text-rose-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
+        class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
         onclick={() => { selectedCategory = selectedCategory === cat ? null : cat; }}
       >
         {cat}
@@ -154,7 +154,7 @@
 
   {#if loading}
     <div class="flex items-center justify-center py-12">
-      <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-cyan-400"></span>
+      <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-emerald-400"></span>
     </div>
   {:else if filteredDrivers.length === 0}
     <div class="py-12 text-center text-sm text-gray-500">
@@ -170,19 +170,29 @@
         <div class="space-y-1">
           {#each favoriteDrivers as driver (driver.id)}
             <button
-              class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 px-3 py-2.5 text-left transition-colors hover:border-gray-600 hover:bg-gray-800"
+              class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 text-left transition-colors hover:border-gray-600 hover:bg-gray-800 overflow-hidden"
               onclick={() => handleSelectDriver(driver)}
             >
+              <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center rounded-l border-r border-gray-700/30 bg-emerald-500/5">
+                <IconAdjustments size={18} class="text-emerald-500/50" />
+              </div>
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-medium text-gray-100 truncate">{driver.name}</div>
-                <div class="text-xs text-gray-500">{driver.category} · {driver.numberOfConfigs} params</div>
+                <div class="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                  <span>{driver.numberOfConfigs} params</span>
+                </div>
               </div>
+              <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
+                {driver.category}
+              </span>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <span
                 class="shrink-0 p-1 text-amber-400 hover:text-amber-300 cursor-pointer"
                 onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}
                 role="button"
                 tabindex="-1"
                 onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFavorite(driver.id); } }}
+                title="Unfavorite"
               >
                 <IconStar size={14} class="fill-amber-400" />
               </span>
@@ -195,22 +205,29 @@
     <div class="space-y-1">
       {#each (favoriteDrivers.length > 0 && !searchQuery && !selectedCategory ? nonFavoriteDrivers : filteredDrivers) as driver (driver.id)}
         <button
-          class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 px-3 py-2.5 text-left transition-colors hover:border-gray-600 hover:bg-gray-800"
+          class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 text-left transition-colors hover:border-gray-600 hover:bg-gray-800 overflow-hidden"
           onclick={() => handleSelectDriver(driver)}
         >
+          <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center rounded-l border-r border-gray-700/30 bg-emerald-500/5">
+            <IconAdjustments size={18} class="text-emerald-500/40" />
+          </div>
           <div class="min-w-0 flex-1">
             <div class="text-sm font-medium text-gray-100 truncate">{driver.name}</div>
-            <div class="text-xs text-gray-500">{driver.category} · {driver.numberOfConfigs} params</div>
+            <div class="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+              <span>{driver.numberOfConfigs} params</span>
+            </div>
           </div>
-          <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-gray-600/30 text-gray-400">
-            {driver.numberOfConfigs}p
+          <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
+            {driver.category}
           </span>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="shrink-0 p-1 transition-colors cursor-pointer {favorites.has(driver.id) ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-gray-400'}"
             onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}
             role="button"
             tabindex="-1"
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFavorite(driver.id); } }}
+            title={favorites.has(driver.id) ? 'Unfavorite' : 'Favorite'}
           >
             <IconStar size={14} class={favorites.has(driver.id) ? 'fill-amber-400' : ''} />
           </span>

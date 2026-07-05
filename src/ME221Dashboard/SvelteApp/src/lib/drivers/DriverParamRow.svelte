@@ -76,7 +76,7 @@
   }
 </script>
 
-<div class="flex items-center justify-between py-2.5 px-3 {(param.readOnly || disabled) ? 'opacity-40' : ''}">
+<div class="flex items-center justify-between py-2.5 px-3 {(param.readOnly || disabled) ? 'opacity-50' : ''}">
   <div class="min-w-0 flex-1 mr-3">
     <div class="flex items-center gap-1.5">
       <span class="text-sm text-gray-200 truncate">{param.displayName || param.name}</span>
@@ -84,11 +84,11 @@
         <span class="shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-300">Reset</span>
       {/if}
       {#if param.toolTipText}
-        <span class="shrink-0 text-gray-500 text-xs" title={param.toolTipText}>?</span>
+        <span class="shrink-0 text-gray-500 text-xs cursor-help" title={param.toolTipText}>?</span>
       {/if}
     </div>
     {#if param.checkRange}
-      <div class="text-[10px] text-gray-600">Range: {param.min.toFixed(2)} - {param.max.toFixed(2)}</div>
+      <div class="text-[10px] text-gray-500">Range: {param.min.toFixed(2)} - {param.max.toFixed(2)}</div>
     {/if}
   </div>
 
@@ -96,7 +96,7 @@
     {#if param.paramType === 'ComboBox'}
       {#if param.options && param.options.length > 0}
         <button
-          class="rounded-lg border border-gray-600 bg-gray-700/50 px-3 py-1.5 text-sm text-gray-100 transition-colors hover:border-gray-500 hover:bg-gray-700"
+          class="rounded-lg border border-gray-600/60 bg-gray-700/50 px-3 py-1.5 text-sm text-gray-100 transition-colors hover:border-gray-500 hover:bg-gray-700"
           onclick={() => onOpenComboBox()}
         >
           {getOptionName()}
@@ -111,11 +111,11 @@
           bind:value={editValue}
           onblur={handleBlur}
           onkeydown={handleKeydown}
-          class="w-24 rounded border {validationError ? 'border-red-500 bg-red-500/10' : 'border-cyan-500 bg-gray-800'} px-2 py-1 text-sm text-gray-100 outline-none"
+          class="w-24 rounded border {validationError ? 'border-red-500 bg-red-500/10' : 'border-emerald-500 bg-gray-800'} px-2 py-1 text-sm text-gray-100 outline-none"
         />
       {:else}
         <div
-          class="flex items-center gap-1 cursor-pointer rounded-lg border border-gray-600 bg-gray-700/50 px-3 py-1.5 transition-colors hover:border-gray-500 hover:bg-gray-700"
+          class="flex items-center gap-1 cursor-pointer rounded-lg border border-gray-600/60 bg-gray-700/50 px-3 py-1.5 transition-colors hover:border-gray-500 hover:bg-gray-700"
           role="button"
           tabindex="-1"
           onclick={handleTap}
@@ -135,7 +135,7 @@
         </div>
       {/if}
     {:else}
-      <span class="text-sm text-gray-400">{formatValue(value)}</span>
+      <span class="text-sm text-gray-400 tabular-nums">{formatValue(value)}</span>
     {/if}
   </div>
 </div>
