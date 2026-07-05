@@ -1,15 +1,15 @@
 <script lang="ts">
-  import type { TableDefinition, TableData, ColorScheme } from './types';
-  import { cellKey, getOutputValue, heatColor } from './types';
+  import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
+  import { cellKey, getOutputValue, heatColor, formatValueAdaptive, DataType, rangeOpacity } from './types';
 
-  let { tableDef, tableData, selectedRow, selectedCol, editMode, opRow, opCol, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
+  let { tableDef, tableData, selectedRow, selectedCol, editMode, opRowRange, opColRange, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
     tableData: TableData;
     selectedRow: number;
     selectedCol: number;
     editMode: 'output' | 'input0' | 'input1';
-    opRow: number;
-    opCol: number;
+    opRowRange: InterpolationRange | null;
+    opColRange: InterpolationRange | null;
     dirtyCells: Set<string>;
     dirtyInput0: Set<number>;
     dirtyInput1: Set<number>;
@@ -262,7 +262,7 @@
           role="columnheader"
           tabindex="-1"
         >
-          {tableDef.input1Name}&rarr;<br>&darr;{tableDef.input0Name}
+          {tableDef.input1Name}{tableDef.input1Unit ? ` (${tableDef.input1Unit})` : ''}&rarr;<br>&darr;{tableDef.input0Name}{tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''}
         </div>
 
         <!-- Column headers -->
@@ -270,7 +270,8 @@
           {@const isAnc = selectionType === 'input0' && anchor?.row === 0 && anchor?.col === c}
           {@const inSel = highlightColHeader(c)}
           {@const isCurrent = c === selectedCol && editMode === 'input0'}
-          {@const isOpCol = c === opCol}
+          {@const opColOp = opColRange ? rangeOpacity(opColRange, c) : 0}
+          {@const isInRange = opColOp > 0}
           <div
             class="sticky top-0 z-20 flex cursor-pointer items-center justify-center text-center transition-colors duration-150
                    {isAnc ? 'z-[25]' :
@@ -278,7 +279,7 @@
                     isCurrent ? '' :
                     dirtyInput0.has(c) ? '' : ''}
                    hover:text-white"
-            style="border: 1px solid var(--metro-border); background-color: {isOpCol ? 'rgba(255,255,255,0.08)' : isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.25)' : 'var(--metro-sidebar)'}; color: {isOpCol ? '#fff' : isAnc || inSel || isCurrent ? 'var(--metro-orange)' : dirtyInput0.has(c) ? 'var(--metro-yellow)' : 'var(--metro-text-secondary)'};"
+            style="border: 1px solid var(--metro-border); background-color: {isInRange ? `rgba(255,255,255,${(0.04 + 0.06 * opColOp).toFixed(2)})` : isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.25)' : 'var(--metro-sidebar)'}; color: {isInRange ? '#fff' : isAnc || inSel || isCurrent ? 'var(--metro-orange)' : dirtyInput0.has(c) ? 'var(--metro-yellow)' : 'var(--metro-text-secondary)'};"
             role="columnheader"
             tabindex="-1"
             onclick={(e) => handleCellClick(0, c, 'input0', e)}
@@ -289,7 +290,7 @@
             onpointermove={handlePointerMove}
             onpointercancel={handlePointerCancel}
           >
-            {typeof colVal === 'number' ? colVal.toFixed(2) : colVal.toLocaleString()}
+            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.toLocaleString()}
           </div>
         {/each}
 
@@ -298,7 +299,8 @@
           {@const isAnc = selectionType === 'input1' && anchor?.row === r && anchor?.col === 0}
           {@const inSel = highlightRowHeader(r)}
           {@const isCurrent = r === selectedRow && editMode === 'input1'}
-          {@const isOpRow = r === opRow}
+          {@const opRowOp = opRowRange ? rangeOpacity(opRowRange, r) : 0}
+          {@const isInRange = opRowOp > 0}
           <div
             class="sticky left-0 z-20 flex min-w-0 cursor-pointer items-center justify-center overflow-hidden pr-1 text-right transition-colors duration-150
                    {isAnc ? 'z-[25]' :
@@ -306,7 +308,7 @@
                     isCurrent ? '' :
                     dirtyInput1.has(r) ? '' : ''}
                    hover:text-white"
-            style="border: 1px solid var(--metro-border); background-color: {isOpRow ? 'rgba(255,255,255,0.08)' : isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.25)' : 'var(--metro-sidebar)'}; color: {isOpRow ? '#fff' : isAnc || inSel || isCurrent ? 'var(--metro-orange)' : dirtyInput1.has(r) ? 'var(--metro-yellow)' : 'var(--metro-text-secondary)'};"
+            style="border: 1px solid var(--metro-border); background-color: {isInRange ? `rgba(255,255,255,${(0.04 + 0.06 * opRowOp).toFixed(2)})` : isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.25)' : 'var(--metro-sidebar)'}; color: {isInRange ? '#fff' : isAnc || inSel || isCurrent ? 'var(--metro-orange)' : dirtyInput1.has(r) ? 'var(--metro-yellow)' : 'var(--metro-text-secondary)'};"
             role="rowheader"
             tabindex="-1"
             onclick={(e) => handleCellClick(r, 0, 'input1', e)}
@@ -317,7 +319,7 @@
             onpointermove={handlePointerMove}
             onpointercancel={handlePointerCancel}
           >
-            {typeof rowVal === 'number' ? rowVal.toFixed(2) : rowVal}
+            {typeof rowVal === 'number' ? formatValueAdaptive(rowVal, tableDef.input1DataType) : rowVal}
           </div>
 
           {#each tableData.input0 as _, c (c)}
@@ -329,16 +331,22 @@
               : heatColor(val, minVal, maxVal, colorScheme)}
             {@const isCurrentCell = r === selectedRow && c === selectedCol && editMode === 'output'}
             {@const isDirty = dirtyCells.has(cellKey(r, c))}
-            {@const isOpCell = r === opRow && c === opCol}
-            {@const isOpRow = r === opRow}
-            {@const isOpCol = c === opCol}
+            {@const opRowOp = opRowRange ? rangeOpacity(opRowRange, r) : 0}
+            {@const opColOp = opColRange ? rangeOpacity(opColRange, c) : 0}
+            {@const opCellOpacity = Math.min(opRowOp, opColOp)}
+            {@const isInRange = opCellOpacity > 0}
+            {@const isRowInRange = opRowOp > 0}
+            {@const isColInRange = opColOp > 0}
+            {@const borderAlpha = (0.15 + 0.7 * opCellOpacity).toFixed(2)}
+            {@const outlineAlpha = (0.2 + 0.7 * opCellOpacity).toFixed(2)}
+            {@const tintAlpha = (0.1 * Math.max(opRowOp, opColOp)).toFixed(2)}
             {@const isAnc = selectionType === 'output' && anchor?.row === r && anchor?.col === c}
             {@const inSel = highlightOutput(r, c)}
             <div
               class="relative flex cursor-pointer items-center justify-center text-center font-medium transition-colors duration-150
                      {isAnc ? 'z-[2]' : ''}
                      {isCurrentCell && !inSel ? 'z-[2]' : ''}"
-              style="border: 1px solid {isOpCell ? 'rgba(255,255,255,0.7)' : isOpRow || isOpCol ? 'rgba(255,255,255,0.12)' : 'var(--metro-border)'}; background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : isOpRow || isOpCol ? `color-mix(in srgb, ${color} 85%, rgba(255,255,255,0.1))` : color}; {isOpCell ? 'outline: 2px solid rgba(255,255,255,0.8); outline-offset: -2px; z-index: 3;' : ''} {isCurrentCell && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !diffMode && !inSel && !isOpCell ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''}"
+              style="border: 1px solid {isInRange ? `rgba(255,255,255,${borderAlpha})` : isRowInRange || isColInRange ? 'rgba(255,255,255,0.12)' : 'var(--metro-border)'}; background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : isRowInRange || isColInRange ? `color-mix(in srgb, ${color} ${Math.round((1 - parseFloat(tintAlpha)) * 100)}%, rgba(255,255,255,${tintAlpha}))` : color}; {isInRange ? `outline: 2px solid rgba(255,255,255,${outlineAlpha}); outline-offset: -2px; z-index: 3;` : ''} {isCurrentCell && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !diffMode && !inSel && !isInRange ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''}"
               role="gridcell"
               tabindex="-1"
               onclick={(e) => handleCellClick(r, c, 'output', e)}
@@ -349,25 +357,20 @@
               onpointermove={handlePointerMove}
               onpointercancel={handlePointerCancel}
             >
-              <span class="pointer-events-none" style="color: {diffMode && Math.abs(delta) > 0.001 ? '#fff' : inSel ? 'var(--metro-orange)' : isOpCell ? '#fff' : ''};">
-                {diffMode && originalData ? (delta > 0 ? '+' : '') + delta.toFixed(2) : val.toFixed(2)}
+              <span class="pointer-events-none" style="color: {diffMode && Math.abs(delta) > 0.001 ? '#fff' : inSel ? 'var(--metro-orange)' : isInRange ? '#fff' : ''};">
+                {diffMode && originalData ? (delta > 0 ? '+' : '') + formatValueAdaptive(delta, tableDef.outputDataType) : formatValueAdaptive(val, tableDef.outputDataType)}
               </span>
               {#if isAnc}
                 <div class="pointer-events-none absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full" style="background-color: var(--metro-orange);"></div>
               {/if}
-              {#if isOpCell && liveOutputValue !== null}
-                {@const liveDelta = liveOutputValue - val}
-                {@const absDelta = Math.abs(liveDelta)}
-                <div class="pointer-events-none absolute inset-x-0 -bottom-4 flex items-center justify-center">
-                  <span class="rounded px-1 text-[8px] font-bold tabular-nums whitespace-nowrap"
-                    style="background-color: {absDelta < 2 ? 'rgba(34,139,80,0.9)' : absDelta < 10 ? 'rgba(216,59,1,0.9)' : 'rgba(200,50,50,0.9)'}; color: #fff;">
-                    {liveOutputValue.toFixed(1)} ({liveDelta > 0 ? '+' : ''}{liveDelta.toFixed(1)})
-                  </span>
-                </div>
-              {/if}
             </div>
           {/each}
         {/each}
-      </div>
+      {#if opColRange && opRowRange && liveOutputValue !== null}
+        {@const dotX = axisW + (opColRange.lower + (opColRange.lower === opColRange.upper ? 0.5 : opColRange.fraction)) * cellW}
+        {@const dotY = headerH + (opRowRange.lower + (opRowRange.lower === opRowRange.upper ? 0.5 : opRowRange.fraction)) * (isMobile ? 24 : 28)}
+        <div class="pointer-events-none absolute rounded-full" style="left: {dotX - 5}px; top: {dotY - 5}px; width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4); z-index: 20;" aria-hidden="true"></div>
+      {/if}
     </div>
+  </div>
 </div>

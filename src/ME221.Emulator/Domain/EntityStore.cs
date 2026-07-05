@@ -27,10 +27,16 @@ public sealed class EntityStore
 
         foreach (var table in Calibration.Tables)
         {
-            _tableInput0[table.Id] = GenerateAxisValues(table.Cols, table.Input0LinkId, table.Input0Name, linkLookup);
-            _tableInput1[table.Id] = GenerateAxisValues(table.Rows, table.Input1LinkId, table.Input1Name, linkLookup);
-            _tableOutputs[table.Id] = GenerateOutputValues(table,
-                _tableInput0[table.Id], _tableInput1[table.Id]);
+            // Use actual calibration data when available; fall back to generated values
+            _tableInput0[table.Id] = table.Input0 is { Count: > 0 }
+                ? [.. table.Input0]
+                : GenerateAxisValues(table.Cols, table.Input0LinkId, table.Input0Name, linkLookup);
+            _tableInput1[table.Id] = table.Input1 is { Count: > 0 }
+                ? [.. table.Input1]
+                : GenerateAxisValues(table.Rows, table.Input1LinkId, table.Input1Name, linkLookup);
+            _tableOutputs[table.Id] = table.Output is { Count: > 0 }
+                ? [.. table.Output]
+                : GenerateOutputValues(table, _tableInput0[table.Id], _tableInput1[table.Id]);
             _tableEnabled[table.Id] = table.Enabled;
         }
 
@@ -59,12 +65,31 @@ public sealed class EntityStore
 
         if (linkLookup.TryGetValue(linkId, out var link))
         {
-            (min, max) = link.MeasureUnit switch
+            // Use MeasurementUnitTypes when measureUnit string is empty
+            var unit = link.MeasureUnit;
+            if (string.IsNullOrEmpty(unit) && link.MeasurementUnitTypes != MeasurementUnitType.Unknown)
+            {
+                if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.Volt))
+                    unit = "V";
+                else if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.KPa))
+                    unit = "kPa";
+                else if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.Celsius))
+                    unit = "\u00B0C";
+                else if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.Rpm))
+                    unit = "RPM";
+                else if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.Ohm))
+                    unit = "\u03A9";
+                else if (link.MeasurementUnitTypes.HasFlag(MeasurementUnitType.PSI))
+                    unit = "PSI";
+            }
+
+            (min, max) = unit switch
             {
                 "%" or "Percent" => (0f, 100f),
-                "V" or "Volt" => (8f, 16f),
+                "V" or "Volt" => (0f, 65535f),
                 "\u00B0C" or "C" or "\u00B0" or "deg" or "degC" => (-20f, 120f),
                 "\u00B0F" or "F" or "degF" => (-20f, 250f),
+                "\u03A9" or "Ohm" => (100f, 10000f),
                 "ms" => (0f, 20f),
                 "kPa" or "bar" or "PSI" or "psi" when name.Contains("Boost", StringComparison.OrdinalIgnoreCase) => (0f, 300f),
                 "kPa" or "bar" or "PSI" or "psi" => (0f, 250f),

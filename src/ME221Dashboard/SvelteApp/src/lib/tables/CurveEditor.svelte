@@ -1,14 +1,14 @@
 <script lang="ts">
-  import type { TableDefinition, TableData, ColorScheme } from './types';
-  import { cellKey, heatColor } from './types';
+  import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
+  import { cellKey, heatColor, formatValueAdaptive, DataType, rangeOpacity } from './types';
   import { IconDownload } from '@tabler/icons-svelte';
   import { HybridBridge } from '../HybridBridge';
 
-  let { tableDef, tableData, selectedCol, opCol, minVal, maxVal, anchor, selection, selectionType = 'output', dirtyCells, dirtyInput0, diffMode = false, originalData = null, colorScheme = 'thermal', liveOutputValue = null, onCellClick, onAxis0Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
+  let { tableDef, tableData, selectedCol, opColRange, minVal, maxVal, anchor, selection, selectionType = 'output', dirtyCells, dirtyInput0, diffMode = false, originalData = null, colorScheme = 'thermal', liveOutputValue = null, onCellClick, onAxis0Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
     tableData: TableData;
     selectedCol: number;
-    opCol: number;
+    opColRange: InterpolationRange | null;
     minVal: number;
     maxVal: number;
     anchor: { row: number; col: number } | null;
@@ -202,8 +202,8 @@
     }
 
     // Operating point line
-    if (opCol >= 0 && opCol < axis.length) {
-      const opX = pL + (axis[opCol] - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+    if (opColRange && opColRange.lower < axis.length) {
+      const opX = pL + (axis[opColRange.lower] - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
       ctx.strokeStyle = 'rgba(255,255,255,0.12)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);
@@ -250,10 +250,11 @@
       const px = pL + (pt.x - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
       const py = pT + cH - (pt.y - yMin) / (yMax - yMin) * cH;
       const isCurrent = i === selectedCol;
-      const isOp = i === opCol;
+      const opOpacity = opColRange ? rangeOpacity(opColRange, i) : 0;
+      const isInRange = opOpacity > 0;
       const inSel = isSelectedOutput(i);
       const isDirty = dirtyCells.has(cellKey(0, i));
-      const r = isCurrent ? 7 : isOp ? 6 : inSel ? 6 : 4;
+      const r = isCurrent ? 7 : isInRange ? 5 : inSel ? 6 : 4;
 
       // Dirty indicator
       if (isDirty && !isCurrent && !inSel) {
@@ -264,7 +265,7 @@
       }
 
       // Point
-      ctx.fillStyle = isCurrent ? metroOrange : isOp ? '#ffffff' : inSel ? metroOrange : '#B83201';
+      ctx.fillStyle = isCurrent ? metroOrange : isInRange ? `rgba(255,255,255,${0.4 + 0.6 * opOpacity})` : inSel ? metroOrange : '#B83201';
       ctx.beginPath();
       ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
@@ -273,17 +274,23 @@
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2.5;
         ctx.stroke();
-      } else if (isOp) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      } else if (isInRange) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.3 + 0.4 * opOpacity})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
 
     // Operating point indicator
-    if (opCol >= 0 && opCol < values.length) {
-      const opX = pL + (axis[opCol] - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
-      const opY = pT + cH - ((values[opCol]?.y ?? 0) - yMin) / (yMax - yMin) * cH;
+    if (opColRange && opColRange.lower < values.length && opColRange.upper < values.length) {
+      const fracX = opColRange.lower === opColRange.upper
+        ? axis[opColRange.lower]
+        : axis[opColRange.lower] + opColRange.fraction * (axis[opColRange.upper] - axis[opColRange.lower]);
+      const lowerY = values[opColRange.lower]?.y ?? 0;
+      const upperY = values[opColRange.upper]?.y ?? 0;
+      const fracY = lowerY + opColRange.fraction * (upperY - lowerY);
+      const opX = pL + (fracX - axis[0]) / (axis[axis.length - 1] - axis[0]) * cW;
+      const opY = pT + cH - (fracY - yMin) / (yMax - yMin) * cH;
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = 'rgba(255,255,255,0.8)';
       ctx.shadowBlur = 6;
@@ -448,7 +455,7 @@
             onpointermove={handlePointerMove}
             onpointercancel={handlePointerCancel}
           >
-            {typeof colVal === 'number' ? colVal.toFixed(2) : colVal.toLocaleString()}
+            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.toLocaleString()}
           </div>
         {/each}
 
@@ -459,7 +466,7 @@
           role="rowheader"
           tabindex="-1"
         >
-          {tableDef.outputName}
+          {tableDef.outputName}{tableDef.outputUnit ? ` (${tableDef.outputUnit})` : ''}
         </div>
 
         <!-- Output cells -->
@@ -473,13 +480,15 @@
           {@const inSel = isSelectedOutput(c)}
           {@const isCurrent = c === selectedCol && selectionType === 'output'}
           {@const isDirty = dirtyCells.has(cellKey(0, c))}
-          {@const isOp = c === opCol}
+          {@const opOpacity = opColRange ? rangeOpacity(opColRange, c) : 0}
+          {@const isInRange = opOpacity > 0}
+          {@const borderAlpha = (0.15 + 0.7 * opOpacity).toFixed(2)}
           <div
             class="relative flex cursor-pointer items-center justify-center text-center font-medium transition-colors duration-150
                    {isAnc ? 'z-[2]' : ''}
                    {isCurrent && !inSel ? 'z-[2]' : ''}
-                   {isOp ? 'border-t-2 border-t-white/20' : ''}"
-            style="border: 1px solid var(--metro-border); background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : color}; {isCurrent && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !inSel ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''}"
+                   {isInRange ? 'border-t-2 border-t-white/20' : ''}"
+            style="border: 1px solid var(--metro-border); background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : color}; {isCurrent && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !inSel ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''} {isInRange ? `outline: 2px solid rgba(255,255,255,${borderAlpha}); outline-offset: -2px; z-index: 1;` : ''}"
             role="gridcell"
             tabindex="-1"
             onclick={() => handleCellTap(c, 'output')}
@@ -491,23 +500,20 @@
             onpointercancel={handlePointerCancel}
           >
             <span class="pointer-events-none" style="color: {diffMode && Math.abs(delta) > 0.001 ? '#fff' : inSel ? 'var(--metro-orange)' : ''};">
-              {diffMode && originalData ? (delta > 0 ? '+' : '') + delta.toFixed(2) : val.toFixed(2)}
+              {diffMode && originalData ? (delta > 0 ? '+' : '') + formatValueAdaptive(delta, tableDef.outputDataType) : formatValueAdaptive(val, tableDef.outputDataType)}
             </span>
             {#if isAnc}
               <div class="pointer-events-none absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full" style="background-color: var(--metro-orange);"></div>
             {/if}
-            {#if isOp}
-              <div class="pointer-events-none absolute -left-1 -top-1 h-2 w-2 rounded-full bg-white" style="filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));"></div>
-              {#if liveOutputValue !== null}
-                {@const liveDelta = liveOutputValue - val}
-                {@const absDelta = Math.abs(liveDelta)}
-                <div class="pointer-events-none absolute inset-x-0 -bottom-4 flex items-center justify-center">
-                  <span class="rounded px-1 text-[8px] font-bold tabular-nums whitespace-nowrap"
-                    style="background-color: {absDelta < 2 ? 'rgba(34,139,80,0.9)' : absDelta < 10 ? 'rgba(216,59,1,0.9)' : 'rgba(200,50,50,0.9)'}; color: #fff;">
-                    {liveOutputValue.toFixed(1)} ({liveDelta > 0 ? '+' : ''}{liveDelta.toFixed(1)})
-                  </span>
-                </div>
-              {/if}
+            {#if isInRange && opColRange?.lower === c && liveOutputValue !== null}
+              {@const liveDelta = liveOutputValue - val}
+              {@const absDelta = Math.abs(liveDelta)}
+              <div class="pointer-events-none absolute inset-x-0 -bottom-4 flex items-center justify-center">
+                <span class="rounded px-1 text-[8px] font-bold tabular-nums whitespace-nowrap"
+                  style="background-color: {absDelta < 2 ? 'rgba(34,139,80,0.9)' : absDelta < 10 ? 'rgba(216,59,1,0.9)' : 'rgba(200,50,50,0.9)'}; color: #fff;">
+                  {liveOutputValue.toFixed(1)} ({liveDelta > 0 ? '+' : ''}{liveDelta.toFixed(1)})
+                </span>
+              </div>
             {/if}
           </div>
         {/each}
@@ -536,8 +542,20 @@
           </text>
         {/each}
 
-        {#if opCol >= 0 && opCol < axis.length}
-          <line x1={x2px(axis[opCol])} y1={pad.top} x2={x2px(axis[opCol])} y2={pad.top + ch}
+        {#if opColRange && opColRange.lower !== opColRange.upper && opColRange.lower < axis.length && opColRange.upper < axis.length}
+          <rect x={x2px(axis[opColRange.lower])} y={pad.top}
+                width={x2px(axis[opColRange.upper]) - x2px(axis[opColRange.lower])}
+                height={ch}
+                fill="rgba(255,255,255,0.06)" />
+          <line x1={x2px(axis[opColRange.lower])} y1={pad.top}
+                x2={x2px(axis[opColRange.lower])} y2={pad.top + ch}
+                stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="4 3" />
+          <line x1={x2px(axis[opColRange.upper])} y1={pad.top}
+                x2={x2px(axis[opColRange.upper])} y2={pad.top + ch}
+                stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="4 3" />
+        {:else if opColRange && opColRange.lower < axis.length}
+          <line x1={x2px(axis[opColRange.lower])} y1={pad.top}
+                x2={x2px(axis[opColRange.lower])} y2={pad.top + ch}
                 stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4 3" />
         {/if}
 
@@ -553,18 +571,19 @@
 
         {#each values as point, i}
           {@const isCurrent = i === selectedCol}
-          {@const isOp = i === opCol}
+          {@const opOpacity = opColRange ? rangeOpacity(opColRange, i) : 0}
+          {@const isInRange = opOpacity > 0}
           {@const inSel = isSelectedOutput(i)}
           {@const isDirty = dirtyCells.has(cellKey(0, i))}
 
           <circle
             cx={x2px(point.x)} cy={y2px(point.y)}
-            r={isCurrent ? 7 : isOp ? 6 : inSel ? 6 : 4}
+            r={isCurrent ? 7 : isInRange ? 5 : inSel ? 6 : 4}
             class="pointer-events-none transition-all"
-            fill={isCurrent ? '#D83B01' : isOp ? '#ffffff' : inSel ? '#D83B01' : '#B83201'}
-            stroke={isCurrent ? '#ffffff' : isOp ? 'rgba(255,255,255,0.5)' : 'none'}
-            stroke-width={isCurrent ? 2.5 : isOp ? 1.5 : 0}
-            style={isOp ? 'filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));' : ''}
+            fill={isCurrent ? '#D83B01' : isInRange ? `rgba(255,255,255,${0.4 + 0.6 * opOpacity})` : inSel ? '#D83B01' : '#B83201'}
+            stroke={isCurrent ? '#ffffff' : isInRange ? `rgba(255,255,255,${0.3 + 0.4 * opOpacity})` : 'none'}
+            stroke-width={isCurrent ? 2.5 : isInRange ? 1.5 : 0}
+            style={isInRange ? 'filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));' : ''}
           />
 
           {#if isDirty && !isCurrent && !inSel}
@@ -590,10 +609,16 @@
           </text>
         {/each}
 
-        {#if opCol >= 0 && opCol < values.length}
+        {#if opColRange && opColRange.lower < values.length && opColRange.upper < values.length}
+          {@const fracX = opColRange.lower === opColRange.upper
+            ? axis[opColRange.lower]
+            : axis[opColRange.lower] + opColRange.fraction * (axis[opColRange.upper] - axis[opColRange.lower])}
+          {@const lowerY = values[opColRange.lower]?.y ?? 0}
+          {@const upperY = values[opColRange.upper]?.y ?? 0}
+          {@const fracY = lowerY + opColRange.fraction * (upperY - lowerY)}
           <circle
-            cx={x2px(axis[opCol])}
-            cy={y2px(values[opCol]?.y ?? 0)}
+            cx={x2px(fracX)}
+            cy={y2px(fracY)}
             r="5"
             fill="#ffffff"
             class="pointer-events-none"

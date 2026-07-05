@@ -24,6 +24,11 @@ public sealed class SensorSimulator
     private const float ShiftUpRpm = 6000f;
     private const float ShiftDownRpm = 2000f;
 
+    // ── ADC simulation ──
+    private const float RawAdcMax = 65535f;
+    private const float VoltMax = 5f;
+    private static float VoltageToRaw(float voltage) => Math.Clamp(voltage / VoltMax * RawAdcMax, 0f, RawAdcMax);
+
     // ── RPM sweep mode state machine ──
     private enum DrivingMode { Idle, RpmSweepUp, RpmHoldHigh, RpmSweepDown, RpmHoldLow }
     private DrivingMode _currentMode = DrivingMode.Idle;
@@ -162,7 +167,7 @@ public sealed class SensorSimulator
         SetIfPresent("AFR_ERR", (lambdaAfr - 14.7f) * 0.5f);
         SetIfPresent("SYNC_STATUS", rpm > 50f ? 1f : 0f);
         SetIfPresent("INJ_MAX_DUTY_CNT", injectorDuty * 1.2f);
-        SetIfPresent("TPS_RAW", tps / 100f * 5f);
+        SetIfPresent("TPS_RAW", tps / 100f * 65535f);
 
         SetIfPresent("DAY", now.Day);
         SetIfPresent("MONTH", now.Month);
@@ -185,10 +190,10 @@ public sealed class SensorSimulator
         SetIfPresent("SEL_MAP_INJ", 0f);
 
         var pps = _smoothTps / 100f;
-        SetIfPresent("PPS1_RAW", pps * 5f * 0.5f);
-        SetIfPresent("PPS2_RAW", pps * 5f * 0.45f);
-        SetIfPresent("TPPS1_RAW", pps * 5f * 0.48f);
-        SetIfPresent("TPPS2_RAW", pps * 5f * 0.43f);
+        SetIfPresent("PPS1_RAW", pps * 65535f * 0.5f);
+        SetIfPresent("PPS2_RAW", pps * 65535f * 0.45f);
+        SetIfPresent("TPPS1_RAW", pps * 65535f * 0.48f);
+        SetIfPresent("TPPS2_RAW", pps * 65535f * 0.43f);
         SetIfPresent("PPS1_VAL", _smoothTps * 0.5f);
         SetIfPresent("PPS2_VAL", _smoothTps * 0.45f);
         SetIfPresent("TPPS1_VAL", _smoothTps * 0.48f);
@@ -488,27 +493,27 @@ public sealed class SensorSimulator
         if (link.TextValues is { Count: > 0 })
             return null;
 
-        // Raw sensor values — derived from known context values
+        // Raw sensor values — simulate actual ADC readings (0–65535 for 16-bit)
         if (name.Contains("Raw", StringComparison.OrdinalIgnoreCase))
         {
             if (name.Contains("TPS", StringComparison.OrdinalIgnoreCase))
-                return ctx => ctx.Tps / 100f * 5f;
+                return ctx => ctx.Tps / 100f * RawAdcMax;
             if (name.Contains("MAP", StringComparison.OrdinalIgnoreCase))
-                return ctx => ctx.Map / 100f * 5f;
+                return ctx => ctx.Map / 250f * RawAdcMax;
             if (name.Contains("Coolant", StringComparison.OrdinalIgnoreCase) || name.Contains("CLT", StringComparison.OrdinalIgnoreCase))
-                return ctx => 2f + ctx.CoolantTemp / 100f * 3f;
+                return ctx => VoltageToRaw(2f + ctx.CoolantTemp / 100f * 3f);
             if (name.Contains("IAT", StringComparison.OrdinalIgnoreCase) || name.Contains("Intake", StringComparison.OrdinalIgnoreCase))
-                return _ => 2f + 30f / 100f * 3f; // IAT ~30°C
+                return _ => VoltageToRaw(2f + 30f / 100f * 3f);
             if (name.Contains("Battery", StringComparison.OrdinalIgnoreCase))
-                return ctx => ctx.BatteryVoltage * 0.95f + 0.5f;
+                return ctx => VoltageToRaw(ctx.BatteryVoltage * 0.95f + 0.5f);
             if (name.Contains("Oil", StringComparison.OrdinalIgnoreCase))
-                return ctx => ctx.OilPressure * 0.02f;
+                return ctx => VoltageToRaw(ctx.OilPressure * 0.02f);
             if (name.Contains("Fuel", StringComparison.OrdinalIgnoreCase))
-                return ctx => ctx.FuelPressure * 0.01f;
+                return ctx => VoltageToRaw(ctx.FuelPressure * 0.01f);
             if (name.Contains("Analog", StringComparison.OrdinalIgnoreCase))
-                return ctx => 2.5f + 1.5f * (float)Math.Sin(ctx.Elapsed * 0.3 + ctx.Rpm * 0.0001f);
+                return ctx => VoltageToRaw(2.5f + 1.5f * (float)Math.Sin(ctx.Elapsed * 0.3 + ctx.Rpm * 0.0001f));
             // Generic raw
-            return ctx => 2.5f + 1.5f * (float)Math.Sin(ctx.Elapsed * 0.2);
+            return ctx => VoltageToRaw(2.5f + 1.5f * (float)Math.Sin(ctx.Elapsed * 0.2));
         }
 
         // Speed — from gear model

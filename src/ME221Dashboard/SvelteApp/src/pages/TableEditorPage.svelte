@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
-  import type { TableDefinition, TableData, OperatingPoint } from '../lib/tables/types';
-  import { is1DTable, cellKey, getOutputValue, heatColor, getDataRange, findNearestIndex } from '../lib/tables/types';
+  import type { TableDefinition, TableData, OperatingPoint, InterpolationRange } from '../lib/tables/types';
+  import { is1DTable, cellKey, getOutputValue, heatColor, getDataRange, findNearestIndex, findInterpolationRange, fromRaw, MeasurementUnitType } from '../lib/tables/types';
   import type { ColorScheme } from '../lib/tables/types';
   import TableGrid from '../lib/tables/TableGrid.svelte';
   import CurveEditor from '../lib/tables/CurveEditor.svelte';
@@ -37,13 +37,13 @@
   let operatingPoint = $derived.by(() => {
     if (!tableDef) return { rpm: null, map: null, output: null } as OperatingPoint;
     const v = liveDataStore.values;
-    const rpmVal = v[String(tableDef.input0LinkId)] ?? null;
-    const mapVal = tableDef.input1LinkId ? (v[String(tableDef.input1LinkId)] ?? null) : null;
-    const outVal = tableDef.outputLinkId ? (v[String(tableDef.outputLinkId)] ?? null) : null;
+    const rpmRaw = v[String(tableDef.input0LinkId)] ?? null;
+    const mapRaw = tableDef.input1LinkId ? (v[String(tableDef.input1LinkId)] ?? null) : null;
+    const outRaw = tableDef.outputLinkId ? (v[String(tableDef.outputLinkId)] ?? null) : null;
     return {
-      rpm: rpmVal,
-      map: is1D ? null : mapVal,
-      output: outVal,
+      rpm: rpmRaw !== null ? fromRaw(rpmRaw, tableDef.input0UnitType) : null,
+      map: is1D ? null : (mapRaw !== null ? fromRaw(mapRaw, tableDef.input1UnitType) : null),
+      output: outRaw !== null ? fromRaw(outRaw, tableDef.outputUnitType) : null,
     };
   });
   let loading = $state(true);
@@ -263,14 +263,28 @@
 
   // Operating point indices
   let opRow = $derived.by(() => {
-    if (!tableData || !tableDef || operatingPoint.map === null) return -1;
+    if (!tableData || !tableDef) return -1;
     if (is1D) return 0;
+    if (operatingPoint.map === null) return -1;
     return findNearestIndex(operatingPoint.map, tableData.input1);
   });
 
   let opCol = $derived.by(() => {
     if (!tableData || operatingPoint.rpm === null) return -1;
     return findNearestIndex(operatingPoint.rpm, tableData.input0);
+  });
+
+  // Interpolation ranges for range-based highlighting
+  let opColRange = $derived.by(() => {
+    if (!tableData || operatingPoint.rpm === null) return null;
+    return findInterpolationRange(operatingPoint.rpm, tableData.input0);
+  });
+
+  let opRowRange = $derived.by(() => {
+    if (!tableData || !tableDef) return null;
+    if (is1D) return null;
+    if (operatingPoint.map === null) return null;
+    return findInterpolationRange(operatingPoint.map, tableData.input1);
   });
 
   // Live values for side panel and cell overlay
@@ -966,12 +980,12 @@
       const rpm = tableData.input0[selectedCol];
       const map = tableData.input1[selectedRow];
       return is1D
-        ? `${tableDef.input0Name}: ${rpm.toLocaleString()}`
-        : `${tableDef.input0Name}: ${rpm.toLocaleString()} / ${tableDef.input1Name}: ${map} ${tableDef.input1Name}`;
+        ? `${tableDef.input0Name}: ${rpm.toLocaleString()}${tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''}`
+        : `${tableDef.input0Name}: ${rpm.toLocaleString()}${tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''} / ${tableDef.input1Name}: ${map}${tableDef.input1Unit ? ` (${tableDef.input1Unit})` : ''}`;
     } else if (editMode === 'input0') {
-      return `${tableDef.input0Name} axis [${selectedCol}]`;
+      return `${tableDef.input0Name}${tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''} axis [${selectedCol}]`;
     } else {
-      return `${tableDef.input1Name} axis [${selectedRow}]`;
+      return `${tableDef.input1Name}${tableDef.input1Unit ? ` (${tableDef.input1Unit})` : ''} axis [${selectedRow}]`;
     }
   });
 
@@ -980,13 +994,14 @@
   let infoText = $derived.by(() => {
     if (!tableData || !tableDef) return '';
     const outVal = getOutputValue(tableData, selectedRow, selectedCol, tableDef.cols);
+    const outFmt = outVal.toFixed(1);
     if (is1D) {
       const axisVal = tableData.input0[selectedCol];
-      return `${tableDef.input0Name}: ${axisVal.toLocaleString()} → ${outVal.toFixed(1)}`;
+      return `${tableDef.input0Name}: ${axisVal.toLocaleString()}${tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''} → ${outFmt}${tableDef.outputUnit ? ` (${tableDef.outputUnit})` : ''}`;
     }
     const axis0Val = tableData.input0[selectedCol];
     const axis1Val = tableData.input1[selectedRow];
-    return `${tableDef.input1Name}: ${axis1Val} × ${tableDef.input0Name}: ${axis0Val.toLocaleString()} → ${outVal.toFixed(1)}`;
+    return `${tableDef.input1Name}: ${axis1Val}${tableDef.input1Unit ? ` (${tableDef.input1Unit})` : ''} × ${tableDef.input0Name}: ${axis0Val.toLocaleString()}${tableDef.input0Unit ? ` (${tableDef.input0Unit})` : ''} → ${outFmt}${tableDef.outputUnit ? ` (${tableDef.outputUnit})` : ''}`;
   });
 
   let infoDelta = $derived.by(() => {
@@ -1260,7 +1275,7 @@
           {tableDef}
           {tableData}
           {selectedCol}
-          {opCol}
+          opColRange={opColRange}
           {minVal}
           {maxVal}
           {anchor}
@@ -1286,8 +1301,8 @@
     {selectedRow}
     {selectedCol}
     {editMode}
-    {opRow}
-    {opCol}
+    opRowRange={opRowRange}
+    opColRange={opColRange}
     {dirtyCells}
     {dirtyInput0}
     {dirtyInput1}

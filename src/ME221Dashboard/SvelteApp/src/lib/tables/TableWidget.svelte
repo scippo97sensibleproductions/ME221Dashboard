@@ -7,10 +7,12 @@
     getOutputValue,
     heatColor,
     getDataRange,
-    findNearestIndex,
+    findInterpolationRange,
+    rangeOpacity,
+    fromRaw,
   } from './types';
   import { IconSettings } from '@tabler/icons-svelte';
-  import type { TableDefinition, TableData } from './types';
+  import type { TableDefinition, TableData, InterpolationRange } from './types';
 
   let { tableId, tableName, onTap, onSettings, colorScheme = 'thermal', showLabels = true, showDimensionBadge = true, maxFontSize }: {
     tableId: number;
@@ -32,8 +34,8 @@
   let widgetH = $state(0);
 
   // Operating point (live)
-  let opRow = $state(-1);
-  let opCol = $state(-1);
+  let opRowRange = $state<InterpolationRange | null>(null);
+  let opColRange = $state<InterpolationRange | null>(null);
   let liveOutputVal = $state<number | null>(null);
 
   async function loadData() {
@@ -81,20 +83,22 @@
     if (!tableDef) return;
     const v = liveDataStore.values;
     if (tableDef.input0LinkId != null) {
-      const x = v[String(tableDef.input0LinkId)];
-      if (x != null && tableData && tableData.input0.length > 0) {
-        opCol = findNearestIndex(x, tableData.input0);
+      const raw = v[String(tableDef.input0LinkId)];
+      if (raw != null && tableData && tableData.input0.length > 0) {
+        const x = fromRaw(raw, tableDef.input0UnitType ?? 0);
+        opColRange = findInterpolationRange(x, tableData.input0);
       }
     }
-    if (tableDef.input1LinkId != null) {
-      const y = v[String(tableDef.input1LinkId)];
-      if (y != null && tableData && tableData.input1.length > 1) {
-        opRow = findNearestIndex(y, tableData.input1);
+    if (tableDef.input1LinkId != null && tableDef.input1LinkId !== 0) {
+      const raw = v[String(tableDef.input1LinkId)];
+      if (raw != null && tableData && tableData.input1.length > 1) {
+        const y = fromRaw(raw, tableDef.input1UnitType ?? 0);
+        opRowRange = findInterpolationRange(y, tableData.input1);
       }
     }
     if (tableDef.outputLinkId != null) {
-      const out = v[String(tableDef.outputLinkId)];
-      liveOutputVal = out ?? null;
+      const raw = v[String(tableDef.outputLinkId)];
+      liveOutputVal = raw != null ? fromRaw(raw, tableDef.outputUnitType ?? 0) : null;
     }
   }
 
@@ -308,12 +312,15 @@
             <tr style="height: {layout.gridH}px;">
               {#each tableData.output as val, c}
                 {@const color = heatColor(val, range.min, range.max, colorScheme)}
-                {@const isOp = c === opCol}
+                {@const opOpacity = opColRange ? rangeOpacity(opColRange, c) : 0}
+                {@const isInRange = opOpacity > 0}
+                {@const borderAlpha = (0.15 + 0.8 * opOpacity).toFixed(2)}
+                {@const outlineAlpha = (0.2 + 0.8 * opOpacity).toFixed(2)}
                 <td
                   class="relative overflow-hidden"
                   style="padding: 0; width: {layout.cellW}px; height: {layout.gridH}px; background: {color};
-                         border: 1px solid {isOp ? 'rgba(255,255,255,0.85)' : 'var(--metro-border)'};
-                         outline: {isOp ? '2px solid rgba(255,255,255,0.95)' : 'none'}; outline-offset: -2px;"
+                         border: 1px solid {isInRange ? `rgba(255,255,255,${borderAlpha})` : 'var(--metro-border)'};
+                         outline: {isInRange ? `2px solid rgba(255,255,255,${outlineAlpha})` : 'none'}; outline-offset: -2px;"
                 >
                   {#if showLabels && showCellLabels1D}
                     <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none whitespace-nowrap"
@@ -321,22 +328,15 @@
                       {formatVal(val, layout.cols)}
                     </span>
                   {/if}
-                  {#if isOp && liveOutputVal != null}
-                    <div
-                      class="pointer-events-none absolute inset-0 flex items-center justify-center"
-                      aria-hidden="true"
-                    >
-                      <div
-                        class="rounded-full"
-                        style="width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4);"
-                      ></div>
-                    </div>
-                  {/if}
                 </td>
               {/each}
             </tr>
           </tbody>
         </table>
+        {#if opColRange && liveOutputVal != null}
+          {@const dotX = (opColRange.lower + (opColRange.lower === opColRange.upper ? 0.5 : opColRange.fraction)) * layout.cellW}
+          <div class="pointer-events-none absolute rounded-full" style="left: {dotX - 5}px; top: {layout.gridH / 2 - 5}px; width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4); z-index: 20;" aria-hidden="true"></div>
+        {/if}
         <!-- Axis labels below -->
         {#if showAxisLabelsThreshold && tableData.input0.length > 0}
           <div class="absolute left-0 right-0 mt-0.5" style="height: {layout.labelH}px;">
@@ -370,15 +370,21 @@
                 {#each Array.from({ length: layout.cols }, (_, c) => c) as c}
                   {@const val = getOutputValue(tableData, r, c, layout.cols)}
                   {@const color = heatColor(val, range.min, range.max, colorScheme)}
-                  {@const isOpCell = r === opRow && c === opCol}
-                  {@const isOpRow = r === opRow}
-                  {@const isOpCol = c === opCol}
+                  {@const opRowOp = opRowRange ? rangeOpacity(opRowRange, r) : 0}
+                  {@const opColOp = opColRange ? rangeOpacity(opColRange, c) : 0}
+                  {@const opCellOpacity = Math.min(opRowOp, opColOp)}
+                  {@const isInRange = opCellOpacity > 0}
+                  {@const isRowInRange = opRowOp > 0}
+                  {@const isColInRange = opColOp > 0}
+                  {@const borderAlpha = (0.15 + 0.8 * opCellOpacity).toFixed(2)}
+                  {@const outlineAlpha = (0.2 + 0.8 * opCellOpacity).toFixed(2)}
+                  {@const tintAlpha = (0.12 * Math.max(opRowOp, opColOp)).toFixed(2)}
                   <td
                     class="relative"
                     style="padding: 0; width: {layout.cellW}px; height: {layout.cellH}px;
-                           background: {isOpRow || isOpCol ? `color-mix(in srgb, ${color} 85%, rgba(255,255,255,0.12))` : color};
-                           border: 1px solid {isOpCell ? 'rgba(255,255,255,0.95)' : isOpRow || isOpCol ? 'rgba(255,255,255,0.18)' : 'var(--metro-border)'};
-                           outline: {isOpCell ? '2px solid rgba(255,255,255,0.95)' : 'none'}; outline-offset: -2px;"
+                           background: {isRowInRange || isColInRange ? `color-mix(in srgb, ${color} ${Math.round((1 - parseFloat(tintAlpha)) * 100)}%, rgba(255,255,255,${tintAlpha}))` : color};
+                           border: 1px solid {isInRange ? `rgba(255,255,255,${borderAlpha})` : isRowInRange || isColInRange ? 'rgba(255,255,255,0.18)' : 'var(--metro-border)'};
+                           outline: {isInRange ? `2px solid rgba(255,255,255,${outlineAlpha})` : 'none'}; outline-offset: -2px;"
                   >
                     {#if showLabels && showCellLabels2D}
                       <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none"
@@ -386,20 +392,17 @@
                         {formatVal(val, layout.cols)}
                       </span>
                     {/if}
-                    {#if isOpCell && liveOutputVal != null}
-                      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <div
-                          class="rounded-full"
-                          style="width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4);"
-                        ></div>
-                      </div>
-                    {/if}
                   </td>
                 {/each}
               </tr>
             {/each}
           </tbody>
         </table>
+        {#if opColRange && opRowRange && liveOutputVal != null}
+          {@const dotX = (opColRange.lower + (opColRange.lower === opColRange.upper ? 0.5 : opColRange.fraction)) * layout.cellW}
+          {@const dotY = (opRowRange.lower + (opRowRange.lower === opRowRange.upper ? 0.5 : opRowRange.fraction)) * layout.cellH}
+          <div class="pointer-events-none absolute rounded-full" style="left: {dotX - 5}px; top: {dotY - 5}px; width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4); z-index: 20;" aria-hidden="true"></div>
+        {/if}
       </div>
 
       <!-- Column headers (top): input0 axis -->

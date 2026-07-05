@@ -17,6 +17,15 @@ export interface TableDefinition {
   outputLinkId: number;
   incrementValue: number;
   defaultValue: number | null;
+  input0Unit: string;
+  input0UnitType: number;
+  input0DataType: number;
+  input1Unit: string;
+  input1UnitType: number;
+  input1DataType: number;
+  outputUnit: string;
+  outputUnitType: number;
+  outputDataType: number;
 }
 
 export interface TableData {
@@ -30,6 +39,87 @@ export interface OperatingPoint {
   rpm: number | null;
   map: number | null;
   output: number | null;
+}
+
+// ─── MeasurementUnitType Enum (mirrors C# flags enum) ───────────────────────
+
+export enum MeasurementUnitType {
+  Unknown = 0,
+  Raw = 1,
+  Volt = 2,
+  Ohm = 4,
+  KPa = 8,
+  PSI = 16,
+  Celsius = 32,
+  Fahrenheit = 64,
+  Percent = 128,
+  Rpm = 256,
+  Deg = 512,
+  Ms = 1024,
+  Bar = 2048,
+}
+
+const RAW_MAX = 65535;
+const VOLT_MAX = 5;
+const INTERNAL_RESISTANCE = 2700;
+const PSI_TO_KPA = 6.89476;
+
+/**
+ * Convert raw ECU float to display value. Mirrors C# MeasurementUnitConverter.FromRaw().
+ */
+export function fromRaw(raw: number, unitType: MeasurementUnitType): number {
+  if (unitType & MeasurementUnitType.Volt)
+    return VOLT_MAX * raw / RAW_MAX;
+  if (unitType & MeasurementUnitType.Ohm) {
+    if (raw >= RAW_MAX) return Infinity;
+    return INTERNAL_RESISTANCE * raw / (RAW_MAX - raw);
+  }
+  if (unitType & MeasurementUnitType.PSI)
+    return raw / PSI_TO_KPA;
+  if (unitType & MeasurementUnitType.Fahrenheit)
+    return raw * 1.8 + 32;
+  return raw;
+}
+
+// ─── DataType Enum ───────────────────────────────────────────────────────────
+
+export enum DataType {
+  Normal = 0,
+  TrimModPercent = 1,
+  Percent = 2,
+  ADCRaw = 3,
+}
+
+// ─── Value Formatting ───────────────────────────────────────────────────────
+
+/**
+ * Format a display value based on its DataType.
+ */
+export function formatValue(value: number, dataType: DataType, decimalPlaces: number = 2): string {
+  switch (dataType) {
+    case DataType.TrimModPercent: {
+      const trimmed = value - 1;
+      return trimmed < 0
+        ? `${trimmed.toFixed(2)} %`
+        : `+${trimmed.toFixed(2)} %`;
+    }
+    case DataType.Percent:
+      return `${value.toFixed(2)} %`;
+    default:
+      return value.toFixed(decimalPlaces);
+  }
+}
+
+/**
+ * Format a value with adaptive precision based on magnitude.
+ */
+export function formatValueAdaptive(value: number, dataType: DataType): string {
+  const abs = Math.abs(value);
+  let decimals: number;
+  if (abs >= 100) decimals = 0;
+  else if (abs >= 10) decimals = 1;
+  else decimals = 2;
+  return formatValue(value, dataType, decimals);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -115,6 +205,46 @@ export function findNearestIndex(value: number, axis: number[]): number {
     }
   }
   return best;
+}
+
+// ─── Interpolation Range ─────────────────────────────────────────────────────
+
+export interface InterpolationRange {
+  lower: number;
+  upper: number;
+  fraction: number;
+}
+
+export function findInterpolationRange(value: number, axis: number[]): InterpolationRange {
+  if (axis.length === 0) return { lower: 0, upper: 0, fraction: 0 };
+  if (axis.length === 1) return { lower: 0, upper: 0, fraction: 0 };
+
+  if (value <= axis[0]) return { lower: 0, upper: 0, fraction: 0 };
+
+  if (value >= axis[axis.length - 1]) {
+    const last = axis.length - 1;
+    return { lower: last, upper: last, fraction: 0 };
+  }
+
+  for (let i = 0; i < axis.length - 1; i++) {
+    if (value >= axis[i] && value <= axis[i + 1]) {
+      const span = axis[i + 1] - axis[i];
+      const fraction = span === 0 ? 0 : (value - axis[i]) / span;
+      return { lower: i, upper: i + 1, fraction };
+    }
+  }
+
+  const last = axis.length - 1;
+  return { lower: last, upper: last, fraction: 0 };
+}
+
+export function rangeOpacity(range: InterpolationRange, cellIndex: number): number {
+  if (range.lower === range.upper) {
+    return cellIndex === range.lower ? 1 : 0;
+  }
+  if (cellIndex === range.lower) return 1 - range.fraction;
+  if (cellIndex === range.upper) return range.fraction;
+  return 0;
 }
 
 export function getDataRange(output: number[]): { min: number; max: number } {

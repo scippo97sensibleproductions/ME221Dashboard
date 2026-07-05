@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ME221.Comms.Messages;
+using ME221.Data.Infrastructure;
+using ME221.Data.Models;
 using ME221Dashboard.Services;
 using Microsoft.Extensions.Logging;
 
@@ -20,26 +22,45 @@ public partial class HybridBridgeService
         {
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var tables = calResult.Data?.Tables ?? [];
+            var links = calResult.Data?.DataLinks ?? [];
+            var linkDict = links.ToDictionary(l => l.Id);
+
             return JsonSerializer.Serialize(new
             {
-                tables = tables.Where(t => t.ViewInTree).Select(t => new
+                tables = tables.Where(t => t.ViewInTree).Select(t =>
                 {
-                    id = t.Id,
-                    name = t.Name,
-                    category = t.Category,
-                    viewInTree = t.ViewInTree,
-                    enabled = t.Enabled,
-                    tableType = t.TableType,
-                    cols = t.Cols,
-                    rows = t.Rows,
-                    input0Name = t.Input0Name,
-                    input1Name = t.Input1Name,
-                    outputName = t.OutputName,
-                    input0LinkId = t.Input0LinkId,
-                    input1LinkId = t.Input1LinkId,
-                    outputLinkId = t.OutputLinkId,
-                    incrementValue = t.IncrementValue,
-                    defaultValue = t.DefaultValue,
+                    var input0Unit = linkDict.TryGetValue(t.Input0LinkId, out var l0) ? l0 : null;
+                    var input1Unit = linkDict.TryGetValue(t.Input1LinkId, out var l1) ? l1 : null;
+                    var outputUnit = linkDict.TryGetValue(t.OutputLinkId, out var lo) ? lo : null;
+
+                    return new
+                    {
+                        id = t.Id,
+                        name = t.Name,
+                        category = t.Category,
+                        viewInTree = t.ViewInTree,
+                        enabled = t.Enabled,
+                        tableType = t.TableType,
+                        cols = t.Cols,
+                        rows = t.Rows,
+                        input0Name = t.Input0Name,
+                        input1Name = t.Input1Name,
+                        outputName = t.OutputName,
+                        input0LinkId = t.Input0LinkId,
+                        input1LinkId = t.Input1LinkId,
+                        outputLinkId = t.OutputLinkId,
+                        incrementValue = t.IncrementValue,
+                        defaultValue = t.DefaultValue,
+                        input0Unit = input0Unit?.MeasureUnit ?? "",
+                        input0UnitType = input0Unit?.MeasurementUnitTypes ?? MeasurementUnitType.Unknown,
+                        input0DataType = input0Unit?.DataTypeSet ?? DataType.Normal,
+                        input1Unit = input1Unit?.MeasureUnit ?? "",
+                        input1UnitType = input1Unit?.MeasurementUnitTypes ?? MeasurementUnitType.Unknown,
+                        input1DataType = input1Unit?.DataTypeSet ?? DataType.Normal,
+                        outputUnit = outputUnit?.MeasureUnit ?? "",
+                        outputUnitType = outputUnit?.MeasurementUnitTypes ?? MeasurementUnitType.Unknown,
+                        outputDataType = outputUnit?.DataTypeSet ?? DataType.Normal,
+                    };
                 }),
             }, SJsonOptions);
         }
@@ -63,13 +84,35 @@ public partial class HybridBridgeService
             if (tableDef is null)
                 return JsonSerializer.Serialize(new { success = false, error = $"Table {tableId} not found" });
 
+            var links = calResult.Data?.DataLinks ?? [];
+            var linkDict = links.ToDictionary(l => l.Id);
+
             var request = new GetTableRequest(tableId);
             var protocol = _connection.GetProtocolService();
             var response = await protocol.SendAsync<GetTableResponse>(request).ConfigureAwait(false);
             if (response.Status != ME221.Comms.Messages.MessageStatus.Success)
                 return JsonSerializer.Serialize(new { success = false, error = $"ECU returned status {response.Status}" });
 
-            var wireData = ME221.Data.Infrastructure.TableSerializer.Deserialize(tableDef, response.SerializedTable.Span);
+            var wireData = TableSerializer.Deserialize(tableDef, response.SerializedTable.Span);
+
+            // Convert raw values to display units
+            var input0 = wireData.Input0;
+            var input1 = wireData.Input1;
+            var output = wireData.Output;
+
+            if (linkDict.TryGetValue(tableDef.Input0LinkId, out var input0Link))
+            {
+                input0 = MeasurementUnitConverter.FromRawArray(wireData.Input0, input0Link.MeasurementUnitTypes);
+            }
+            if (linkDict.TryGetValue(tableDef.Input1LinkId, out var input1Link))
+            {
+                input1 = MeasurementUnitConverter.FromRawArray(wireData.Input1, input1Link.MeasurementUnitTypes);
+            }
+            if (linkDict.TryGetValue(tableDef.OutputLinkId, out var outputLink))
+            {
+                output = MeasurementUnitConverter.FromRawArray(wireData.Output, outputLink.MeasurementUnitTypes);
+            }
+
             return JsonSerializer.Serialize(new
             {
                 success = true,
@@ -77,9 +120,9 @@ public partial class HybridBridgeService
                 rows = tableDef.Rows,
                 cols = tableDef.Cols,
                 tableType = tableDef.TableType,
-                input0 = wireData.Input0,
-                input1 = wireData.Input1,
-                output = wireData.Output,
+                input0,
+                input1,
+                output,
             }, SJsonOptions);
         }
         catch (Exception ex)
@@ -99,6 +142,8 @@ public partial class HybridBridgeService
             var ids = JsonSerializer.Deserialize<ushort[]>(tableIdsJson) ?? [];
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var allTables = calResult.Data?.Tables ?? [];
+            var links = calResult.Data?.DataLinks ?? [];
+            var linkDict = links.ToDictionary(l => l.Id);
             var protocol = _connection.GetProtocolService();
 
             var results = new Dictionary<int, object>();
@@ -113,14 +158,26 @@ public partial class HybridBridgeService
                     var response = await protocol.SendAsync<GetTableResponse>(request).ConfigureAwait(false);
                     if (response.Status != ME221.Comms.Messages.MessageStatus.Success) continue;
 
-                    var wireData = ME221.Data.Infrastructure.TableSerializer.Deserialize(tableDef, response.SerializedTable.Span);
+                    var wireData = TableSerializer.Deserialize(tableDef, response.SerializedTable.Span);
+
+                    var input0 = wireData.Input0;
+                    var input1 = wireData.Input1;
+                    var output = wireData.Output;
+
+                    if (linkDict.TryGetValue(tableDef.Input0LinkId, out var input0Link))
+                        input0 = MeasurementUnitConverter.FromRawArray(wireData.Input0, input0Link.MeasurementUnitTypes);
+                    if (linkDict.TryGetValue(tableDef.Input1LinkId, out var input1Link))
+                        input1 = MeasurementUnitConverter.FromRawArray(wireData.Input1, input1Link.MeasurementUnitTypes);
+                    if (linkDict.TryGetValue(tableDef.OutputLinkId, out var outputLink))
+                        output = MeasurementUnitConverter.FromRawArray(wireData.Output, outputLink.MeasurementUnitTypes);
+
                     results[tableId] = new
                     {
                         success = true,
                         enabled = wireData.Enabled,
-                        input0 = wireData.Input0,
-                        input1 = wireData.Input1,
-                        output = wireData.Output,
+                        input0,
+                        input1,
+                        output,
                     };
                 }
                 catch
@@ -157,7 +214,18 @@ public partial class HybridBridgeService
             if (tableDef is null)
                 return JsonSerializer.Serialize(new { success = false, error = $"Table {tableId} not found" });
 
-            var serialized = ME221.Data.Infrastructure.TableSerializer.Serialize(tableDef, true, input0, input1, output);
+            var links = calResult.Data?.DataLinks ?? [];
+            var linkDict = links.ToDictionary(l => l.Id);
+
+            // Convert display values back to raw for writing
+            if (linkDict.TryGetValue(tableDef.Input0LinkId, out var input0Link))
+                input0 = MeasurementUnitConverter.ToRawArray(input0, input0Link.MeasurementUnitTypes);
+            if (linkDict.TryGetValue(tableDef.Input1LinkId, out var input1Link))
+                input1 = MeasurementUnitConverter.ToRawArray(input1, input1Link.MeasurementUnitTypes);
+            if (linkDict.TryGetValue(tableDef.OutputLinkId, out var outputLink))
+                output = MeasurementUnitConverter.ToRawArray(output, outputLink.MeasurementUnitTypes);
+
+            var serialized = TableSerializer.Serialize(tableDef, true, input0, input1, output);
             var request = new SetTableRequest(tableId, serialized);
             var protocol = _connection.GetProtocolService();
             var response = await protocol.SendAsync<SetTableResponse>(request).ConfigureAwait(false);

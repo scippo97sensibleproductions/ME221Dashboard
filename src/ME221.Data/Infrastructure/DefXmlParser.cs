@@ -50,10 +50,28 @@ public static class DefXmlParser
                 ViewInTree = (bool?)elem.Element("ViewInTree") ?? false,
                 StandardLogging = (bool?)elem.Element("StandardLogging") ?? false,
                 MeasureUnit = ParseMeasureUnit(elem),
+                MeasurementUnitTypes = MeasurementUnitConverter.ParseUnitTypes(elem.Element("MeasurementUnitTypes")),
+                DataTypeSet = ParseDataType(elem),
+                MinValue = (float?)elem.Element("MinValue") ?? 0f,
+                MaxValue = (float?)elem.Element("MaxValue") ?? 0f,
                 DataKey = (string?)elem.Element("DataKey"),
                 TextValues = [.. ParseTextValues(elem)],
             };
         }
+    }
+
+    private static DataType ParseDataType(XElement elem)
+    {
+        var dataTypeElement = elem.Element("DataTypeSet");
+        if (dataTypeElement is null) return DataType.Normal;
+
+        return dataTypeElement.Value switch
+        {
+            "TrimModPercent" => DataType.TrimModPercent,
+            "Percent" => DataType.Percent,
+            "ADCRaw" => DataType.ADCRaw,
+            _ => DataType.Normal,
+        };
     }
 
     private static IEnumerable<TextValueMapping> ParseTextValues(XElement parent)

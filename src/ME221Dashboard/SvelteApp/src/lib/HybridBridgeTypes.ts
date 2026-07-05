@@ -375,6 +375,10 @@ export interface DataLinkDefinition {
   name: string;
   category: string;
   measureUnit: string;
+  measurementUnitTypes: number;
+  dataType: number;
+  minValue: number;
+  maxValue: number;
 }
 
 export interface DataLinksResult {
