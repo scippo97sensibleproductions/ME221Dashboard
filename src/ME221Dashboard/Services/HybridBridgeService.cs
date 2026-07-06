@@ -67,6 +67,7 @@ public partial class HybridBridgeService : IDisposable
     internal readonly IGpsService? _gps;
     internal readonly LogCapture _logCapture;
     internal readonly IChannelFactory? _channelFactory;
+    internal readonly IUpdateCheckerService? _updateChecker;
     internal HybridWebView? _webView;
 
     internal readonly Dictionary<int, string> _entityIdStrings = new();
@@ -88,7 +89,8 @@ public partial class HybridBridgeService : IDisposable
         LogCapture logCapture,
         ILogger<HybridBridgeService>? logger = null,
         IGpsService? gps = null,
-        IChannelFactory? channelFactory = null)
+        IChannelFactory? channelFactory = null,
+        IUpdateCheckerService? updateChecker = null)
     {
         _connection = connection;
         _liveData = liveData;
@@ -98,6 +100,7 @@ public partial class HybridBridgeService : IDisposable
         _logger = logger ?? NullLogger<HybridBridgeService>.Instance;
         _gps = gps;
         _channelFactory = channelFactory;
+        _updateChecker = updateChecker;
 
         _logger.LogInformation("GPS service: {GpsType}", _gps?.GetType().Name ?? "NULL (none registered)");
 

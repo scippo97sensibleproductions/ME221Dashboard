@@ -23,6 +23,7 @@ import type {
   DriverDataResult,
   DriverSetResult,
   DataLinksResult,
+  UpdateCheckResult,
 } from './HybridBridgeTypes';
 
 // Re-export all types for backward compatibility
@@ -57,6 +58,7 @@ export type {
   DriverDefinitionsResult,
   DataLinkDefinition,
   DataLinksResult,
+  UpdateCheckResult,
 } from './HybridBridgeTypes';
 
 // ─── Bridge Implementation ──────────────────────────────────────────────────
@@ -618,6 +620,12 @@ export const HybridBridge = {
   getDataLinks: async (): Promise<DataLinksResult> => {
     if (!isWebViewAvailable()) return { dataLinks: [], error: 'No WebView' };
     const result = await invokeDotNetLogged('GetDataLinks');
+    return JSON.parse(result);
+  },
+
+  checkForUpdate: async (): Promise<UpdateCheckResult> => {
+    if (!isWebViewAvailable()) return { updateAvailable: false, currentVersion: '', latestVersion: '', releaseUrl: '', releaseName: '', publishedAt: null };
+    const result = await invokeDotNetLogged('CheckForUpdate');
     return JSON.parse(result);
   },
 };

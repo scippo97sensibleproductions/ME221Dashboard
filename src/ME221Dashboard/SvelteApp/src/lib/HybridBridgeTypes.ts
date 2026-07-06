@@ -311,6 +311,17 @@ export interface GpsStatus {
 
 export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent;
 
+// ─── Update Check Types ─────────────────────────────────────────────────────
+
+export interface UpdateCheckResult {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseUrl: string;
+  releaseName: string;
+  publishedAt: string | null;
+}
+
 // ─── Driver Types ────────────────────────────────────────────────────────────
 
 export interface ComboOption {

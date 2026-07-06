@@ -33,6 +33,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ICalibrationService, CalibrationService>();
         builder.Services.AddSingleton<LogCapture>(logCapture);
         builder.Services.AddSingleton<DashboardPackageService>();
+        builder.Services.AddSingleton<IUpdateCheckerService, UpdateCheckerService>();
         builder.Services.AddSingleton<HybridBridgeService>();
 
 #if WINDOWS

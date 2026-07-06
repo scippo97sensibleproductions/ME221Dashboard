@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type GpsLocation } from './lib/HybridBridge';
+  import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type GpsLocation, type UpdateCheckResult } from './lib/HybridBridge';
   import WelcomePage from './pages/WelcomePage.svelte';
   import ConnectionPage from './pages/ConnectionPage.svelte';
   import CalibrationPage from './pages/CalibrationPage.svelte';
@@ -19,6 +19,9 @@
   import Sidebar from './lib/Sidebar.svelte';
   import NewDashboardDialog from './lib/NewDashboardDialog.svelte';
   import VehicleConfigModal from './lib/VehicleConfigModal.svelte';
+  import UpdateAvailableModal from './lib/UpdateAvailableModal.svelte';
+
+  let _updateChecked = false;
 
   let connectionState: ConnectionStateInfo = $state({ state: 'Disconnected' });
   let notification = $state<{
@@ -59,6 +62,8 @@
   let newDashboardError = $state<string | null>(null);
   let vehicleConfigOpen = $state(false);
   let allSensors = $state<{ id: number; name: string }[]>([]);
+  let updateCheckResult = $state<UpdateCheckResult | null>(null);
+  let updateModalOpen = $state(false);
 
   let showBottomBar = $derived(sidebarVisible && isConnected && currentPage !== 'welcome' && currentPage !== 'connection' && currentPage !== 'calibration');
 
@@ -425,6 +430,17 @@
     startup();
     liveDataStore.start();
 
+    // Check for updates once per session (non-blocking)
+    if (!_updateChecked) {
+      _updateChecked = true;
+      HybridBridge.checkForUpdate().then(result => {
+        if (result.updateAvailable) {
+          updateCheckResult = result;
+          updateModalOpen = true;
+        }
+      }).catch(() => {});
+    }
+
     // App.svelte still monitors connection changes for reconnect logic
     const unsubscribe = HybridBridge.onMessage((event: BridgeEvent) => {
       if (event.event === 'connectionStateChanged') {
@@ -548,6 +564,14 @@
       open={vehicleConfigOpen}
       sensors={allSensors}
       onclose={() => { vehicleConfigOpen = false; }}
+    />
+  {/if}
+
+  {#if updateCheckResult}
+    <UpdateAvailableModal
+      open={updateModalOpen}
+      update={updateCheckResult}
+      onDismiss={() => { updateModalOpen = false; }}
     />
   {/if}
 
