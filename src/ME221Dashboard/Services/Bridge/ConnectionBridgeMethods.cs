@@ -11,6 +11,8 @@ namespace ME221Dashboard.Services;
 public partial class HybridBridgeService
 {
     private ConnectionTarget? _lastTarget;
+    private int _lastVendorId;
+    private int _lastProductId;
     /// <summary>
     /// Connect to an ECU via TCP. Called from JS: window.HybridWebView.InvokeDotNet('ConnectTcp', [host, port])
     /// </summary>
@@ -73,6 +75,8 @@ public partial class HybridBridgeService
                         $"{entry.Value.VendorId:X4}:{entry.Value.ProductId:X4}" == portName)
                     {
                         targetDevice = entry.Value;
+                        _lastVendorId = entry.Value.VendorId;
+                        _lastProductId = entry.Value.ProductId;
                         _logger.LogInformation("ConnectSerial: matched device '{DeviceName}' (VID={VendorId:X4}, PID={ProductId:X4})",
                             targetDevice.DeviceName, targetDevice.VendorId, targetDevice.ProductId);
                         break;
@@ -82,6 +86,22 @@ public partial class HybridBridgeService
                 if (targetDevice == null)
                 {
                     _logger.LogWarning("ConnectSerial: device '{PortName}' not found in DeviceList", portName);
+
+                    // Fallback: try matching by cached VID/PID from last successful connection
+                    if (_lastVendorId != 0 && _lastProductId != 0)
+                    {
+                        _logger.LogInformation("ConnectSerial: trying VID/PID fallback {VendorId:X4}:{ProductId:X4}", _lastVendorId, _lastProductId);
+                        foreach (var entry in usbManager!.DeviceList!)
+                        {
+                            if (entry.Value.VendorId == _lastVendorId && entry.Value.ProductId == _lastProductId)
+                            {
+                                targetDevice = entry.Value;
+                                portName = targetDevice.DeviceName;
+                                _logger.LogInformation("ConnectSerial: matched by VID/PID fallback → '{DeviceName}'", targetDevice.DeviceName);
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 if (targetDevice != null && !usbManager.HasPermission(targetDevice))
@@ -119,7 +139,7 @@ public partial class HybridBridgeService
                 return JsonSerializer.Serialize(new { success = false, error, state = _connection.State.ToString() });
             }
             _logger.LogInformation("ConnectSerial: connected successfully");
-            return JsonSerializer.Serialize(new { success, state = _connection.State.ToString() });
+            return JsonSerializer.Serialize(new { success, state = _connection.State.ToString(), deviceName = portName });
         }
         catch (Exception ex)
         {

@@ -342,6 +342,15 @@
       }
 
       if (result.success) {
+        // Update localStorage if device was renamed (Android USB re-enumeration)
+        if (result.deviceName && result.deviceName !== params.serialPort) {
+          try {
+            localStorage.setItem('me221_lastConnection', JSON.stringify({
+              type: params.type,
+              serialPort: result.deviceName,
+            }));
+          } catch {}
+        }
         // Reconnected — serialize: reporting → names → restore page
         const restorePage = pageBeforeDisconnect;
         pageBeforeDisconnect = 'connection';

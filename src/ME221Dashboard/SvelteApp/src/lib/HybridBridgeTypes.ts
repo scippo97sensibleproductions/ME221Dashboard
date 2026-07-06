@@ -26,6 +26,7 @@ export interface ConnectionResult {
   success: boolean;
   state?: string;
   error?: string;
+  deviceName?: string;
 }
 
 export interface AvailablePortsResult {

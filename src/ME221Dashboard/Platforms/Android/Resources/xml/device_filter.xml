@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- NXP / ME221 ECU (VID=0x1FC9, PID=0x823D) -->
+    <usb-device vendor-id="8137" product-id="33341" />
+
     <!-- FTDI FT232R, FT2232H, FT4232H, FT232H, FT230X, FT231X, FT234XD -->
     <usb-device vendor-id="1027" product-id="24577" />
     <usb-device vendor-id="1027" product-id="24592" />

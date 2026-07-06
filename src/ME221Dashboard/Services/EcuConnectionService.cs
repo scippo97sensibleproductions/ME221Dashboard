@@ -59,6 +59,16 @@ public sealed class EcuConnectionService(
                     try
                     {
                         await service.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+#if ANDROID
+                        if (target is ConnectionTarget.Serial)
+                        {
+                            // After USB re-enumeration the ECU's serial bridge needs time
+                            // to settle before it can respond to the probe.
+                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                        }
+#endif
+
                         await ProbeEcuAsync(service, cancellationToken).ConfigureAwait(false);
                     }
                     catch
@@ -106,7 +116,7 @@ public sealed class EcuConnectionService(
     private static async Task ProbeEcuAsync(ProtocolService service, CancellationToken cancellationToken)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(3));
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
 
         try
         {
@@ -114,7 +124,7 @@ public sealed class EcuConnectionService(
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException("ECU did not respond to connection probe within 3 seconds.");
+            throw new TimeoutException("ECU did not respond to connection probe within 5 seconds.");
         }
     }
 
