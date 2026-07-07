@@ -4,7 +4,7 @@
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
-  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize } from '../lib/gauges/types';
+  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, type ValueTransformStep } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
   import { computeDerived, type ComputationInputs } from '../lib/derived/compute';
@@ -175,11 +175,13 @@
   const staticGaugeConfigs = $derived(gaugeDefs.map(def => {
     const entInfo = entityLookup[String(def.entityId)];
     const name = entInfo?.name ?? defaultGaugeName(def.entityId);
-    const unit = entInfo?.unit ?? defaultGaugeUnit(def.entityId);
+    const defaultUnit = entInfo?.unit ?? defaultGaugeUnit(def.entityId);
+    const unit = def.customUnitLabel || defaultUnit;
     const minValue = (entInfo?.minValue ?? 0) <= (entInfo?.maxValue ?? 10000)
       ? (entInfo?.minValue ?? 0) : 0;
     const maxValue = (entInfo?.maxValue ?? 10000) > minValue
       ? (entInfo?.maxValue ?? 10000) : 10000;
+    const transformSteps = def.transformSteps;
 
     return {
       config: def,
@@ -188,6 +190,7 @@
       unit,
       minValue,
       maxValue,
+      transformSteps,
     };
   }));
 
@@ -247,18 +250,29 @@
     _gaugeIndexByEntityId = idxMap;
   }
 
-  // Update a single gauge's value in place — O(1), no allocation
-  function updateGaugeValue(entityId: number, value: number | null) {
-    const idx = _gaugeIndexByEntityId.get(entityId);
-    if (idx === undefined) return;
-    const g = gaugeStates[idx];
-    const raw = value ?? 0;
+  // ── Shared smoothing + transform pipeline ──
+  function applyPipeline(raw: number, entityId: number, g: { smoothingEnabled: boolean; smoothingFactor: number }, sc: { transformSteps?: ValueTransformStep[] }): number {
     let v = raw;
     if (g.smoothingEnabled && g.smoothingFactor > 0 && g.smoothingFactor < 1) {
       const prev = _smoothedValues.get(entityId) ?? raw;
       v = prev + g.smoothingFactor * (raw - prev);
       _smoothedValues.set(entityId, v);
     }
+    if (sc.transformSteps && isTransformable(entityId)) {
+      const transformed = applyTransform(v, sc.transformSteps);
+      if (Number.isFinite(transformed)) {
+        v = transformed;
+      }
+    }
+    return v;
+  }
+
+  // Update a single gauge's value in place — O(1), no allocation
+  function updateGaugeValue(entityId: number, value: number | null) {
+    const idx = _gaugeIndexByEntityId.get(entityId);
+    if (idx === undefined) return;
+    const g = gaugeStates[idx];
+    const v = applyPipeline(value ?? 0, entityId, g, staticGaugeConfigs[idx]);
     g.value = v;
     g.formattedValue = formatValue(v, g.name, g.unit);
   }
@@ -280,16 +294,12 @@
     void liveDataStore.frameCount;
     const states = gaugeStates;
     const v = entityValues;
+    const cfgs = staticGaugeConfigs;
     for (let i = 0; i < states.length; i++) {
       const g = states[i];
       const rawKv = v[g.entityId];
       const raw = rawKv == null ? 0 : rawKv;
-      let val = raw;
-      if (g.smoothingEnabled && g.smoothingFactor > 0 && g.smoothingFactor < 1) {
-        const prev = _smoothedValues.get(g.entityId) ?? raw;
-        val = prev + g.smoothingFactor * (raw - prev);
-        _smoothedValues.set(g.entityId, val);
-      }
+      const val = applyPipeline(raw, g.entityId, g, cfgs[i]);
       if (g.value !== val) {
         g.value = val;
         g.formattedValue = formatValue(val, g.name, g.unit);

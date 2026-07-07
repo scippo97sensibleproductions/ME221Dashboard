@@ -60,4 +60,7 @@ public sealed class GaugeConfigEntry
     public int ChartPrecision { get; set; } = 1;
     public string TextColor { get; set; } = "#ffffff";
     public int ZIndex { get; set; }
+
+    public List<ValueTransformStep>? TransformSteps { get; set; }
+    public string? CustomUnitLabel { get; set; }
 }

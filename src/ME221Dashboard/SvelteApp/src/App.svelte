@@ -86,6 +86,8 @@
       dashboardNames = result.names;
       if (result.activeDashboard && result.activeDashboard !== activeDashboard) {
         activeDashboard = result.activeDashboard;
+        // Sync active dashboard to C# side so odometer/gps work correctly
+        await HybridBridge.setActiveDashboard(result.activeDashboard);
       }
     } catch {
       // ignore — will retry on next connect

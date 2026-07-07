@@ -19,12 +19,14 @@ namespace ME221.Data;
 [JsonSerializable(typeof(TextValueMapping))]
 [JsonSerializable(typeof(DeviceInfoMetadata))]
 [JsonSerializable(typeof(GaugeConfigEntry))]
+[JsonSerializable(typeof(ValueTransformStep))]
 [JsonSerializable(typeof(SensorCustomization))]
 [JsonSerializable(typeof(List<DataLinkDefinition>))]
 [JsonSerializable(typeof(List<TableDefinition>))]
 [JsonSerializable(typeof(List<DriverDefinition>))]
 [JsonSerializable(typeof(List<int>))]
 [JsonSerializable(typeof(List<GaugeConfigEntry>))]
+[JsonSerializable(typeof(List<ValueTransformStep>))]
 public partial class CalibrationJsonContext : JsonSerializerContext
 {
 }

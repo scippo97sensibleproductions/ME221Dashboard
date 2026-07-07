@@ -1,5 +1,6 @@
 import { GaugeShapeCategory, DigitalStyle } from './gaugeTypes';
 import type { ArcPosition, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
+import type { ValueTransformStep } from './transformUtils';
 
 export function computeValueFraction(value: number, min: number, max: number): number {
   const range = max - min;
@@ -279,6 +280,8 @@ export function toSavePayload(def: {
   texturePath?: string | null;
   textColor?: string;
   zIndex: number;
+  transformSteps?: ValueTransformStep[];
+  customUnitLabel?: string | null;
 }) {
   return {
     entityId: def.entityId,
@@ -326,6 +329,8 @@ export function toSavePayload(def: {
     chartPrecision: def.chartPrecision,
     textColor: def.textColor,
     zIndex: def.zIndex,
+    transformSteps: def.transformSteps,
+    customUnitLabel: def.customUnitLabel,
   };
 }
 

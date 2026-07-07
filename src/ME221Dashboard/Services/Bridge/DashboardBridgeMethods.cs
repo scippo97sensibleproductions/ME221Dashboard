@@ -300,6 +300,8 @@ public partial class HybridBridgeService
                     chartPrecision = g.ChartPrecision,
                     textColor = g.TextColor,
                     zIndex = g.ZIndex,
+                    transformSteps = g.TransformSteps?.Select(t => new { operation = (int)t.Operation, operand = t.Operand }).ToList(),
+                    customUnitLabel = g.CustomUnitLabel,
                 }).ToList(),
                 tables = (dashboard.Tables ?? []).Select(t => new
                 {
@@ -446,6 +448,38 @@ public partial class HybridBridgeService
                     if (g["chartPrecision"] is JsonValue) existing.ChartPrecision = g["chartPrecision"]!.GetValue<int>();
                     if (g["textColor"] is JsonValue) existing.TextColor = g["textColor"]!.GetValue<string>();
                     if (g["zIndex"] is JsonValue) existing.ZIndex = g["zIndex"]!.GetValue<int>();
+                    // Always clear first, then re-populate if present (handles empty array → null)
+                    if (gObj.ContainsKey("transformSteps"))
+                    {
+                        existing.TransformSteps = null;
+                        if (g["transformSteps"] is JsonArray tsArr && tsArr.Count > 0)
+                        {
+                            const int maxSteps = 20;
+                            existing.TransformSteps = tsArr
+                                .Where(t => t is JsonObject)
+                                .Take(maxSteps)
+                                .Select(t => t!.AsObject())
+                                .Select(t =>
+                                {
+                                    var op = t["operation"] is JsonValue ov && ov.TryGetValue<int>(out var opVal) ? opVal : -1;
+                                    if (op < 0 || op > (int)ValueTransformOperation.InvertSign) op = 0;
+                                    var operand = t["operand"] is JsonValue jv && jv.TryGetValue<double>(out var opd) ? opd : 0;
+                                    return new ValueTransformStep
+                                    {
+                                        Operation = (ValueTransformOperation)op,
+                                        Operand = operand,
+                                    };
+                                })
+                                .ToList();
+                            if (existing.TransformSteps.Count == 0) existing.TransformSteps = null;
+                        }
+                    }
+                    if (gObj.ContainsKey("customUnitLabel"))
+                    {
+                        var cul = g["customUnitLabel"] is JsonValue cv ? cv.GetValue<string>() : null;
+                        if (!string.IsNullOrEmpty(cul) && cul.Length > 50) cul = cul[..50];
+                        existing.CustomUnitLabel = string.IsNullOrEmpty(cul) ? null : cul;
+                    }
                 }
             }
 

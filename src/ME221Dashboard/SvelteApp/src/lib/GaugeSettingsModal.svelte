@@ -10,6 +10,7 @@
   import ColorConfigSettings from './gauges/ColorConfigSettings.svelte';
   import SmoothingSettings from './gauges/SmoothingSettings.svelte';
   import GpsSpeedDebugSettings from './gauges/GpsSpeedDebugSettings.svelte';
+  import TransformSettings from './gauges/TransformSettings.svelte';
   import GaugePreviewPanel from './GaugePreviewPanel.svelte';
   import { Modal, Button } from 'flowbite-svelte';
   import { IconX, IconChevronDown } from '@tabler/icons-svelte';
@@ -32,7 +33,7 @@
   ];
 
   let openSections = $state<Record<string, boolean>>({
-    shape: false, layout: false, scale: false, labels: false, icon: false, appearance: false, color: false, smoothing: false, odometer: false
+    shape: false, layout: false, scale: false, labels: false, icon: false, appearance: false, color: false, smoothing: false, odometer: false, transform: false
   });
 
   let iconPicking = $state(false);
@@ -120,6 +121,7 @@
     gpsDebug:  { border: 'border-l-amber-500',   bg: 'bg-amber-500/5',   text: 'text-white', headerBg: 'bg-amber-500/25', slider: 'accent-amber-500',   activeBtn: 'bg-amber-600',   activeBtnText: 'text-white' },
     color:     { border: 'border-l-rose-500',    bg: 'bg-rose-500/5',    text: 'text-white', headerBg: 'bg-rose-500/25', slider: 'accent-rose-500',    activeBtn: 'bg-rose-600',    activeBtnText: 'text-white' },
     smoothing: { border: 'border-l-emerald-500', bg: 'bg-emerald-500/5', text: 'text-white', headerBg: 'bg-emerald-500/25', slider: 'accent-emerald-500', activeBtn: 'bg-emerald-600', activeBtnText: 'text-white' },
+    transform:  { border: 'border-l-orange-500', bg: 'bg-orange-500/5',  text: 'text-white', headerBg: 'bg-orange-500/25',  slider: 'accent-orange-500',  activeBtn: 'bg-orange-600',  activeBtnText: 'text-white' },
   };
 </script>
 
@@ -554,6 +556,25 @@
               {/if}
             </div>
           {/if}
+
+          <!-- 7. Transform (all gauge types) -->
+          <div class="rounded-lg border border-l-2 {sectionColors.transform.border} border-gray-700/50 overflow-hidden">
+            <button class="flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold uppercase tracking-wider {sectionColors.transform.text} {sectionColors.transform.headerBg} transition-colors"
+                    onclick={() => toggleSection('transform')}>
+              <span>
+                Transform
+                {#if !openSections.transform && gaugeDef.transformSteps && gaugeDef.transformSteps.length > 0}
+                  <span class="font-normal text-gray-400">({gaugeDef.transformSteps.length} step{gaugeDef.transformSteps.length !== 1 ? 's' : ''})</span>
+                {/if}
+              </span>
+              <IconChevronDown size={14} class="transition-transform duration-200 {openSections.transform ? 'rotate-180' : ''}" />
+            </button>
+            {#if openSections.transform}
+              <div class="px-3 pb-3 pt-1 border-t border-gray-700/30 {sectionColors.transform.bg}">
+                <TransformSettings {gaugeDef} {entityInfo} {onchange} />
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
 

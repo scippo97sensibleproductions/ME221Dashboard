@@ -140,6 +140,7 @@ public partial class HybridBridgeService
         if (_activeDashboardName == null) return;
         _odometerByDashboard[_activeDashboardName] = new OdometerConfig { CurrentValue = 0 };
         await PersistOdometerAsync(_activeDashboardName, _odometerByDashboard[_activeDashboardName]).ConfigureAwait(false);
+        SendOdometerUpdate();
     }
 
     /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerValue', [value])
@@ -151,6 +152,7 @@ public partial class HybridBridgeService
         state.CurrentValue = Math.Max(0, value);
         _odometerByDashboard[_activeDashboardName] = state;
         await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
     }
 
     /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerUnit', [useKilometers])
@@ -162,6 +164,7 @@ public partial class HybridBridgeService
         state.UseKilometers = useKilometers;
         _odometerByDashboard[_activeDashboardName] = state;
         await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
     }
 
     internal void OnGpsLocationUpdated(object? sender, GpsLocationEventArgs e)
@@ -353,7 +356,8 @@ public partial class HybridBridgeService
             if (_activeDashboardName != null && _odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
             {
                 state.VssSpeedInMph = isInMph;
-                await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
             }
         }
     }
@@ -387,5 +391,19 @@ public partial class HybridBridgeService
         }
 
         await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
+    }
+
+    private void SendOdometerUpdate()
+    {
+        if (_activeDashboardName == null || _webView is null) return;
+        if (!_odometerByDashboard.TryGetValue(_activeDashboardName, out var state)) return;
+        var json = JsonSerializer.Serialize(new
+        {
+            @event = "odometerUpdate",
+            odometer = state.CurrentValue,
+            odometerUnit = state.UseKilometers ? "km" : "mi",
+        });
+        MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(json));
     }
 }

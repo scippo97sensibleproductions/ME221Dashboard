@@ -3,6 +3,7 @@
  */
 
 import type { ColorScheme } from './tables/types';
+import type { ValueTransformStep } from './gauges/transformUtils';
 
 export type { ColorScheme };
 
@@ -149,6 +150,9 @@ export interface GaugeConfigEntry {
   chartPrecision: number;
   textColor: string;
   zIndex: number;
+  // Value transforms
+  transformSteps?: ValueTransformStep[];
+  customUnitLabel?: string | null;
 }
 
 export interface DashboardTableEntry {
@@ -216,6 +220,8 @@ export interface SaveLayoutPayload {
   chartPrecision?: number;
   textColor?: string;
   zIndex?: number;
+  transformSteps?: ValueTransformStep[];
+  customUnitLabel?: string | null;
 }
 
 // ─── Vehicle Config ──────────────────────────────────────────────────────────
