@@ -241,6 +241,7 @@
         maxValue: sc.maxValue,
         fractionX: sc.config.fractionX,
         fractionY: sc.config.fractionY,
+        transformSteps: sc.transformSteps,
       });
       idxMap.set(sc.config.entityId, i);
       // Seed smoothed value with current raw value
@@ -251,15 +252,15 @@
   }
 
   // ── Shared smoothing + transform pipeline ──
-  function applyPipeline(raw: number, entityId: number, g: { smoothingEnabled: boolean; smoothingFactor: number }, sc: { transformSteps?: ValueTransformStep[] }): number {
+  function applyPipeline(raw: number, entityId: number, g: { smoothingEnabled: boolean; smoothingFactor: number; transformSteps?: ValueTransformStep[] }): number {
     let v = raw;
     if (g.smoothingEnabled && g.smoothingFactor > 0 && g.smoothingFactor < 1) {
       const prev = _smoothedValues.get(entityId) ?? raw;
       v = prev + g.smoothingFactor * (raw - prev);
       _smoothedValues.set(entityId, v);
     }
-    if (sc.transformSteps && isTransformable(entityId)) {
-      const transformed = applyTransform(v, sc.transformSteps);
+    if (g.transformSteps && isTransformable(entityId)) {
+      const transformed = applyTransform(v, g.transformSteps);
       if (Number.isFinite(transformed)) {
         v = transformed;
       }
@@ -272,7 +273,7 @@
     const idx = _gaugeIndexByEntityId.get(entityId);
     if (idx === undefined) return;
     const g = gaugeStates[idx];
-    const v = applyPipeline(value ?? 0, entityId, g, staticGaugeConfigs[idx]);
+    const v = applyPipeline(value ?? 0, entityId, g);
     g.value = v;
     g.formattedValue = formatValue(v, g.name, g.unit);
   }
@@ -290,22 +291,26 @@
   // Drives gauge updates whenever the store has new data. Iterates ONLY gauges on this dashboard
   // (small N), not all entities (large K). O(N_gauges) per frame at ~10Hz = no measurable cost.
   $effect(() => {
-    if (gaugeStates.length === 0) return;
+    // Only track the frame tick. The loop below mutates gaugeStates in place, so tracking
+    // gauge values here would make the effect read and write the same state.
     void liveDataStore.frameCount;
-    const states = gaugeStates;
-    const v = entityValues;
-    const cfgs = staticGaugeConfigs;
-    for (let i = 0; i < states.length; i++) {
-      const g = states[i];
-      const rawKv = v[g.entityId];
-      const raw = rawKv == null ? 0 : rawKv;
-      const val = applyPipeline(raw, g.entityId, g, cfgs[i]);
-      if (g.value !== val) {
-        g.value = val;
-        g.formattedValue = formatValue(val, g.name, g.unit);
+
+    untrack(() => {
+      if (gaugeStates.length === 0) return;
+      const states = gaugeStates;
+      const v = entityValues;
+      for (let i = 0; i < states.length; i++) {
+        const g = states[i];
+        const rawKv = v[g.entityId];
+        const raw = rawKv == null ? 0 : rawKv;
+        const val = applyPipeline(raw, g.entityId, g);
+        if (g.value !== val) {
+          g.value = val;
+          g.formattedValue = formatValue(val, g.name, g.unit);
+        }
       }
-    }
-    computeAndInjectDerived();
+      computeAndInjectDerived();
+    });
   });
 
   function loadRealConfig() {

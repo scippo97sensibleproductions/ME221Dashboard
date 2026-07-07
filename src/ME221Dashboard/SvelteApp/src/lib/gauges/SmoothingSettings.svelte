@@ -28,9 +28,9 @@
   {/if}
   <button
     class="mt-1.5 text-[10px] font-medium transition-colors
-      {gaugeDef.smoothingEnabled ? 'text-cyan-400 hover:text-cyan-300' : 'text-gray-500 hover:text-gray-400'}"
-    onclick={() => set('smoothingEnabled', !gaugeDef.smoothingEnabled)}
+      {gaugeDef?.smoothingEnabled ? 'text-cyan-400 hover:text-cyan-300' : 'text-gray-500 hover:text-gray-400'}"
+    onclick={() => gaugeDef && set('smoothingEnabled', !gaugeDef.smoothingEnabled)}
   >
-    {gaugeDef.smoothingEnabled ? 'Disable smoothing' : 'Enable smoothing'}
+    {gaugeDef?.smoothingEnabled ? 'Disable smoothing' : 'Enable smoothing'}
   </button>
 </div>

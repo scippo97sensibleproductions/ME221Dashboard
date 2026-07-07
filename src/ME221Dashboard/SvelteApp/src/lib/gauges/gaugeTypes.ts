@@ -1,3 +1,5 @@
+import type { ValueTransformStep } from './transformUtils';
+
 export enum GaugeShapeCategory {
   Arc = 0,
   Bar = 1,
@@ -79,6 +81,8 @@ export interface GaugeDefinition {
   // Smoothing
   smoothingEnabled: boolean;
   smoothingFactor: number;
+  // Transforms
+  transformSteps?: ValueTransformStep[];
   // Layering
   zIndex: number;
 }
