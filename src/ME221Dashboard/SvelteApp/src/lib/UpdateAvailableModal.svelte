@@ -2,6 +2,7 @@
   import { Modal, Button } from 'flowbite-svelte';
   import { IconDownload, IconRefresh } from '@tabler/icons-svelte';
   import type { UpdateCheckResult } from './HybridBridgeTypes';
+  import { HybridBridge } from './HybridBridge';
 
   let { open, update, onDismiss }: {
     open: boolean;
@@ -48,7 +49,7 @@
       <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600" onclick={onDismiss}>
         Remind Later
       </Button>
-      <Button class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600" onclick={() => window.open(update.releaseUrl, '_blank')}>
+      <Button class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600" onclick={() => HybridBridge.openExternalUrl(update.releaseUrl)}>
         <IconDownload size={16} class="mr-1.5" />
         Download
       </Button>

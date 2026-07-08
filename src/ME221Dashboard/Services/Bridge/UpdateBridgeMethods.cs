@@ -6,6 +6,23 @@ namespace ME221Dashboard.Services;
 public partial class HybridBridgeService
 {
     /// <summary>
+    /// Open a URL in the device's default browser.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('OpenExternalUrl', [url])
+    /// </summary>
+    public async Task OpenExternalUrl(string url)
+    {
+        try
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                await Launcher.OpenAsync(uri);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open external URL: {Url}", url);
+        }
+    }
+
+    /// <summary>
     /// Check for a new release on GitHub.
     /// Called from JS: window.HybridWebView.InvokeDotNet('CheckForUpdate')
     /// </summary>

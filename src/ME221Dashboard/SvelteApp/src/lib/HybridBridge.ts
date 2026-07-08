@@ -628,6 +628,14 @@ export const HybridBridge = {
     const result = await invokeDotNetLogged('CheckForUpdate');
     return JSON.parse(result);
   },
+
+  openExternalUrl: async (url: string): Promise<void> => {
+    if (!isWebViewAvailable()) {
+      window.open(url, '_blank');
+      return;
+    }
+    await invokeDotNetLogged('OpenExternalUrl', [url]);
+  },
 };
 
 // Initialize the centralized message router at module load time,
