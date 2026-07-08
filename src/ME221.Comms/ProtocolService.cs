@@ -28,6 +28,18 @@ public sealed class ProtocolService : IAsyncDisposable
     /// </summary>
     private const int MaxConsecutiveHeartbeatFailures = 3;
 
+    /// <summary>
+    /// Guards against heartbeat re-entrancy. The System.Threading.Timer fires
+    /// OnHeartbeat every 1.5s on a thread-pool thread. Since OnHeartbeat is
+    /// async void, the await inside releases the thread and the next timer fire
+    /// can start a second heartbeat while the first is blocked on USB write
+    /// (3s timeout × 3 retries = potentially 9s). Two concurrent writes on
+    /// the same UsbDeviceConnection cause Java.IO.IOException.
+    ///
+    /// Setting this flag sync immediately (not awaited) prevents overlap.
+    /// </summary>
+    private int _heartbeatInFlight;
+
     public event EventHandler? HeartbeatFailed;
 
     public ProtocolService(IChannel channel, ILogger<ProtocolService>? logger = null, ILoggerFactory? loggerFactory = null)
@@ -97,6 +109,11 @@ public sealed class ProtocolService : IAsyncDisposable
         if (!IsOpen || !_isReportingActive)
             return;
 
+        // Re-entrancy guard: skip if a previous heartbeat is still blocked on USB write.
+        // Interlocked.Exchange returns the original value, atomically setting in-flight=1.
+        if (Interlocked.Exchange(ref _heartbeatInFlight, 1) == 1)
+            return;
+
         try
         {
             await SendAsync(SendAckRequest.Instance, _disposeCts.Token).ConfigureAwait(false);
@@ -111,6 +128,10 @@ public sealed class ProtocolService : IAsyncDisposable
             {
                 HeartbeatFailed?.Invoke(this, EventArgs.Empty);
             }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _heartbeatInFlight, 0);
         }
     }
 

@@ -108,10 +108,11 @@ public class CorrelationTests
 
         // Assert
         result.Should().BeTrue();
-        var r2 = await tcs2.Task;  // await satisfies xUnit1031; tcs2 was overwritten by tcs1
+        var r2 = await tcs2.Task;
         r2.Should().NotBeNull();
-        // tcs1 should NOT be completed since tcs2's TCS was the one that got correlated
-        tcs1.Task.IsCompleted.Should().BeFalse();
+
+        // Old TCS should be canceled (not leaked) by the AddOrUpdate guard
+        tcs1.Task.IsCanceled.Should().BeTrue();
     }
 
     [Fact]

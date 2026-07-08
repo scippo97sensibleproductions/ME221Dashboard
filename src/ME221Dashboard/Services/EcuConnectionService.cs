@@ -16,6 +16,8 @@ public sealed class EcuConnectionService(
     private ProtocolService? _protocolService;
     private ConnectionState _state = ConnectionState.Disconnected;
     private CancellationTokenSource? _monitorCts;
+    private ConnectionTarget? _lastTarget;
+    private int _autoReconnectAttempts;
 
     public ConnectionState State
     {
@@ -46,6 +48,8 @@ public sealed class EcuConnectionService(
 
             LastError = null;
             State = ConnectionState.Connecting;
+            _lastTarget = target;
+            _autoReconnectAttempts = 0;
 
             var maxAttempts = target is ConnectionTarget.Serial ? 3 : 1;
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -135,6 +139,8 @@ public sealed class EcuConnectionService(
         {
             if (_state is ConnectionState.Disconnected) return;
             State = ConnectionState.Disconnecting;
+            _lastTarget = null;
+            _autoReconnectAttempts = 0;
             // Skip DisableReporting — the ECU may be unresponsive (e.g. during cranking).
             // Just tear down the channel immediately.
             await CleanupAsync().ConfigureAwait(false);
@@ -231,9 +237,10 @@ public sealed class EcuConnectionService(
 
     private void TransitionToError(string error)
     {
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(_state, ConnectionState.Error, error));
+        var oldState = _state;
+        _state = ConnectionState.Error;
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, ConnectionState.Error, error));
         _state = ConnectionState.Disconnected;
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(ConnectionState.Error, ConnectionState.Disconnected, error));
     }
 
     private void StartMonitor()
@@ -257,6 +264,31 @@ public sealed class EcuConnectionService(
         if (_state != ConnectionState.Connected) return;
         _logger.LogWarning("Connection lost");
         await CleanupAsync().ConfigureAwait(false);
+
+        // Auto-reconnect: attempt up to 3 times with backoff for serial connections.
+        // This handles USB re-enumeration (device path changes) without waiting for the JS layer.
+        if (_lastTarget is ConnectionTarget.Serial && _autoReconnectAttempts < 3)
+        {
+            _autoReconnectAttempts++;
+            var delayMs = _autoReconnectAttempts * 1000; // 1s, 2s, 3s backoff
+            _logger.LogInformation("Auto-reconnect attempt {Attempt}/3 in {Delay}ms", _autoReconnectAttempts, delayMs);
+            await Task.Delay(delayMs).ConfigureAwait(false);
+
+            try
+            {
+                var success = await ConnectAsync(_lastTarget).ConfigureAwait(false);
+                if (success)
+                {
+                    _logger.LogInformation("Auto-reconnect succeeded on attempt {Attempt}", _autoReconnectAttempts);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Auto-reconnect attempt {Attempt} failed", _autoReconnectAttempts);
+            }
+        }
+
         TransitionToError("Connection lost");
     }
 

@@ -39,7 +39,20 @@ internal sealed class RequestCorrelator : IAsyncDisposable
         var tcs = new TaskCompletionSource<Response>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var key = (request.Class, request.Command);
-        _pendingRequests[key] = tcs;
+
+        // Guard: if a TCS is already pending for this key (e.g. heartbeat SendAck
+        // fired while previous SendAck is still in-flight), cancel the old one and
+        // replace rather than silently orphaning it. The old TCS would otherwise
+        // block forever on await tcs.Task.WaitAsync() with the dispose CTS.
+        _pendingRequests.AddOrUpdate(
+            key,
+            tcs,
+            (_, existing) =>
+            {
+                if (!existing.Task.IsCompleted)
+                    existing.TrySetCanceled();
+                return tcs;
+            });
 
         if (_logger is not null)
         {
