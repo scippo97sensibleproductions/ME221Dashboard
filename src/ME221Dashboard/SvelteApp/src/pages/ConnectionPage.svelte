@@ -21,15 +21,7 @@
   let selectedPort = $state('');
   let isConnecting = $state(false);
 
-  try {
-    const last = localStorage.getItem('me221_lastConnection');
-    if (last) {
-      const parsed = JSON.parse(last);
-      if (parsed.host) host = parsed.host;
-      if (parsed.port) port = String(parsed.port);
-      if (parsed.type) connectionType = parsed.type;
-    }
-  } catch {}
+  // Load last connection from native file on mount (via onMount below)
 
   let isConnected = $derived(connectionState.state === 'Connected');
   let isDisabled = $derived(isConnected || isConnecting);
@@ -62,14 +54,12 @@
         result = await HybridBridge.connectSerial(selectedPort);
       }
       if (result.success) {
-        try {
-          localStorage.setItem('me221_lastConnection', JSON.stringify({
-            type: connectionType,
-            host: connectionType === 'tcp' ? host : undefined,
-            port: connectionType === 'tcp' ? parseInt(port) : undefined,
-            serialPort: connectionType === 'serial' ? selectedPort : undefined,
-          }));
-        } catch {}
+        HybridBridge.saveLastConnection({
+          type: connectionType,
+          host: connectionType === 'tcp' ? host : undefined,
+          port: connectionType === 'tcp' ? parseInt(port) : undefined,
+          serialPort: connectionType === 'serial' ? selectedPort : undefined,
+        }).catch(() => {});
         onConnectionChange({ state: result.state || 'Connected' });
       } else {
         onConnectionChange({ state: 'Error', error: result.error });
@@ -94,8 +84,17 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     refreshPorts();
+    try {
+      const last = await HybridBridge.getLastConnection();
+      if (last) {
+        if (last.host) host = last.host;
+        if (last.port) port = String(last.port);
+        if (last.type) connectionType = last.type as ConnType;
+        if (last.serialPort) selectedPort = last.serialPort;
+      }
+    } catch {}
   });
 </script>
 

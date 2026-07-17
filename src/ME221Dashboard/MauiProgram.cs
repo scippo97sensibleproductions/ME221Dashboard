@@ -12,11 +12,15 @@ public static class MauiProgram
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
+            .WriteTo.Debug(
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File(
                 Path.Combine(FileSystem.AppDataDirectory, "logs", "me221-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7)
             .CreateLogger();
+
+        Log.Information("=== ME221 Dashboard starting ===");
 
         var builder = MauiApp.CreateBuilder();
         builder
@@ -47,8 +51,16 @@ public static class MauiProgram
 #elif ANDROID
         builder.Services.AddSingleton<IGpsService, GeolocationGpsService>();
         Log.Information("DI: Registered GeolocationGpsService (ANDROID)");
+#elif MACCATALYST
+        builder.Services.AddSingleton<IGpsService>(sp =>
+        {
+            var liveData = sp.GetService<ILiveDataService>();
+            var logger = sp.GetService<ILogger<SimulatedGpsService>>();
+            return new SimulatedGpsService(liveData, logger);
+        });
+        Log.Information("DI: Registered SimulatedGpsService with ILiveDataService (MACCATALYST)");
 #else
-        Log.Warning("DI: NO GPS service registered — ANDROID and WINDOWS both undefined");
+        Log.Warning("DI: NO GPS service registered — target platform undefined");
 #endif
 
         builder.Services.AddTransient<MainPage>();

@@ -75,6 +75,57 @@ jobs:
           name: ME221Dashboard-${{ needs.validate.outputs.version }}-win-x64
           path: ME221Dashboard-${{ env.VERSION }}-win-x64.zip
 
+  build-macos:
+    name: macOS (Catalyst)
+    needs: validate
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.x
+          dotnet-quality: preview
+
+      - name: Select Xcode 26.6
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.6'
+
+      - name: Install MAUI workloads
+        run: dotnet workload restore
+
+      - name: Install npm dependencies
+        working-directory: src/ME221Dashboard/SvelteApp
+        run: npm ci
+
+      - name: Build & publish
+        run: >
+          dotnet run scripts/build.cs --
+          -p macos -c Release --publish --no-install --no-clean
+          --msbuild ApplicationDisplayVersion=${{ env.VERSION }}
+          --msbuild ApplicationVersion=${{ github.run_number }}
+
+      - name: Package macOS artifact
+        shell: bash
+        run: |
+          SRC="src/ME221Dashboard/bin/Release/net11.0-maccatalyst/maccatalyst-arm64/publish"
+          ZIP="ME221Dashboard-${{ env.VERSION }}-macos-arm64.zip"
+          (cd "$SRC" && zip -r "$OLDPWD/$ZIP" .)
+          echo "ZIP_PATH=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ME221Dashboard-${{ needs.validate.outputs.version }}-macos-arm64
+          path: ME221Dashboard-${{ env.VERSION }}-macos-arm64.zip
+
   build-android:
     name: Android (universal APK)
     needs: validate
@@ -136,7 +187,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [validate, build-windows, build-android]
+    needs: [validate, build-windows, build-macos, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,16 +210,19 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/ME221Dashboard-${{ env.VERSION }}-win-x64.zip
+            artifacts/ME221Dashboard-${{ env.VERSION }}-macos-arm64.zip
             artifacts/ME221Dashboard-${{ env.VERSION }}-android.apk
           body: |
             ## ME221 Dashboard v${{ env.VERSION }}
 
             ### Downloads
             - **Windows**: `ME221Dashboard-${{ env.VERSION }}-win-x64.zip` — self-contained, no .NET install needed. Unzip and run `ME221Dashboard.exe`.
+            - **macOS**: `ME221Dashboard-${{ env.VERSION }}-macos-arm64.zip` — Apple Silicon Catalyst build. macOS 17.0+ required.
             - **Android**: `ME221Dashboard-${{ env.VERSION }}-android.apk` — universal APK (arm64-v8a, armeabi-v7a, x86, x64). Enable "Install from unknown sources" and open the file.
 
             ### Requirements
             - **Windows**: Windows 10 (1809+) x64
+            - **macOS**: macOS 17.0+ (Apple Silicon)
             - **Android**: API 26+ (Android 8.0+)
 
             ### Connect

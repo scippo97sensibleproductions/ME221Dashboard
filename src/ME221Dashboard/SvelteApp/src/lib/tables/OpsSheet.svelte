@@ -1,14 +1,12 @@
 <script lang="ts">
-  import { IconPercentage, IconMath, IconAdjustments, IconArrowsCross, IconWaveSine, IconMinus, IconPlayerPlay, IconFileImport, IconFileExport, IconArrowLeft, IconArrowsSort, IconCopy, IconFilter, IconChartLine, IconHelp } from '@tabler/icons-svelte';
+  import { IconPercentage, IconMath, IconAdjustments, IconArrowsCross, IconWaveSine, IconMinus, IconPlayerPlay, IconArrowLeft, IconArrowsSort, IconCopy, IconFilter, IconChartLine, IconHelp } from '@tabler/icons-svelte';
   import TransformHelpModal from './TransformHelpModal.svelte';
 
-  let { open, cellCount, selectionType = 'output', onApply, onImportYaml, onExportYaml, onClose }: {
+  let { open, cellCount, selectionType = 'output', onApply, onClose }: {
     open: boolean;
     cellCount: number;
     selectionType?: 'output' | 'input0' | 'input1';
     onApply: (operation: string, params: Record<string, number>) => void;
-    onImportYaml: () => void;
-    onExportYaml: () => void;
     onClose: () => void;
   } = $props();
 
@@ -20,6 +18,7 @@
   let setValue = $state(0);
   let clampMin = $state(0);
   let clampMax = $state(100);
+  let smoothRadius = $state(1);
   let gaussianSigma = $state(1.0);
   let copyRowSource = $state(0);
   let rampStart = $state(0);
@@ -41,11 +40,11 @@
       case 'set': onApply('set', { value: setValue }); break;
       case 'fill': onApply('fill', {}); break;
       case 'interpolate': onApply('interpolate', {}); break;
-      case 'smooth': onApply('smooth', {}); break;
+      case 'smooth': onApply('smooth', { radius: smoothRadius }); break;
       case 'clamp': onApply('clamp', { min: Math.min(clampMin, clampMax), max: Math.max(clampMin, clampMax) }); break;
       case 'rowNormalize': onApply('rowNormalize', {}); break;
       case 'colNormalize': onApply('colNormalize', {}); break;
-      case 'gaussianSmooth': onApply('gaussianSmooth', { sigma: gaussianSigma }); break;
+      case 'gaussianSmooth': onApply('gaussianSmooth', { sigma: gaussianSigma, radius: smoothRadius }); break;
       case 'mirrorH': onApply('mirrorH', {}); break;
       case 'mirrorV': onApply('mirrorV', {}); break;
       case 'copyRow': onApply('copyRow', { sourceRow: copyRowSource }); break;
@@ -244,24 +243,6 @@
             </div>
           </button>
         </div>
-
-        <!-- I/O operations -->
-        <div class="mt-3 flex gap-2">
-          <button
-            class="flex flex-1 items-center justify-center gap-2 border border-[var(--metro-border)] bg-transparent px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-[var(--metro-text-secondary)] transition-colors duration-150 hover:border-[var(--metro-text-secondary)] hover:bg-[var(--metro-hover)] hover:text-white"
-            onclick={() => { onImportYaml(); onClose(); }}
-          >
-            <IconFileImport size={16} />
-            Import YAML
-          </button>
-          <button
-            class="flex flex-1 items-center justify-center gap-2 border border-[var(--metro-border)] bg-transparent px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-[var(--metro-text-secondary)] transition-colors duration-150 hover:border-[var(--metro-text-secondary)] hover:bg-[var(--metro-hover)] hover:text-white"
-            onclick={() => { onExportYaml(); onClose(); }}
-          >
-            <IconFileExport size={16} />
-            Export YAML
-          </button>
-        </div>
       {:else}
         <!-- Op parameter inputs -->
         <div class="mb-4">
@@ -284,8 +265,9 @@
             <p class="text-[13px] text-[var(--metro-text-secondary)]">Creates a straight linear ramp between the two diagonal corners of your selection. Unlike Fill, this only preserves the two opposite corners, not all four.</p>
             <p class="mt-2 text-[11px] text-[var(--metro-text-muted)]">Use for a simple diagonal blend across a rectangular region, or for a straight ramp in 1D.</p>
           {:else if activeOp === 'smooth'}
-            <p class="text-[13px] text-[var(--metro-text-secondary)]">Replaces each cell with the average of itself and its immediate neighbors (3x3 kernel in 2D, 3-cell window in 1D). Reduces spikes and jagged transitions.</p>
-            <p class="mt-2 text-[11px] text-[var(--metro-text-muted)]">Good first pass for cleaning up noisy data or harsh edges. Apply multiple times for stronger smoothing.</p>
+            <label for="ops-smooth-radius" class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[var(--metro-text-secondary)]">Radius</label>
+            <input id="ops-smooth-radius" bind:value={smoothRadius} type="number" inputmode="numeric" min="1" max="5" class="metro-input w-full font-mono" />
+            <p class="mt-1 text-[10px] text-[var(--metro-text-muted)]">Kernel size: {smoothRadius * 2 + 1}×{smoothRadius * 2 + 1} (2D) or {smoothRadius * 2 + 1} cells (1D). 1 = immediate neighbors only, 5 = wide averaging. Apply multiple times for stronger smoothing.</p>
           {:else if activeOp === 'clamp'}
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -307,7 +289,9 @@
           {:else if activeOp === 'gaussianSmooth'}
             <label for="ops-gauss-sigma" class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[var(--metro-text-secondary)]">Sigma (smoothness)</label>
             <input id="ops-gauss-sigma" bind:value={gaussianSigma} type="number" inputmode="decimal" step="0.1" min="0.1" max="5" class="metro-input w-full font-mono" />
-            <p class="mt-1 text-[10px] text-[var(--metro-text-muted)]">0.5 = subtle, 1.0 = moderate, 2.0 = very smooth. Uses a bell-curve weighted average so nearby cells have more influence than distant ones. Produces smoother results than basic Smooth.</p>
+            <label for="ops-gauss-radius" class="mb-1 mt-3 block text-[11px] font-bold uppercase tracking-wider text-[var(--metro-text-secondary)]">Max Radius</label>
+            <input id="ops-gauss-radius" bind:value={smoothRadius} type="number" inputmode="numeric" min="1" max="5" class="metro-input w-full font-mono" />
+            <p class="mt-1 text-[10px] text-[var(--metro-text-muted)]">Sigma: 0.5 = subtle, 1.0 = moderate, 2.0 = very smooth. Max Radius caps the kernel size independently. Actual radius = min(ceil(sigma×3), maxRadius). Produces smoother results than basic Smooth.</p>
           {:else if activeOp === 'mirrorH'}
             <p class="text-[13px] text-[var(--metro-text-secondary)]">Reverses the order of values left-to-right. The first value becomes the last, the second becomes the second-to-last, and so on.</p>
             <p class="mt-2 text-[11px] text-[var(--metro-text-muted)]">Use for symmetrical tuning or when you want to flip a curve direction (e.g., for a reverse-mapped axis).</p>

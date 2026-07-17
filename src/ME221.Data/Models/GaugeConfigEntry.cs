@@ -34,6 +34,8 @@ public sealed class GaugeConfigEntry
     public bool ShowValue { get; set; } = true;
     public bool SmoothingEnabled { get; set; }
     public double SmoothingFactor { get; set; } = 0.3;
+    public double SmoothingResponseMs { get; set; }
+    public double SpikeGatePercent { get; set; }
     public int BarValuePosition { get; set; } = 4; // 0-8 grid (0=TopLeft, 4=Center, 8=BottomRight)
     public int BarUnitPosition { get; set; } = 7;
     public int BarNamePosition { get; set; } = 8;
@@ -63,4 +65,5 @@ public sealed class GaugeConfigEntry
 
     public List<ValueTransformStep>? TransformSteps { get; set; }
     public string? CustomUnitLabel { get; set; }
+    public bool ShowHistogram { get; set; }
 }

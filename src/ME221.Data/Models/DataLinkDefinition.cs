@@ -14,4 +14,5 @@ public sealed class DataLinkDefinition
     public float MaxValue { get; init; }
     public string? DataKey { get; init; }
     public List<TextValueMapping>? TextValues { get; init; }
+    public List<DataLinkFeedback>? Feedbacks { get; init; }
 }

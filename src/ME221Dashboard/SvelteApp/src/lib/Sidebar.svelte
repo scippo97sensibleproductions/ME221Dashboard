@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity } from '@tabler/icons-svelte';
+  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity, IconAlertTriangle } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
+  import { warningStore } from './stores/warningStore.svelte';
 
   let { isConnected, dashboardNames, activeDashboard, currentPage, sidebarVisible, onSwitchDashboard, onDeleteDashboard, onNewDashboard, onNavigate, onDisconnect, onHideSidebar, onShowSidebar, onExportDashboard, onImportDashboard, onVehicleConfig }: {
     isConnected: boolean;
@@ -32,6 +33,7 @@
     currentPage === 'dashboard' ? 'dashboard' :
     currentPage === 'driverList' || currentPage === 'driverEditor' ? 'drivers' :
     currentPage === 'ecuMonitor' ? 'monitor' :
+    currentPage === 'warnings' ? 'warnings' :
     ''
   );
 
@@ -42,6 +44,7 @@
     drivers:   '#107C10',
     logs:      '#E81123',
     monitor:   '#0ea5e9',
+    warnings:  '#F59E0B',
   };
 
   let showBar = $derived(sidebarVisible && currentPage !== 'welcome' && currentPage !== 'calibration');
@@ -196,14 +199,31 @@
       <!-- More menu -->
       <button
         id="sidebar-more-btn"
-        class="flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
+        class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
         style="color: var(--metro-text-secondary, #A0A0A0);"
         aria-label="More options"
       >
-        <IconMenu2 size={20} />
+        <div class="relative">
+          <IconMenu2 size={20} />
+          {#if warningStore.activeWarningCount > 0}
+            <span
+              class="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[8px] font-bold text-white"
+              style="background-color: {warningStore.activeWarningCount > 0 ? '#ef4444' : 'transparent'};"
+            >
+              {warningStore.activeWarningCount}
+            </span>
+          {/if}
+        </div>
         <span class="text-[10px] leading-tight">More</span>
       </button>
       <Dropdown triggeredBy="#sidebar-more-btn" placement="top-end" class="w-48">
+        <DropdownItem onclick={() => onNavigate('warnings')} class="flex items-center gap-2.5 text-[13px]">
+          <IconAlertTriangle size={15} class="shrink-0" style="color: {warningStore.activeWarningCount > 0 ? '#f59e0b' : ''};" />
+          <span>Warnings</span>
+          {#if warningStore.activeWarningCount > 0}
+            <span class="ml-auto rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">{warningStore.activeWarningCount}</span>
+          {/if}
+        </DropdownItem>
         <DropdownItem onclick={() => onNavigate('logs')} class="flex items-center gap-2.5 text-[13px]">
           <IconMessage size={15} class="shrink-0" />
           <span>Logs</span>

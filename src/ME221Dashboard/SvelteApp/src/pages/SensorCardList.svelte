@@ -10,6 +10,8 @@
       customUnit: string;
       minRange: string;
       maxRange: string;
+      minRangeBypass: boolean;
+      maxRangeBypass: boolean;
     }>;
     toggleSensor: (id: number) => void;
     toggleCustomization: (id: number) => void;
@@ -87,7 +89,7 @@
 
           <!-- Expanded customization panel -->
           {#if isExpanded}
-            {@const ed = edits[sensor.id] || { customName: '', customUnit: '', minRange: '', maxRange: '' }}
+            {@const ed = edits[sensor.id] || { customName: '', customUnit: '', minRange: '', maxRange: '', minRangeBypass: false, maxRangeBypass: false }}
             <div class="px-3 pb-3 pt-2" style="border-top: 1px solid var(--metro-border-subtle);">
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>
@@ -120,31 +122,55 @@
                 </div>
                 <div>
                   <label for="cust-min-{sensor.id}" class="mb-1 block text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Min Range</label>
-                  <input
-                          id="cust-min-{sensor.id}"
-                          type="text"
-                          placeholder="Auto"
-                          value={ed.minRange}
-                          oninput={(e) => { const v = (e.target as HTMLInputElement).value; edits[sensor.id] = { ...edits[sensor.id], minRange: v }; }}
-                          class="w-full px-3 py-2 text-[12px] outline-none transition-colors duration-150 sm:px-2 sm:py-1.5"
-                          style="background-color: var(--metro-input-bg); border: 1px solid var(--metro-input-border); color: var(--metro-text);"
-                          onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--metro-purple)'; }}
-                          onblur={(e) => { e.currentTarget.style.borderColor = 'var(--metro-input-border)'; }}
-                  />
+                  <div class="flex items-center gap-1.5">
+                    <input
+                            id="cust-min-{sensor.id}"
+                            type="text"
+                            placeholder={ed.minRangeBypass ? 'Bypassed' : `ECU: ${sensor.minValue}`}
+                            value={ed.minRange}
+                            disabled={ed.minRangeBypass}
+                            oninput={(e) => { const v = (e.target as HTMLInputElement).value; edits[sensor.id] = { ...edits[sensor.id], minRange: v }; }}
+                            class="w-full px-3 py-2 text-[12px] outline-none transition-colors duration-150 sm:px-2 sm:py-1.5"
+                            style="background-color: var(--metro-input-bg); border: 1px solid var(--metro-input-border); color: var(--metro-text); {ed.minRangeBypass ? 'opacity: 0.5;' : ''}"
+                            onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--metro-purple)'; }}
+                            onblur={(e) => { e.currentTarget.style.borderColor = 'var(--metro-input-border)'; }}
+                    />
+                    <label class="flex items-center gap-1 text-[10px] shrink-0" style="color: var(--metro-text-muted);">
+                      <input
+                              type="checkbox"
+                              checked={ed.minRangeBypass}
+                              onchange={(e) => { edits[sensor.id] = { ...edits[sensor.id], minRangeBypass: (e.target as HTMLInputElement).checked }; }}
+                              class="w-3.5 h-3.5"
+                      />
+                      Off
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label for="cust-max-{sensor.id}" class="mb-1 block text-[11px] font-extrabold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Max Range</label>
-                  <input
-                          id="cust-max-{sensor.id}"
-                          type="text"
-                          placeholder="Auto"
-                          value={ed.maxRange}
-                          oninput={(e) => { const v = (e.target as HTMLInputElement).value; edits[sensor.id] = { ...edits[sensor.id], maxRange: v }; }}
-                          class="w-full px-3 py-2 text-[12px] outline-none transition-colors duration-150 sm:px-2 sm:py-1.5"
-                          style="background-color: var(--metro-input-bg); border: 1px solid var(--metro-input-border); color: var(--metro-text);"
-                          onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--metro-purple)'; }}
-                          onblur={(e) => { e.currentTarget.style.borderColor = 'var(--metro-input-border)'; }}
-                  />
+                  <div class="flex items-center gap-1.5">
+                    <input
+                            id="cust-max-{sensor.id}"
+                            type="text"
+                            placeholder={ed.maxRangeBypass ? 'Bypassed' : `ECU: ${sensor.maxValue}`}
+                            value={ed.maxRange}
+                            disabled={ed.maxRangeBypass}
+                            oninput={(e) => { const v = (e.target as HTMLInputElement).value; edits[sensor.id] = { ...edits[sensor.id], maxRange: v }; }}
+                            class="w-full px-3 py-2 text-[12px] outline-none transition-colors duration-150 sm:px-2 sm:py-1.5"
+                            style="background-color: var(--metro-input-bg); border: 1px solid var(--metro-input-border); color: var(--metro-text); {ed.maxRangeBypass ? 'opacity: 0.5;' : ''}"
+                            onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--metro-purple)'; }}
+                            onblur={(e) => { e.currentTarget.style.borderColor = 'var(--metro-input-border)'; }}
+                    />
+                    <label class="flex items-center gap-1 text-[10px] shrink-0" style="color: var(--metro-text-muted);">
+                      <input
+                              type="checkbox"
+                              checked={ed.maxRangeBypass}
+                              onchange={(e) => { edits[sensor.id] = { ...edits[sensor.id], maxRangeBypass: (e.target as HTMLInputElement).checked }; }}
+                              class="w-3.5 h-3.5"
+                      />
+                      Off
+                    </label>
+                  </div>
                 </div>
               </div>
               <div class="mt-2 flex items-center justify-end gap-1.5">

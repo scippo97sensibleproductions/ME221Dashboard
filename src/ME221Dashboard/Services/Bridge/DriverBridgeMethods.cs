@@ -180,12 +180,20 @@ public partial class HybridBridgeService
             var dataLinks = calResult.Data?.DataLinks ?? [];
             return JsonSerializer.Serialize(new
             {
-                dataLinks = dataLinks.Select(dl => new
+                dataLinks = dataLinks.Select(dl =>
                 {
-                    id = dl.Id,
-                    name = dl.Name,
-                    category = dl.Category,
-                    measureUnit = dl.MeasureUnit,
+                    var (defMin, defMax) = GetUnitDefaults(dl.MeasureUnit);
+                    var effectiveMin = dl.MinValue != 0 || dl.MaxValue != 0 ? dl.MinValue : (float)defMin;
+                    var effectiveMax = dl.MinValue != 0 || dl.MaxValue != 0 ? dl.MaxValue : (float)defMax;
+                    return new
+                    {
+                        id = dl.Id,
+                        name = dl.Name,
+                        category = dl.Category,
+                        measureUnit = dl.MeasureUnit,
+                        minValue = effectiveMin,
+                        maxValue = effectiveMax,
+                    };
                 }),
             }, SJsonOptions);
         }

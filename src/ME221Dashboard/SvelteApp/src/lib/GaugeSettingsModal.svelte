@@ -406,6 +406,26 @@
                 <!-- Smoothing -->
                 <SmoothingSettings {gaugeDef} {onchange} />
 
+                <!-- Histogram -->
+                <div class="border-t border-gray-700/30 pt-4">
+                  <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Histogram</p>
+                  <div class="flex items-center justify-between rounded bg-gray-800/60 px-3 py-2">
+                    <span class="text-xs text-gray-300">Show value history</span>
+                    <button
+                      class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                      style="background-color: {gaugeDef.showHistogram ? 'var(--metro-purple)' : 'rgb(55,65,81)'}"
+                      role="switch"
+                      aria-checked={gaugeDef.showHistogram ?? false}
+                      onclick={() => onchange({ ...gaugeDef, showHistogram: !(gaugeDef.showHistogram ?? false) })}
+                    >
+                      <span
+                        class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out"
+                        style="transform: translateX({gaugeDef.showHistogram ? '18px' : '0'})"
+                      ></span>
+                    </button>
+                  </div>
+                </div>
+
                 <!-- Transform -->
                 <div class="border-t border-gray-700/30 pt-4">
                   <TransformSettings {gaugeDef} {entityInfo} customUnitLabel={gaugeDef.customUnitLabel ?? null} {onchange} />

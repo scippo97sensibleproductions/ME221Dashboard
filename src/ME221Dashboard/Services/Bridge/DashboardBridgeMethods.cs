@@ -201,12 +201,30 @@ public partial class HybridBridgeService
 
                 if (linksById.TryGetValue(g.Id, out var link))
                 {
+                    var unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : link.MeasureUnit;
+                    var (defMin, defMax) = GetUnitDefaults(unit);
+
+                    var minVal = cust?.MinRangeBypass == true
+                        ? (double?)null
+                        : cust?.MinRange.HasValue == true
+                            ? (double)cust.MinRange.Value
+                            : link.MinValue != 0 || link.MaxValue != 0
+                                ? (double)link.MinValue
+                                : defMin;
+                    var maxVal = cust?.MaxRangeBypass == true
+                        ? (double?)null
+                        : cust?.MaxRange.HasValue == true
+                            ? (double)cust.MaxRange.Value
+                            : link.MinValue != 0 || link.MaxValue != 0
+                                ? (double)link.MaxValue
+                                : defMax;
+
                     entityLookup[key] = new
                     {
                         name = cust?.CustomName is { Length: > 0 } cn ? cn : link.Name,
-                        unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : link.MeasureUnit,
-                        minValue = cust?.MinRange.HasValue == true ? (double)cust.MinRange.Value : (double?)null,
-                        maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : (double?)null,
+                        unit,
+                        minValue = minVal,
+                        maxValue = maxVal,
                     };
                 }
                 else if (S_gpsDefaults.TryGetValue(g.Id, out var gps))
@@ -279,6 +297,8 @@ public partial class HybridBridgeService
                     barNamePosition = g.BarNamePosition,
                     smoothingEnabled = g.SmoothingEnabled,
                     smoothingFactor = g.SmoothingFactor,
+                    smoothingResponseMs = g.SmoothingResponseMs,
+                    spikeGatePercent = g.SpikeGatePercent,
                     colorStops = g.ColorStops?.Select(c => new { fraction = c.Fraction, r = c.R, g = c.G, b = c.B }).ToList(),
                     colorHysteresis = g.ColorHysteresis,
                     x = g.X,
@@ -413,6 +433,8 @@ public partial class HybridBridgeService
                     if (g["iconSize"] is JsonValue) existing.IconSize = g["iconSize"]!.GetValue<double>();
                     if (g["smoothingEnabled"] is JsonValue) existing.SmoothingEnabled = g["smoothingEnabled"]!.GetValue<bool>();
                     if (g["smoothingFactor"] is JsonValue) existing.SmoothingFactor = g["smoothingFactor"]!.GetValue<double>();
+                    if (g["smoothingResponseMs"] is JsonValue) existing.SmoothingResponseMs = g["smoothingResponseMs"]!.GetValue<double>();
+                    if (g["spikeGatePercent"] is JsonValue) existing.SpikeGatePercent = g["spikeGatePercent"]!.GetValue<double>();
                     if (g["barValuePosition"] is JsonValue) existing.BarValuePosition = g["barValuePosition"]!.GetValue<int>();
                     if (g["barUnitPosition"] is JsonValue) existing.BarUnitPosition = g["barUnitPosition"]!.GetValue<int>();
                     if (g["barNamePosition"] is JsonValue) existing.BarNamePosition = g["barNamePosition"]!.GetValue<int>();
@@ -503,6 +525,8 @@ public partial class HybridBridgeService
                         if (t["colorScheme"] is JsonValue cs) existing.ColorScheme = cs.GetValue<string>();
                         if (t["showLabels"] is JsonValue sl) existing.ShowLabels = sl.GetValue<bool>();
                         if (t["showDimensionBadge"] is JsonValue sdb) existing.ShowDimensionBadge = sdb.GetValue<bool>();
+                        if (t["traceXLink"] is JsonValue txl) existing.TraceXLink = txl.GetValue<int>();
+                        if (t["traceYLink"] is JsonValue tyl) existing.TraceYLink = tyl.GetValue<int>();
                     }
                     else
                     {
@@ -517,6 +541,8 @@ public partial class HybridBridgeService
                             ColorScheme = t["colorScheme"]?.GetValue<string>(),
                             ShowLabels = t["showLabels"]?.GetValue<bool>(),
                             ShowDimensionBadge = t["showDimensionBadge"]?.GetValue<bool>(),
+                            TraceXLink = t["traceXLink"]?.GetValue<int>(),
+                            TraceYLink = t["traceYLink"]?.GetValue<int>(),
                         });
                     }
                 }
@@ -558,12 +584,17 @@ public partial class HybridBridgeService
             foreach (var l in links)
             {
                 customizations.TryGetValue(l.Id, out var c);
+                var (defMin, defMax) = GetUnitDefaults(l.MeasureUnit);
+                var effectiveMin = l.MinValue != 0 || l.MaxValue != 0 ? l.MinValue : (float)defMin;
+                var effectiveMax = l.MinValue != 0 || l.MaxValue != 0 ? l.MaxValue : (float)defMax;
                 sensorList.Add(new
                 {
                     id = (int)l.Id,
                     name = l.Name,
                     category = l.Category,
                     unit = l.MeasureUnit,
+                    minValue = effectiveMin,
+                    maxValue = effectiveMax,
                     inEntityMap = ecuEntityIds.Contains((int)l.Id),
                     isSelected = selectedIds.Contains((int)l.Id),
                     customization = c is not null ? new
@@ -572,6 +603,8 @@ public partial class HybridBridgeService
                         customUnit = c.CustomUnit,
                         minRange = c.MinRange.HasValue ? (double)c.MinRange.Value : (double?)null,
                         maxRange = c.MaxRange.HasValue ? (double)c.MaxRange.Value : (double?)null,
+                        minRangeBypass = c.MinRangeBypass,
+                        maxRangeBypass = c.MaxRangeBypass,
                     } : null,
                 });
             }
@@ -730,6 +763,8 @@ public partial class HybridBridgeService
                         WidthFraction = t["widthFraction"]?.GetValue<double>() ?? 0.25,
                         HeightFraction = t["heightFraction"]?.GetValue<double>() ?? 0.25,
                         ZIndex = t["zIndex"]?.GetValue<int>() ?? 0,
+                        TraceXLink = t["traceXLink"]?.GetValue<int>(),
+                        TraceYLink = t["traceYLink"]?.GetValue<int>(),
                     });
                 }
             }
@@ -742,5 +777,26 @@ public partial class HybridBridgeService
             _logger.LogError(ex, "SaveDashboardTables failed");
             return JsonSerializer.Serialize(new { success = false, error = ex.Message });
         }
+    }
+
+    private static (double Min, double Max) GetUnitDefaults(string unit)
+    {
+        return unit switch
+        {
+            "%" => (0, 100),
+            "KPa" or "kPa" => (0, 300),
+            "PSI" or "psi" => (0, 45),
+            "°C" => (-40, 150),
+            "°F" => (-40, 300),
+            "RPM" or "rpm" => (0, 8000),
+            "V" or "v" => (0, 16),
+            "°" => (0, 360),
+            "ms" => (0, 25),
+            "km/h" => (0, 260),
+            "km" => (0, 999999),
+            "m" => (0, 1000),
+            "bar" => (0, 5),
+            _ => (0, 10000),
+        };
     }
 }

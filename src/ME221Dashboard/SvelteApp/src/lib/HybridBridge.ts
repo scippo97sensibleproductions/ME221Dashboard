@@ -24,6 +24,10 @@ import type {
   DriverSetResult,
   DataLinksResult,
   UpdateCheckResult,
+  DataLinkWarningSetting,
+  WarningHistoryEntry,
+  ConnectionPreference,
+  LambdaSettings,
 } from './HybridBridgeTypes';
 
 // Re-export all types for backward compatibility
@@ -59,6 +63,8 @@ export type {
   DataLinkDefinition,
   DataLinksResult,
   UpdateCheckResult,
+  DataLinkWarningSetting,
+  LambdaSettings,
 } from './HybridBridgeTypes';
 
 // ─── Bridge Implementation ──────────────────────────────────────────────────
@@ -629,12 +635,132 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
+  // ─── Warning Centre ─────────────────────────────────────────────────────
+
   openExternalUrl: async (url: string): Promise<void> => {
     if (!isWebViewAvailable()) {
       window.open(url, '_blank');
       return;
     }
     await invokeDotNetLogged('OpenExternalUrl', [url]);
+  },
+
+  getWarningSettings: async (): Promise<DataLinkWarningSetting[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetWarningSettings');
+    return JSON.parse(result);
+  },
+
+  saveWarningSettings: async (settings: DataLinkWarningSetting[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveWarningSettings', [JSON.stringify(settings)]);
+    return JSON.parse(result);
+  },
+
+  getDefXmlDefaults: async (): Promise<DataLinkWarningSetting[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetDefXmlDefaults');
+    return JSON.parse(result);
+  },
+
+  getWarningHistory: async (): Promise<WarningHistoryEntry[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetWarningHistory');
+    return JSON.parse(result);
+  },
+
+  saveWarningHistory: async (history: WarningHistoryEntry[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveWarningHistory', [JSON.stringify(history)]);
+    return JSON.parse(result);
+  },
+
+  // ─── User Preferences ─────────────────────────────────────────────────────
+
+  getLastConnection: async (): Promise<ConnectionPreference | null> => {
+    if (!isWebViewAvailable()) return null;
+    const result = await invokeDotNetLogged('GetLastConnection');
+    return JSON.parse(result);
+  },
+
+  saveLastConnection: async (conn: ConnectionPreference): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveLastConnection', [JSON.stringify(conn)]);
+    return JSON.parse(result);
+  },
+
+  getFavoriteTables: async (): Promise<number[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetFavoriteTables');
+    return JSON.parse(result);
+  },
+
+  saveFavoriteTables: async (ids: number[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveFavoriteTables', [JSON.stringify(ids)]);
+    return JSON.parse(result);
+  },
+
+  getRecentTables: async (): Promise<number[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetRecentTables');
+    return JSON.parse(result);
+  },
+
+  saveRecentTables: async (ids: number[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveRecentTables', [JSON.stringify(ids)]);
+    return JSON.parse(result);
+  },
+
+  getFavoriteDrivers: async (): Promise<number[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetFavoriteDrivers');
+    return JSON.parse(result);
+  },
+
+  saveFavoriteDrivers: async (ids: number[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveFavoriteDrivers', [JSON.stringify(ids)]);
+    return JSON.parse(result);
+  },
+
+  getRecentDrivers: async (): Promise<number[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('GetRecentDrivers');
+    return JSON.parse(result);
+  },
+
+  saveRecentDrivers: async (ids: number[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveRecentDrivers', [JSON.stringify(ids)]);
+    return JSON.parse(result);
+  },
+
+  getTableNotes: async (): Promise<Record<number, string>> => {
+    if (!isWebViewAvailable()) return {};
+    const result = await invokeDotNetLogged('GetTableNotes');
+    return JSON.parse(result);
+  },
+
+  saveTableNotes: async (notes: Record<number, string>): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveTableNotes', [JSON.stringify(notes)]);
+    return JSON.parse(result);
+  },
+
+  // ─── Lambda / AFR Mode ─────────────────────────────────────────────────
+
+  getLambdaSettings: async (): Promise<LambdaSettings> => {
+    if (!isWebViewAvailable()) return { useLambdaMode: false, stoichAfr: 14.7 };
+    const result = await invokeDotNetLogged('GetLambdaSettings');
+    return JSON.parse(result);
+  },
+
+  saveLambdaSettings: async (settings: LambdaSettings): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveLambdaSettings', [JSON.stringify(settings)]);
+    return JSON.parse(result);
   },
 };
 

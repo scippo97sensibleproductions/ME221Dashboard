@@ -21,18 +21,16 @@
   let loading = $state(true);
   let mounted = false;
 
-  // Load favorites from localStorage
-  function loadFavorites() {
+  // Load favorites from native file
+  async function loadFavorites() {
     try {
-      const stored = localStorage.getItem('me221-favorites');
-      if (stored) favorites = new Set(JSON.parse(stored));
+      const stored = await HybridBridge.getFavoriteTables();
+      if (Array.isArray(stored)) favorites = new Set(stored);
     } catch {}
   }
 
   function saveFavorites() {
-    try {
-      localStorage.setItem('me221-favorites', JSON.stringify([...favorites]));
-    } catch {}
+    HybridBridge.saveFavoriteTables([...favorites]).catch(() => {});
   }
 
   function toggleFavorite(id: number) {
@@ -46,20 +44,18 @@
     saveFavorites();
   }
 
-  // Load recent from localStorage
-  function loadRecent() {
+  // Load recent from native file
+  async function loadRecent() {
     try {
-      const stored = localStorage.getItem('me221-recent-tables');
-      if (stored) recentIds = JSON.parse(stored);
+      const stored = await HybridBridge.getRecentTables();
+      if (Array.isArray(stored)) recentIds = stored;
     } catch {}
   }
 
   function trackRecent(id: number) {
     const newRecent = [id, ...recentIds.filter(r => r !== id)].slice(0, 5);
     recentIds = newRecent;
-    try {
-      localStorage.setItem('me221-recent-tables', JSON.stringify(newRecent));
-    } catch {}
+    HybridBridge.saveRecentTables(newRecent).catch(() => {});
   }
 
   let categories = $derived.by(() => {

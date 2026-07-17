@@ -40,6 +40,8 @@
     customUnit: string;
     minRange: string;
     maxRange: string;
+    minRangeBypass: boolean;
+    maxRangeBypass: boolean;
   }>>({});
 
   // ─── Derived (auto-computed, no manual cascade) ──────────────────────────
@@ -242,6 +244,8 @@
         customUnit: s.customization?.customUnit ?? '',
         minRange: s.customization?.minRange != null ? String(s.customization.minRange) : '',
         maxRange: s.customization?.maxRange != null ? String(s.customization.maxRange) : '',
+        minRangeBypass: s.customization?.minRangeBypass ?? false,
+        maxRangeBypass: s.customization?.maxRangeBypass ?? false,
       };
     }
   }
@@ -253,13 +257,16 @@
     const maxVal = e.maxRange ? parseFloat(e.maxRange) : null;
     const hasName = e.customName.trim().length > 0;
     const hasUnit = e.customUnit.trim().length > 0;
+    const hasBypass = e.minRangeBypass || e.maxRangeBypass;
 
-    const cust: SensorCustomization | null = (hasName || hasUnit || minVal != null || maxVal != null)
+    const cust: SensorCustomization | null = (hasName || hasUnit || minVal != null || maxVal != null || hasBypass)
             ? {
               customName: hasName ? e.customName.trim() : null,
               customUnit: hasUnit ? e.customUnit.trim() : null,
               minRange: minVal,
               maxRange: maxVal,
+              minRangeBypass: e.minRangeBypass,
+              maxRangeBypass: e.maxRangeBypass,
             }
             : null;
 

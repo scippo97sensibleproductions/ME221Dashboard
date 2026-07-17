@@ -3,8 +3,9 @@
   import GaugeCard from '../lib/gauges/GaugeCard.svelte';
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
+  import type { DataLinkWarningSetting } from '../lib/HybridBridgeTypes';
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
-  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, type ValueTransformStep } from '../lib/gauges/types';
+  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, computeWarningState, buildWarningMap, type ValueTransformStep } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
   import { computeDerived, type ComputationInputs } from '../lib/derived/compute';
@@ -12,6 +13,7 @@
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
   import TableWidget from '../lib/tables/TableWidget.svelte';
   import TableSettingsModal from '../lib/tables/TableSettingsModal.svelte';
+  import AddGaugePopup from '../lib/AddGaugePopup.svelte';
 
   let { dashboardName, onNavigate, gpsLocation }: {
     dashboardName: string;
@@ -20,8 +22,8 @@
   } = $props();
 
   let containerEl = $state<HTMLDivElement | null>(null);
-  let containerWidth = $state(800);
-  let containerHeight = $state(600);
+  let containerWidth = $derived(canvasWidth);
+  let containerHeight = $derived(canvasHeight);
   let gaugeDefs = $state<GaugeConfigEntry[]>([]);
   let entityLookup = $state<Record<string, EntityInfo>>({});
   let entityValues = liveDataStore.values;
@@ -47,11 +49,18 @@
   let tableSettingsOpen = $state(false);
   let tableSettingsEntry = $state<DashboardTableEntry | null>(null);
   let tableSettingsName = $state('');
+  let addGaugePopupOpen = $state(false);
+  let addGaugePopupX = $state(0);
+  let addGaugePopupY = $state(0);
   let loaded = $state(false);
   let loadError = $state<string | null>(null);
   let gridRows = $state(4);
   let gridColumns = $state(7);
   let backgroundImageDataUrl = $state<string | null>(null);
+  let warningSettings = $state<DataLinkWarningSetting[] | null>(null);
+  let warningMap = $state<Map<number, DataLinkWarningSetting> | null>(null);
+  let useLambdaMode = $state(false);
+  let stoichAfr = $state(14.7);
 
   // GPS entity IDs (must match C# HybridBridgeService constants)
   const GPS_SPEED = -1001;
@@ -188,6 +197,8 @@
       entityIdStr: String(def.entityId),
       name,
       unit,
+      lowerName: name.toLowerCase(),
+      lowerUnit: unit.toLowerCase(),
       minValue,
       maxValue,
       transformSteps,
@@ -221,12 +232,24 @@
 
   // Per-gauge smoothed values for EMA (exponential moving average)
   let _smoothedValues = new Map<number, number>();
+  // Per-gauge previous raw values for spike gate
+  let _prevRawValues = new Map<number, number>();
+  // Last frame timestamp for frame-rate independent smoothing
+  let _lastFrameTime = 0;
+
+  // Per-gauge value history for histograms (circular buffer, last 60 values)
+  const HIST_BUFFER_SIZE = 60;
+  let gaugeValueHistory = $state<Map<number, number[]>>(new Map());
 
   function rebuildGaugeStates() {
     const next: GaugeDefinition[] = [];
     const idxMap = new Map<number, number>();
     // Reset smoothed values on config change
     _smoothedValues = new Map<number, number>();
+    _prevRawValues = new Map<number, number>();
+    _lastFrameTime = 0;
+    // Reset history buffers
+    const newHistory = new Map<number, number[]>();
     for (let i = 0; i < staticGaugeConfigs.length; i++) {
       const sc = staticGaugeConfigs[i];
       const rawValue = entityValues[sc.entityIdStr];
@@ -234,31 +257,73 @@
       next.push({
         ..._gaugeDefCache[i],
         value,
-        formattedValue: formatValue(value, sc.name, sc.unit),
+        formattedValue: formatValue(value, sc.name, sc.unit, useLambdaMode, stoichAfr, sc.lowerName, sc.lowerUnit),
         name: sc.name,
         unit: sc.unit,
+        lowerName: sc.lowerName,
+        lowerUnit: sc.lowerUnit,
         minValue: sc.minValue,
         maxValue: sc.maxValue,
         fractionX: sc.config.fractionX,
         fractionY: sc.config.fractionY,
         transformSteps: sc.transformSteps,
+        warningState: 'none',
       });
       idxMap.set(sc.config.entityId, i);
       // Seed smoothed value with current raw value
       _smoothedValues.set(sc.config.entityId, value);
+      _prevRawValues.set(sc.config.entityId, value);
+      // Initialize history buffer
+      newHistory.set(sc.config.entityId, [value]);
     }
     gaugeStates = next;
     _gaugeIndexByEntityId = idxMap;
+    gaugeValueHistory = newHistory;
   }
 
   // ── Shared smoothing + transform pipeline ──
-  function applyPipeline(raw: number, entityId: number, g: { smoothingEnabled: boolean; smoothingFactor: number; transformSteps?: ValueTransformStep[] }): number {
+  function applyPipeline(raw: number, entityId: number, g: {
+    smoothingEnabled: boolean;
+    smoothingFactor: number;
+    smoothingResponseMs: number;
+    spikeGatePercent: number;
+    transformSteps?: ValueTransformStep[];
+  }): number {
     let v = raw;
-    if (g.smoothingEnabled && g.smoothingFactor > 0 && g.smoothingFactor < 1) {
-      const prev = _smoothedValues.get(entityId) ?? raw;
-      v = prev + g.smoothingFactor * (raw - prev);
+    const now = performance.now();
+
+    // Spike gate: reject jumps beyond threshold (percentage of gauge range)
+    if (g.spikeGatePercent > 0 && g.minValue != null && g.maxValue != null) {
+      const prevRaw = _prevRawValues.get(entityId) ?? raw;
+      const range = Math.abs(g.maxValue - g.minValue);
+      const maxDelta = range * (g.spikeGatePercent / 100);
+      const jump = Math.abs(raw - prevRaw);
+      if (jump > maxDelta) {
+        // Clamp to max delta from previous raw
+        v = prevRaw + Math.sign(raw - prevRaw) * maxDelta;
+      }
+    }
+    _prevRawValues.set(entityId, v);
+
+    // Smoothing: response-time-based EMA (frame-rate independent)
+    if (g.smoothingEnabled) {
+      let alpha: number;
+      if (g.smoothingResponseMs > 0) {
+        // Derive alpha from response time: alpha = 1 - exp(-dt / tau)
+        // dt = frame interval, tau = response time in ms
+        const dt = _lastFrameTime > 0 ? Math.min(now - _lastFrameTime, 200) : 33;
+        const tau = g.smoothingResponseMs;
+        alpha = 1 - Math.exp(-dt / tau);
+      } else {
+        // Fallback to old factor-based smoothing
+        alpha = g.smoothingFactor > 0 && g.smoothingFactor < 1 ? g.smoothingFactor : 0.3;
+      }
+      const prev = _smoothedValues.get(entityId) ?? v;
+      v = prev + alpha * (v - prev);
       _smoothedValues.set(entityId, v);
     }
+    _lastFrameTime = now;
+
     if (g.transformSteps && isTransformable(entityId)) {
       const transformed = applyTransform(v, g.transformSteps);
       if (Number.isFinite(transformed)) {
@@ -275,7 +340,7 @@
     const g = gaugeStates[idx];
     const v = applyPipeline(value ?? 0, entityId, g);
     g.value = v;
-    g.formattedValue = formatValue(v, g.name, g.unit);
+    g.formattedValue = formatValue(v, g.name, g.unit, useLambdaMode, stoichAfr, g.lowerName, g.lowerUnit);
   }
 
   // Rebuild gaugeStates when config or def cache changes (rare — on load, settings change).
@@ -299,6 +364,7 @@
       if (gaugeStates.length === 0) return;
       const states = gaugeStates;
       const v = entityValues;
+      const ws = warningMap;
       for (let i = 0; i < states.length; i++) {
         const g = states[i];
         const rawKv = v[g.entityId];
@@ -306,7 +372,18 @@
         const val = applyPipeline(raw, g.entityId, g);
         if (g.value !== val) {
           g.value = val;
-          g.formattedValue = formatValue(val, g.name, g.unit);
+          g.formattedValue = formatValue(val, g.name, g.unit, useLambdaMode, stoichAfr, g.lowerName, g.lowerUnit);
+        }
+        g.warningState = computeWarningState(val, ws, g.entityId);
+        // Push to history buffer for histograms
+        if (g.showHistogram) {
+          let buf = gaugeValueHistory.get(g.entityId);
+          if (!buf) {
+            buf = [];
+            gaugeValueHistory.set(g.entityId, buf);
+          }
+          buf.push(val);
+          if (buf.length > HIST_BUFFER_SIZE) buf.shift();
         }
       }
       computeAndInjectDerived();
@@ -337,16 +414,23 @@
       }
 
       // Inject GPS entity names and default ranges if GPS gauges are configured
+      // Only add if not already present to avoid unnecessary staticGaugeConfigs rebuild
       if (gaugeDefs.some(g => g.entityId <= -1001 && g.entityId >= -1006)) {
-        entityLookup = {
-          ...entityLookup,
-          [GPS_SPEED]: entityLookup[String(GPS_SPEED)] ?? { name: 'GPS Speed', unit: 'km/h', minValue: 0, maxValue: 240 },
-          [GPS_LAT]: entityLookup[String(GPS_LAT)] ?? { name: 'GPS Latitude', unit: '°', minValue: -90, maxValue: 90 },
-          [GPS_LON]: entityLookup[String(GPS_LON)] ?? { name: 'GPS Longitude', unit: '°', minValue: -180, maxValue: 180 },
-          [GPS_ALT]: entityLookup[String(GPS_ALT)] ?? { name: 'GPS Altitude', unit: 'm', minValue: 0, maxValue: 1000 },
-          [GPS_COURSE]: entityLookup[String(GPS_COURSE)] ?? { name: 'GPS Course', unit: '°', minValue: 0, maxValue: 360 },
-          [GPS_ACC]: entityLookup[String(GPS_ACC)] ?? { name: 'GPS Accuracy', unit: 'm', minValue: 0, maxValue: 50 },
-        };
+        let changed = false;
+        for (const [id, info] of [
+          [GPS_SPEED, { name: 'GPS Speed', unit: 'km/h', minValue: 0, maxValue: 240 }],
+          [GPS_LAT, { name: 'GPS Latitude', unit: '°', minValue: -90, maxValue: 90 }],
+          [GPS_LON, { name: 'GPS Longitude', unit: '°', minValue: -180, maxValue: 180 }],
+          [GPS_ALT, { name: 'GPS Altitude', unit: 'm', minValue: 0, maxValue: 1000 }],
+          [GPS_COURSE, { name: 'GPS Course', unit: '°', minValue: 0, maxValue: 360 }],
+          [GPS_ACC, { name: 'GPS Accuracy', unit: 'm', minValue: 0, maxValue: 50 }],
+        ] as const) {
+          if (!entityLookup[String(id)]) {
+            entityLookup[String(id)] = info;
+            changed = true;
+          }
+        }
+        if (changed) entityLookup = entityLookup;
       }
       loaded = true;
 
@@ -387,6 +471,7 @@
   } | null>(null);
 
   const DRAG_THRESHOLD = 4;
+  let layoutLocked = $state(false);
 
   function tryActivateDrag(dx: number, dy: number) {
     if (!pendingDrag) return;
@@ -426,6 +511,7 @@
   }
 
   function handlePointerDown(e: PointerEvent, entityId: number) {
+    if (layoutLocked) return;
     if (!e.target || (e.target as HTMLElement).closest('input, button, a')) return;
     const def = gaugeDefs.find(d => d.entityId === entityId);
     if (!def) return;
@@ -443,6 +529,7 @@
   }
 
   function handleTablePointerDown(e: PointerEvent, tableId: number) {
+    if (layoutLocked) return;
     if (!e.target || (e.target as HTMLElement).closest('input, button, a, td, th, table')) return;
     const def = tableDefs.find(d => d.tableId === tableId);
     if (!def) return;
@@ -598,6 +685,72 @@
     tableSettingsEntry = null;
   }
 
+  function handleContainerContextMenu(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest('.gauge-wrap, .table-wrap')) return;
+    e.preventDefault();
+    addGaugePopupX = e.clientX;
+    addGaugePopupY = e.clientY;
+    addGaugePopupOpen = true;
+  }
+
+  function handleAddGauge(sensor: { id: number; name: string; category: string; unit: string }, clickX: number, clickY: number) {
+    if (gaugeDefs.some(d => d.entityId === sensor.id)) return;
+    const containerRect = containerEl?.getBoundingClientRect();
+    const fracX = containerRect ? (clickX - containerRect.left) / containerRect.width : 0.5;
+    const fracY = containerRect ? (clickY - containerRect.top) / containerRect.height : 0.5;
+    const newEntry: GaugeConfigEntry = {
+      entityId: sensor.id,
+      shapeCategory: 3,
+      sweepAngle: 220,
+      arcPosition: 0,
+      digitalStyle: 0,
+      texturePath: null,
+      needleStartAngle: 135,
+      needleEndAngle: 405,
+      needleOffsetX: 0,
+      needleOffsetY: 0,
+      needleWidth: 2.5,
+      needleLength: 1.0,
+      scale: 1.0,
+      fontSizeScale: 1.0,
+      labelVerticalOffset: 0,
+      showName: true,
+      showUnit: true,
+      showValue: true,
+      iconName: null,
+      iconOffsetX: 0,
+      iconOffsetY: 0,
+      iconSize: 0.5,
+      barValuePosition: 4,
+      barUnitPosition: 7,
+      barNamePosition: 8,
+      colorStops: [],
+      colorHysteresis: 0.03,
+      smoothingEnabled: false,
+      smoothingFactor: 0.3,
+      smoothingResponseMs: 0,
+      spikeGatePercent: 0,
+      fractionX: Math.max(0, Math.min(0.78, fracX)),
+      fractionY: Math.max(0, Math.min(0.72, fracY)),
+      widthFraction: 0.22,
+      heightFraction: 0.28,
+      chartTimeWindowSec: 30,
+      chartYMin: null,
+      chartYMax: null,
+      chartLineColor: '#22c8e6',
+      chartLineWidth: 2,
+      chartShowGrid: true,
+      chartFillUnder: false,
+      chartShowLabels: true,
+      chartPrecision: 1,
+      textColor: '#ffffff',
+      zIndex: gaugeDefs.length,
+    };
+    gaugeDefs = [...gaugeDefs, newEntry];
+    layoutDirty = true;
+    persistLayout();
+  }
+
   function handleSettingsChange(updated: GaugeConfigEntry) {
     settingsDef = updated;
     gaugeDefs = gaugeDefs.map(d => d.entityId === updated.entityId ? updated : d);
@@ -611,17 +764,33 @@
   }
 
   let resizeObserver: ResizeObserver | null = null;
+  let parentWidth = $state(800);
+  let parentHeight = $state(600);
+  const ASPECT = 16 / 9;
 
   function observeContainer() {
     if (!containerEl) return;
+    const parent = containerEl.parentElement;
+    if (!parent) return;
     resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
-        containerWidth = entry.contentRect.width;
-        containerHeight = entry.contentRect.height;
+        parentWidth = entry.contentRect.width;
+        parentHeight = entry.contentRect.height;
       }
     });
-    resizeObserver.observe(containerEl);
+    resizeObserver.observe(parent);
   }
+
+  let canvasWidth = $derived.by(() => {
+    const byW = parentWidth;
+    const byH = parentHeight * ASPECT;
+    return Math.round(Math.min(byW, byH));
+  });
+  let canvasHeight = $derived.by(() => {
+    const byH = parentHeight;
+    const byW = parentWidth / ASPECT;
+    return Math.round(Math.min(byH, byW));
+  });
 
   $effect(() => {
     if (containerEl && loaded && gaugeStates.length > 0) {
@@ -636,6 +805,14 @@
     loadRealConfig();
     const od = liveDataStore.odometer;
     if (od != null) entityValues[String(ODOMETER)] = od;
+    HybridBridge.getWarningSettings().then(s => {
+      warningSettings = s;
+      warningMap = s ? buildWarningMap(s) : null;
+    }).catch(() => {});
+    HybridBridge.getLambdaSettings().then(s => {
+      useLambdaMode = s.useLambdaMode;
+      stoichAfr = s.stoichAfr;
+    }).catch(() => {});
   });
 
   onDestroy(() => {
@@ -644,7 +821,7 @@
   });
 </script>
 
-<div class="relative h-full w-full" role="application" aria-label="Dashboard">
+<div class="relative flex h-full w-full items-center justify-center" role="application" aria-label="Dashboard">
   {#if loadError}
     <div class="flex h-full w-full flex-col items-center justify-center gap-2">
       <p class="text-sm text-red-400">Failed to load dashboard</p>
@@ -661,13 +838,31 @@
       <p class="text-xs text-gray-500">Open the sidebar and go to Configure to add gauges</p>
     </div>
   {:else}
+    <!-- Lock/unlock toggle — floating top-right -->
+    <button
+      class="absolute top-2 right-2 z-50 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors
+        {layoutLocked
+          ? 'border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+          : 'border-gray-600 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
+      title={layoutLocked ? 'Unlock layout (allow dragging)' : 'Lock layout (prevent dragging)'}
+      onclick={() => { layoutLocked = !layoutLocked; }}
+    >
+      {#if layoutLocked}
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      {:else}
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+      {/if}
+    </button>
     <div
       bind:this={containerEl}
-      class="relative h-full w-full"
+      class="dashboard-canvas relative overflow-hidden"
+      style:width="{canvasWidth}px"
+      style:height="{canvasHeight}px"
       role="application"
       onpointermove={handlePointerMove}
       onpointerup={handlePointerUp}
       onpointerleave={handlePointerUp}
+      oncontextmenu={handleContainerContextMenu}
     >
       {#if backgroundImageDataUrl}
         <img
@@ -701,18 +896,19 @@
         {const clampedL = $derived(Math.max(0, Math.min(pxL, maxL)))}
         {const clampedT = $derived(Math.max(0, Math.min(pxT, maxT)))}
         <div
-          class="absolute cursor-grab"
+          class="absolute gauge-wrap"
           style:transform="translate({clampedL}px, {clampedT}px)"
           style:width="{cw}px"
           style:height="{ch}px"
           style:touch-action="none"
           style:will-change="transform"
           style:z-index={gauge.zIndex}
+          style:cursor={layoutLocked ? 'default' : 'grab'}
           onpointerdown={(e) => handlePointerDown(e, gauge.entityId)}
           oncontextmenu={(e) => handleContextMenu(e, gauge.entityId)}
           role="button" tabindex="0"
         >
-          <GaugeCard {gauge} pixelWidth={pxW} pixelHeight={pxH} />
+          <GaugeCard {gauge} pixelWidth={pxW} pixelHeight={pxH} valueHistory={gaugeValueHistory.get(gauge.entityId) ?? []} />
         </div>
       {/each}
       {#each tableDefs as tw (tw.tableId)}
@@ -727,13 +923,14 @@
         {const clampedL = $derived(Math.max(0, Math.min(pxL, maxL)))}
         {const clampedT = $derived(Math.max(0, Math.min(pxT, maxT)))}
         <div
-          class="absolute cursor-grab"
+          class="absolute table-wrap"
           style:transform="translate({clampedL}px, {clampedT}px)"
           style:width="{w}px"
           style:height="{h}px"
           style:touch-action="none"
           style:will-change="transform"
           style:z-index={tw.zIndex}
+          style:cursor={layoutLocked ? 'default' : 'grab'}
           onpointerdown={(e) => handleTablePointerDown(e, tw.tableId)}
           oncontextmenu={(e) => handleTableContextMenu(e, tw.tableId)}
           role="button" tabindex="0"
@@ -775,5 +972,16 @@
     entry={tableSettingsEntry}
     onclose={handleTableSettingsClose}
     onchange={handleTableSettingsChange}
+  />
+{/if}
+
+{#if addGaugePopupOpen}
+  <AddGaugePopup
+    {dashboardName}
+    existingEntityIds={new Set(gaugeDefs.map(d => d.entityId))}
+    anchorX={addGaugePopupX}
+    anchorY={addGaugePopupY}
+    onAdd={handleAddGauge}
+    onclose={() => { addGaugePopupOpen = false; }}
   />
 {/if}

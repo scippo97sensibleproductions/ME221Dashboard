@@ -81,8 +81,17 @@ export interface GaugeDefinition {
   // Smoothing
   smoothingEnabled: boolean;
   smoothingFactor: number;
+  smoothingResponseMs: number;
+  spikeGatePercent: number;
   // Transforms
   transformSteps?: ValueTransformStep[];
+  // Warning state
+  warningState: 'none' | 'warning' | 'critical';
+  // Pre-computed lowercase strings (avoids toLowerCase() in 30fps hot path)
+  lowerName?: string;
+  lowerUnit?: string;
+  // Histogram
+  showHistogram: boolean;
   // Layering
   zIndex: number;
 }

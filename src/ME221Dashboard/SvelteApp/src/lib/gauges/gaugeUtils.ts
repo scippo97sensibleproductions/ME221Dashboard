@@ -1,5 +1,6 @@
 import { GaugeShapeCategory, DigitalStyle } from './gaugeTypes';
 import type { ArcPosition, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
+import type { DataLinkWarningSetting } from '../HybridBridgeTypes';
 import type { ValueTransformStep } from './transformUtils';
 
 export function computeValueFraction(value: number, min: number, max: number): number {
@@ -116,12 +117,72 @@ export function describeArc(cx: number, cy: number, r: number, startAngle: numbe
 }
 
 // ── Shared formatting ──────────────────────────────────────────────
-export function formatValue(val: number, name: string, unit: string): string {
-  const lowerName = name.toLowerCase();
-  const lowerUnit = unit.toLowerCase();
-  if (lowerName.includes('rpm') || lowerUnit.includes('rpm') || lowerName.includes('speed')) return val.toFixed(0);
-  if (lowerUnit.includes('v') || lowerUnit.includes('lambda') || lowerName.includes('afr')) return val.toFixed(2);
+// Lambda mode: if enabled, AFR values are divided by stoichAfr to show Lambda.
+// Entities with "lambda" in name/unit are already in Lambda and skip conversion.
+// Optional pre-computed lowercase strings avoid toLowerCase() allocations in the 30fps hot path.
+export function formatValue(
+  val: number, name: string, unit: string,
+  lambdaMode = false, stoichAfr = 14.7,
+  lowerName?: string, lowerUnit?: string
+): string {
+  const ln = lowerName ?? name.toLowerCase();
+  const lu = lowerUnit ?? unit.toLowerCase();
+  if (ln.includes('rpm') || lu.includes('rpm') || ln.includes('speed')) return val.toFixed(0);
+
+  // Apply Lambda conversion for AFR entities when mode is enabled
+  let displayVal = val;
+  let displayUnit = unit;
+  if (lambdaMode && !lu.includes('lambda') && !ln.includes('lambda')) {
+    if (ln.includes('afr') || lu.includes('afr') || lu.includes('air/fuel')) {
+      displayVal = stoichAfr > 0 ? val / stoichAfr : val;
+      displayUnit = 'λ';
+    }
+  } else if (lu.includes('lambda') || ln.includes('lambda')) {
+    displayUnit = 'λ';
+  }
+
+  if (lu.includes('v') || lu.includes('lambda') || ln.includes('afr') || displayUnit === 'λ') return displayVal.toFixed(2);
   return val.toFixed(1);
+}
+
+// ── Warning state computation ──────────────────────────────────────
+// Pre-build a Map for O(1) lookups in the hot path (replaces Array.find).
+export function buildWarningMap(settings: DataLinkWarningSetting[]): Map<number, DataLinkWarningSetting> {
+  const map = new Map<number, DataLinkWarningSetting>();
+  for (const s of settings) {
+    map.set(s.dataId, s);
+  }
+  return map;
+}
+
+export function computeWarningState(
+  value: number,
+  warningSettings: Map<number, DataLinkWarningSetting> | DataLinkWarningSetting[] | null,
+  entityId: number
+): 'none' | 'warning' | 'critical' {
+  if (!warningSettings) return 'none';
+  const setting = warningSettings instanceof Map
+    ? warningSettings.get(entityId)
+    : warningSettings.find(s => s.dataId === entityId);
+  if (!setting || !setting.enabled) return 'none';
+
+  const { minWarning, maxWarning } = setting;
+  const exceededMin = minWarning != null && value < minWarning;
+  const exceededMax = maxWarning != null && value > maxWarning;
+
+  if (exceededMin || exceededMax) {
+    // Determine severity: critical if value is far beyond the threshold
+    if (maxWarning != null && exceededMax) {
+      const range = maxWarning - (minWarning ?? maxWarning - 1);
+      if (value > maxWarning + range * 0.5) return 'critical';
+    }
+    if (minWarning != null && exceededMin) {
+      const range = (maxWarning ?? minWarning + 1) - minWarning;
+      if (value < minWarning - range * 0.5) return 'critical';
+    }
+    return 'warning';
+  }
+  return 'none';
 }
 
 // ── GaugeConfigEntry → GaugeDefinition mapping ─────────────────────
@@ -175,6 +236,8 @@ export function toGaugeDefinition(
     textColor?: string;
     smoothingEnabled?: boolean;
     smoothingFactor?: number;
+    smoothingResponseMs?: number;
+    spikeGatePercent?: number;
     zIndex?: number;
   },
   overrides: {
@@ -237,6 +300,10 @@ export function toGaugeDefinition(
     textColor: config.textColor ?? '#ffffff',
     smoothingEnabled: config.smoothingEnabled ?? false,
     smoothingFactor: config.smoothingFactor ?? 0.3,
+    smoothingResponseMs: config.smoothingResponseMs ?? 0,
+    spikeGatePercent: config.spikeGatePercent ?? 0,
+    warningState: 'none',
+    showHistogram: config.showHistogram ?? false,
     zIndex: config.zIndex ?? 0,
   };
 }
@@ -271,6 +338,8 @@ export function toSavePayload(def: {
   iconSize: number;
   smoothingEnabled?: boolean;
   smoothingFactor?: number;
+  smoothingResponseMs?: number;
+  spikeGatePercent?: number;
   barValuePosition: number;
   barUnitPosition: number;
   barNamePosition: number;
@@ -282,6 +351,7 @@ export function toSavePayload(def: {
   zIndex: number;
   transformSteps?: ValueTransformStep[];
   customUnitLabel?: string | null;
+  showHistogram?: boolean;
 }) {
   return {
     entityId: def.entityId,
@@ -311,6 +381,8 @@ export function toSavePayload(def: {
     iconSize: def.iconSize,
     smoothingEnabled: def.smoothingEnabled,
     smoothingFactor: def.smoothingFactor,
+    smoothingResponseMs: def.smoothingResponseMs,
+    spikeGatePercent: def.spikeGatePercent,
     barValuePosition: def.barValuePosition,
     barUnitPosition: def.barUnitPosition,
     barNamePosition: def.barNamePosition,
@@ -331,6 +403,7 @@ export function toSavePayload(def: {
     zIndex: def.zIndex,
     transformSteps: def.transformSteps,
     customUnitLabel: def.customUnitLabel,
+    showHistogram: def.showHistogram,
   };
 }
 

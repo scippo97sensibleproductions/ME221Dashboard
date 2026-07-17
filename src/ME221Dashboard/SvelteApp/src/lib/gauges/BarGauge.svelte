@@ -3,10 +3,11 @@
   import { computeValueFraction, gaugeValueColor, buildColorLuts, DEFAULT_COLOR_STOPS } from './types';
   import { HybridBridge } from '../HybridBridge';
 
-  let { gauge, pixelWidth, pixelHeight }: {
+  let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
     gauge: GaugeDefinition;
     pixelWidth: number;
     pixelHeight: number;
+    valueTextColor?: string;
   } = $props();
 
   let iconDataUrl = $state<string | null>(null);
@@ -83,6 +84,8 @@
   const valuePos = $derived(posToXY(gauge.barValuePosition, valueSize * gauge.formattedValue.length * 0.6, valueSize));
   const unitPos = $derived(posToXY(gauge.barUnitPosition, unitSize * gauge.unit.length * 0.6, unitSize));
   const namePos = $derived(posToXY(gauge.barNamePosition, nameSize * gauge.name.length * 0.5, nameSize));
+
+  const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
 </script>
 
 <svg width={pixelWidth} height={pixelHeight} viewBox="0 0 {pixelWidth} {pixelHeight}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
@@ -103,17 +106,17 @@
   {/if}
 
   {#if gauge.showValue}
-    <text x={valuePos.x} y={valuePos.y} text-anchor="middle" fill={gauge.textColor} font-size={valueSize} font-weight="bold">
+    <text x={valuePos.x} y={valuePos.y} text-anchor="middle" fill={displayTextColor} font-size={valueSize} font-weight="bold">
       {gauge.formattedValue}
     </text>
   {/if}
   {#if gauge.showUnit && gauge.unit}
-    <text x={unitPos.x} y={unitPos.y} text-anchor="middle" fill={gauge.textColor} font-size={unitSize}>
+    <text x={unitPos.x} y={unitPos.y} text-anchor="middle" fill={displayTextColor} font-size={unitSize}>
       {gauge.unit}
     </text>
   {/if}
   {#if gauge.showName}
-    <text x={namePos.x} y={namePos.y} text-anchor="middle" fill={gauge.textColor} font-size={nameSize}>
+    <text x={namePos.x} y={namePos.y} text-anchor="middle" fill={displayTextColor} font-size={nameSize}>
       {gauge.name}
     </text>
   {/if}

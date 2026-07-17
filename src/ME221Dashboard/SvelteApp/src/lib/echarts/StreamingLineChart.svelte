@@ -37,7 +37,7 @@
 
   function renderChart() {
     if (!chart) return;
-    const now = performance.now();
+    const now = Date.now();
     const option = buildMultiSeriesOption(
       series,
       buffer.getAllSeries(),
@@ -66,7 +66,7 @@
 
   $effect(() => {
     const frameCount = liveDataStore.frameCount;
-    const now = performance.now();
+    const now = Date.now();
     for (const s of series) {
       const val = liveDataStore.values[s.id];
       if (val != null) {

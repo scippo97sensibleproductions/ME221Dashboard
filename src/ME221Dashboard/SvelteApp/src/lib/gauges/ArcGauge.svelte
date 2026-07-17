@@ -3,10 +3,11 @@
   import { DEFAULT_COLOR_STOPS, computeValueFraction, gaugeValueColor, positionToCenterAngle, describeArc, buildColorLuts, interpolateNeedleAngle } from './types';
   import { HybridBridge } from '../HybridBridge';
 
-  let { gauge, pixelWidth, pixelHeight }: {
+  let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
     gauge: GaugeDefinition;
     pixelWidth: number;
     pixelHeight: number;
+    valueTextColor?: string;
   } = $props();
 
   const containerBox = $derived(Math.min(pixelWidth, pixelHeight));
@@ -87,6 +88,7 @@
   const valueSize = $derived(Math.max(14, arcBox * 0.22 * fontSizeScale));
   const unitSize = $derived(Math.max(10, arcBox * 0.08 * fontSizeScale));
   const nameSize = $derived(Math.max(6, 9 * fontSizeScale));
+  const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
   const textY = $derived(Math.max(0, Math.min(Math.max(0, arcBox - 40), arcBox * 0.65 + gauge.labelVerticalOffset)));
 
 
@@ -131,43 +133,43 @@
   {#if gauge.showValue || gauge.showUnit || gauge.showName}
     <g transform="translate(0, {textY})">
       {#if gauge.showValue}
-        <text x={cx} y="0" text-anchor="middle" fill={gauge.textColor}
+        <text x={cx} y="0" text-anchor="middle" fill={displayTextColor}
               font-size={valueSize} font-weight="bold"
               >
           {gauge.formattedValue}
         </text>
         {@const valueHeight = valueSize}
         {#if gauge.showUnit}
-          <text x={cx} y={valueHeight + 2} text-anchor="middle" fill={gauge.textColor}
+          <text x={cx} y={valueHeight + 2} text-anchor="middle" fill={displayTextColor}
                 font-size={unitSize}>
             {gauge.unit}
           </text>
           {@const unitPos = valueHeight + 2 + unitSize}
           {#if gauge.showName}
-            <text x={cx} y={unitPos + 2} text-anchor="middle" fill={gauge.textColor}
+            <text x={cx} y={unitPos + 2} text-anchor="middle" fill={displayTextColor}
                   font-size={nameSize}>
               {gauge.name}
             </text>
           {/if}
         {:else if gauge.showName}
-          <text x={cx} y={valueHeight + 2} text-anchor="middle" fill={gauge.textColor}
+          <text x={cx} y={valueHeight + 2} text-anchor="middle" fill={displayTextColor}
                 font-size={nameSize}>
             {gauge.name}
           </text>
         {/if}
       {:else if gauge.showUnit}
-        <text x={cx} y="0" text-anchor="middle" fill={gauge.textColor}
+        <text x={cx} y="0" text-anchor="middle" fill={displayTextColor}
               font-size={unitSize}>
           {gauge.unit}
         </text>
         {#if gauge.showName}
-          <text x={cx} y={unitSize + 2} text-anchor="middle" fill={gauge.textColor}
+          <text x={cx} y={unitSize + 2} text-anchor="middle" fill={displayTextColor}
                 font-size={nameSize}>
             {gauge.name}
           </text>
         {/if}
       {:else if gauge.showName}
-        <text x={cx} y="0" text-anchor="middle" fill={gauge.textColor}
+        <text x={cx} y="0" text-anchor="middle" fill={displayTextColor}
               font-size={nameSize}>
           {gauge.name}
         </text>

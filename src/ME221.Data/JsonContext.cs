@@ -27,6 +27,12 @@ namespace ME221.Data;
 [JsonSerializable(typeof(List<int>))]
 [JsonSerializable(typeof(List<GaugeConfigEntry>))]
 [JsonSerializable(typeof(List<ValueTransformStep>))]
+[JsonSerializable(typeof(DataLinkWarningSetting))]
+[JsonSerializable(typeof(WarningSettingStatus))]
+[JsonSerializable(typeof(List<DataLinkWarningSetting>))]
+[JsonSerializable(typeof(DataLinkFeedback))]
+[JsonSerializable(typeof(DataLinkFeedbackSeverity))]
+[JsonSerializable(typeof(List<DataLinkFeedback>))]
 public partial class CalibrationJsonContext : JsonSerializerContext
 {
 }

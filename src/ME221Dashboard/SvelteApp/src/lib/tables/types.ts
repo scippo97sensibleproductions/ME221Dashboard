@@ -252,8 +252,11 @@ export function getDataRange(output: number[]): { min: number; max: number } {
   let min = Infinity;
   let max = -Infinity;
   for (let i = 0; i < output.length; i++) {
-    if (output[i] < min) min = output[i];
-    if (output[i] > max) max = output[i];
+    const v = output[i];
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
   }
+  if (!isFinite(min) || !isFinite(max)) return { min: 0, max: 100 };
   return { min, max };
 }

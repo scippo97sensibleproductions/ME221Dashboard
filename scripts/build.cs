@@ -61,7 +61,7 @@ var platforms = new (string Key, string Label, string Tfm, string? Rid)[]
     ("android-all",   "Android  (all)",    "net11.0-android37.0", null),
     ("windows",       "Windows",           "net11.0-windows10.0.19041.0", null),
     ("ios",           "iOS",               "net11.0-ios", null),
-    ("macos",         "macOS  (Catalyst)", "net11.0-maccatalyst", null),
+    ("macos",         "macOS  (Catalyst)", "net11.0-maccatalyst", "maccatalyst-arm64"),
 };
 
 string platformKey;

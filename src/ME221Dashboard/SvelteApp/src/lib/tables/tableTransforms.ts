@@ -52,7 +52,8 @@ export function applyTransform(
       }
     } else if (operation === 'gaussianSmooth') {
       const sigma = params.sigma ?? 1.5;
-      const radius = Math.max(1, Math.ceil(sigma * 2));
+      const maxRadius = params.radius ?? 5;
+      const radius = Math.min(Math.max(1, Math.ceil(sigma * 3)), maxRadius);
       for (const idx of indices) {
         const oldVal = snapshot[idx];
         let sum = 0, weightSum = 0;
@@ -70,10 +71,11 @@ export function applyTransform(
         entries.push({ type: selectionType, key: `${selectionType}[${idx}]`, idx, oldVal, newVal, groupId });
       }
     } else if (operation === 'smooth') {
+      const radius = params.radius ?? 1;
       for (const idx of indices) {
         const oldVal = snapshot[idx];
         let sum = 0, count = 0;
-        for (let d = -1; d <= 1; d++) {
+        for (let d = -radius; d <= radius; d++) {
           const ni = idx + d;
           if (ni >= 0 && ni < axis.length) { sum += snapshot[ni]; count++; }
         }
@@ -169,12 +171,13 @@ export function applyTransform(
   const cols = tableDef.cols;
 
   if (operation === 'smooth') {
+    const radius = params.radius ?? 1;
     const snapshot = [...tableData.output];
     for (let r = b.minRow; r <= b.maxRow; r++) {
       for (let c = b.minCol; c <= b.maxCol; c++) {
         let sum = 0, count = 0;
-        for (let dr = -1; dr <= 1; dr++) {
-          for (let dc = -1; dc <= 1; dc++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          for (let dc = -radius; dc <= radius; dc++) {
             const nr = r + dr, nc = c + dc;
             if (nr >= 0 && nr < tableDef.rows && nc >= 0 && nc < cols) {
               sum += snapshot[nr * cols + nc];
@@ -327,8 +330,9 @@ export function applyTransform(
     }
   } else if (operation === 'gaussianSmooth') {
     const sigma = params.sigma ?? 1.0;
+    const maxRadius = params.radius ?? 5;
     const snapshot = [...tableData.output];
-    const kernelSize = Math.ceil(sigma * 3) * 2 + 1;
+    const kernelSize = Math.min(Math.ceil(sigma * 3), maxRadius) * 2 + 1;
     const half = Math.floor(kernelSize / 2);
     const kernel: number[] = [];
     let kSum = 0;

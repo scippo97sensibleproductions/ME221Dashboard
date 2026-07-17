@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
-  import { cellKey, getOutputValue, heatColor, formatValueAdaptive, DataType, rangeOpacity } from './types';
+  import type { OperatingPointSample } from '../stores/LiveDataStore.svelte';
+  import { cellKey, getOutputValue, heatColor, formatValueAdaptive, DataType, rangeOpacity, fromRaw, findInterpolationRange } from './types';
 
-  let { tableDef, tableData, selectedRow, selectedCol, editMode, opRowRange, opColRange, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
+  let { tableDef, tableData, selectedRow, selectedCol, editMode, opRowRange, opColRange, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, opHistory = [], onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
     tableData: TableData;
     selectedRow: number;
@@ -23,6 +24,7 @@
     colorScheme?: ColorScheme;
     showContours?: boolean;
     liveOutputValue?: number | null;
+    opHistory?: OperatingPointSample[];
     onCellClick: (row: number, col: number) => void;
     onAxis0Click: (col: number) => void;
     onAxis1Click: (row: number) => void;
@@ -144,6 +146,39 @@
   const contourSvgW = $derived(axisW + tableDef.cols * cellW);
   const contourSvgH = $derived(headerH + tableDef.rows * (isMobile ? 28 : 28));
 
+  const MAX_GHOST_DOTS = 50;
+
+  let ghostTrailDots = $derived.by(() => {
+    if (!opHistory || opHistory.length === 0 || !tableData) return [];
+    const step = Math.max(1, Math.floor(opHistory.length / MAX_GHOST_DOTS));
+    const dots: { x: number; y: number; opacity: number }[] = [];
+    const len = opHistory.length;
+    for (let i = 0; i < len; i += step) {
+      const sample = opHistory[i];
+      const raw0 = tableDef.input0LinkId ? sample.values[String(tableDef.input0LinkId)] : null;
+      if (raw0 == null) continue;
+      const x = fromRaw(raw0, tableDef.input0UnitType ?? 0);
+      const colRange = findInterpolationRange(x, tableData.input0);
+      let colFrac = colRange.lower + (colRange.lower === colRange.upper ? 0.5 : colRange.fraction);
+      colFrac = Math.max(0, Math.min(tableDef.cols, colFrac));
+      let rowFrac = 0.5;
+      if (tableDef.input1LinkId && tableDef.input1LinkId !== 0) {
+        const raw1 = sample.values[String(tableDef.input1LinkId)];
+        if (raw1 == null) continue;
+        const y = fromRaw(raw1, tableDef.input1UnitType ?? 0);
+        const rowRange = findInterpolationRange(y, tableData.input1);
+        rowFrac = rowRange.lower + (rowRange.lower === rowRange.upper ? 0.5 : rowRange.fraction);
+        rowFrac = Math.max(0, Math.min(tableDef.rows, rowFrac));
+      }
+      const dotX = axisW + colFrac * cellW;
+      const dotY = headerH + rowFrac * (isMobile ? 28 : 28);
+      const t = len > 1 ? i / (len - 1) : 1;
+      const opacity = 0.1 + 0.9 * t;
+      dots.push({ x: dotX, y: dotY, opacity });
+    }
+    return dots;
+  });
+
   let sMinR = $derived(selection ? Math.min(selection.startRow, selection.endRow) : -1);
   let sMaxR = $derived(selection ? Math.max(selection.startRow, selection.endRow) : -1);
   let sMinC = $derived(selection ? Math.min(selection.startCol, selection.endCol) : -1);
@@ -252,6 +287,17 @@
               <path {d} fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4,3" />
             {/each}
           </svg>
+        {/if}
+        {#if ghostTrailDots.length > 0}
+          <div class="pointer-events-none absolute" style="z-index: 6; left: 0; top: 0; width: {contourSvgW}px; height: {contourSvgH}px;">
+            {#each ghostTrailDots as dot}
+              <div
+                class="absolute rounded-full"
+                style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
+                aria-hidden="true"
+              ></div>
+            {/each}
+          </div>
         {/if}
         <!-- Corner -->
         <div

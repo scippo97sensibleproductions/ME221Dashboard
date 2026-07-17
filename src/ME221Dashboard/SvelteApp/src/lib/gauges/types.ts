@@ -35,4 +35,6 @@ export {
   toGaugeDefinition,
   toSavePayload,
   estimateVisualSize,
+  computeWarningState,
+  buildWarningMap,
 } from './gaugeUtils';

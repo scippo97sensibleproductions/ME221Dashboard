@@ -15,6 +15,12 @@ interface GpsSnapshot {
 
 const STALE_MS = 2500;
 const RECONNECT_REENABLE_COOLDOWN_MS = 5000;
+const MAX_OP_HISTORY = 500;
+
+export interface OperatingPointSample {
+  timestamp: number;
+  values: Record<string, number | null>;
+}
 
 class LiveDataStore {
   values = $state<Record<string, number | null>>({});
@@ -26,6 +32,7 @@ class LiveDataStore {
   frameCount = $state(0);
   isReportingActive = $state(false);
   reenableTick = $state(0);
+  operatingPointHistory = $state<OperatingPointSample[]>([]);
 
   #unsubscribe: (() => void) | null = null;
   #rafId: number | null = null;
@@ -33,6 +40,8 @@ class LiveDataStore {
   #lastFrameValues: Record<string, number | null> | null = null;
   #lastReenableAt = 0;
   #reenableInFlight = false;
+  #lastSampleTime = 0;
+  static readonly SAMPLE_INTERVAL_MS = 1000; // 1Hz sampling for operating point history
 
   start(): void {
     if (this.#unsubscribe) return;
@@ -89,6 +98,18 @@ class LiveDataStore {
     this.lastUpdateAt = performance.now();
     this.frameCount++;
     if (!this.isReportingActive) this.isReportingActive = true;
+
+    // Throttle operating point samples to 1Hz (was 30fps — 30x fewer object clones)
+    const now = performance.now();
+    if (now - this.#lastSampleTime >= LiveDataStore.SAMPLE_INTERVAL_MS) {
+      this.#lastSampleTime = now;
+      const sample: OperatingPointSample = { timestamp: now, values: { ...v } };
+      const h = this.operatingPointHistory;
+      if (h.length >= MAX_OP_HISTORY) {
+        h.splice(0, h.length - MAX_OP_HISTORY + 1);
+      }
+      h.push(sample);
+    }
   }
 
   private _onGpsUpdate(event: GpsUpdateEvent): void {
@@ -116,6 +137,9 @@ class LiveDataStore {
     this.connectionState = next;
     if (prev === 'connected' && next !== 'connected') {
       this.isReportingActive = false;
+    }
+    if (next === 'disconnected') {
+      this.operatingPointHistory = [];
     }
   }
 
@@ -175,4 +199,4 @@ class LiveDataStore {
 }
 
 export const liveDataStore = new LiveDataStore();
-export type { GpsSnapshot };
+export type { GpsSnapshot, OperatingPointSample };

@@ -32,6 +32,16 @@ namespace ME221Dashboard.Services;
 [JsonSerializable(typeof(LiveDataUpdateMessage))]
 [JsonSerializable(typeof(OdometerConfig))]
 [JsonSerializable(typeof(VehicleConfig))]
+[JsonSerializable(typeof(DataLinkWarningSetting))]
+[JsonSerializable(typeof(WarningSettingStatus))]
+[JsonSerializable(typeof(List<DataLinkWarningSetting>))]
+[JsonSerializable(typeof(WarningHistoryEntry))]
+[JsonSerializable(typeof(List<WarningHistoryEntry>))]
+[JsonSerializable(typeof(UserPreferences))]
+[JsonSerializable(typeof(ConnectionPreference))]
+[JsonSerializable(typeof(DataLinkFeedback))]
+[JsonSerializable(typeof(DataLinkFeedbackSeverity))]
+[JsonSerializable(typeof(List<DataLinkFeedback>))]
 public partial class V2JsonContext : JsonSerializerContext
 {
 }

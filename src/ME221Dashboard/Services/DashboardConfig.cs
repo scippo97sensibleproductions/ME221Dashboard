@@ -13,6 +13,27 @@ public sealed class DashboardConfig
         ["default"] = new()
     };
     public VehicleConfig? Vehicle { get; set; }
+    public UserPreferences? Preferences { get; set; }
+}
+
+public sealed class UserPreferences
+{
+    public ConnectionPreference? LastConnection { get; set; }
+    public List<int> FavoriteTableIds { get; set; } = [];
+    public List<int> RecentTableIds { get; set; } = [];
+    public List<int> FavoriteDriverIds { get; set; } = [];
+    public List<int> RecentDriverIds { get; set; } = [];
+    public Dictionary<int, string> TableNotes { get; set; } = [];
+    public bool UseLambdaMode { get; set; }
+    public double StoichAfr { get; set; } = 14.7;
+}
+
+public sealed class ConnectionPreference
+{
+    public string Type { get; set; } = "tcp";
+    public string? Host { get; set; }
+    public int? Port { get; set; }
+    public string? SerialPort { get; set; }
 }
 
 public sealed class DashboardDefinition
@@ -25,6 +46,24 @@ public sealed class DashboardDefinition
     public bool HeaderVisible { get; set; } = true;
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
+    public List<DataLinkWarningSetting> WarningSettings { get; set; } = [];
+    public int WarningDelayMs { get; set; } = 500;
+    public List<WarningHistoryEntry> WarningHistory { get; set; } = [];
+}
+
+public sealed class WarningHistoryEntry
+{
+    public int Id { get; set; }
+    public int DataId { get; set; }
+    public string Name { get; set; } = "";
+    public string Unit { get; set; } = "";
+    public string Category { get; set; } = "";
+    public double Value { get; set; }
+    public string Severity { get; set; } = "warning";
+    public double Threshold { get; set; }
+    public string ThresholdType { get; set; } = "max";
+    public long TriggeredAt { get; set; }
+    public long? ClearedAt { get; set; }
 }
 
 public sealed class DashboardTableEntry
@@ -38,6 +77,8 @@ public sealed class DashboardTableEntry
     public string? ColorScheme { get; set; }
     public bool? ShowLabels { get; set; }
     public bool? ShowDimensionBadge { get; set; }
+    public int? TraceXLink { get; set; }
+    public int? TraceYLink { get; set; }
 }
 
 public enum OdometerSpeedSource { Gps = 0, Vss = 1 }

@@ -3,10 +3,12 @@
   import { DigitalStyle } from './types';
   import { HybridBridge } from '../HybridBridge';
 
-  let { gauge, pixelWidth, pixelHeight }: {
+  let { gauge, pixelWidth, pixelHeight, valueTextColor, valueHistory = [] }: {
     gauge: GaugeDefinition;
     pixelWidth: number;
     pixelHeight: number;
+    valueTextColor?: string;
+    valueHistory?: number[];
   } = $props();
 
   let iconDataUrl = $state<string | null>(null);
@@ -55,6 +57,42 @@
   const insetUnitSize = $derived(Math.max(7, dim * 0.06 * fs));
   const insetNameSize = $derived(Math.max(6, dim * 0.04 * fs));
 
+  // Sparkline path for histogram background
+  const sparklinePath = $derived.by(() => {
+    if (valueHistory.length < 2) return '';
+    const w = pixelWidth;
+    const h = pixelHeight;
+    const pad = 4;
+    const plotW = w - pad * 2;
+    const plotH = h * 0.28;
+    const plotY = h - pad - plotH;
+    let mn = Infinity, mx = -Infinity;
+    for (const v of valueHistory) {
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    if (mn === mx) { mx = mn + 1; }
+    const range = mx - mn;
+    const step = plotW / (valueHistory.length - 1);
+    let d = '';
+    for (let i = 0; i < valueHistory.length; i++) {
+      const x = pad + i * step;
+      const y = plotY + plotH - ((valueHistory[i] - mn) / range) * plotH;
+      d += (i === 0 ? 'M' : 'L') + `${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+    return d;
+  });
+
+  const sparklineFillPath = $derived.by(() => {
+    if (!sparklinePath) return '';
+    const w = pixelWidth;
+    const h = pixelHeight;
+    const pad = 4;
+    const plotH = h * 0.28;
+    const plotY = h - pad - plotH;
+    return `${sparklinePath}L${(pad + (valueHistory.length - 1) * ((w - pad * 2) / (valueHistory.length - 1))).toFixed(1)},${(plotY + plotH).toFixed(1)}L${pad},${(plotY + plotH).toFixed(1)}Z`;
+  });
+
   function buildDigits(value: string): string[] {
     const display = value || '';
     const padded = display.length < 3 ? display.padStart(3) : display;
@@ -62,6 +100,7 @@
   }
 
   const digits = $derived(buildDigits(gauge.formattedValue));
+  const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
 </script>
 
 <div class="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
@@ -75,18 +114,18 @@
     <div class="flex flex-col items-center justify-center gap-0.5 max-h-full">
       {#if gauge.showValue}
         <div class="rounded-lg px-3 py-0.5 max-w-full overflow-hidden" style="background: {_digitBg};">
-          <span class="block truncate" style="color: {gauge.textColor}; font-size: {largeDigitValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
+          <span class="block truncate" style="color: {displayTextColor}; font-size: {largeDigitValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
             {gauge.formattedValue}
           </span>
         </div>
       {/if}
       {#if gauge.showUnit}
-        <span class="block truncate max-w-full" style="color: {gauge.textColor}; font-size: {unitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
+        <span class="block truncate max-w-full" style="color: {displayTextColor}; font-size: {unitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
           {gauge.unit}
         </span>
       {/if}
       {#if gauge.showName}
-        <span class="block truncate max-w-full" style="color: {gauge.textColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
+        <span class="block truncate max-w-full" style="color: {displayTextColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
           {gauge.name}
         </span>
       {/if}
@@ -100,7 +139,7 @@
           {#each digits as ch}
             <div class="flex items-center justify-center rounded-sm"
                  style="background: {_ledBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span class="font-bold" style="font-size: {segmentDigitSize}px; color: {_ledColor};">
+              <span class="font-bold" style="font-size: {segmentDigitSize}px; color: {valueTextColor || _ledColor};">
                 {ch}
               </span>
             </div>
@@ -113,7 +152,7 @@
         </span>
       {/if}
       {#if gauge.showName}
-        <span class="truncate max-w-full" style="color: {gauge.textColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+        <span class="truncate max-w-full" style="color: {displayTextColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.name}
         </span>
       {/if}
@@ -124,19 +163,19 @@
     <div class="flex flex-col items-center justify-center gap-0 max-h-full">
       <div class="flex items-center gap-1">
         {#if gauge.showValue}
-          <span class="truncate" style="color: {gauge.textColor}; font-size: {clusterValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+          <span class="truncate" style="color: {displayTextColor}; font-size: {clusterValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
             {gauge.formattedValue}
           </span>
         {/if}
         {#if gauge.showUnit}
-          <span style="color: {gauge.textColor}; font-size: {clusterUnitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1; margin-bottom: 2px;">
+          <span style="color: {displayTextColor}; font-size: {clusterUnitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1; margin-bottom: 2px;">
             {gauge.unit}
           </span>
         {/if}
       </div>
       <div style="background: {_digitBg}; border-radius: 2px; height: 2px; width: {separatorWidth}px; margin: 3px 0;"></div>
       {#if gauge.showName}
-        <span class="truncate max-w-full font-medium" style="color: {gauge.textColor}; font-size: {clusterNameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+        <span class="truncate max-w-full font-medium" style="color: {displayTextColor}; font-size: {clusterNameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.name}
         </span>
       {/if}
@@ -146,17 +185,17 @@
     <!-- LabelTop: name as label above value, unit below — inverted hierarchy -->
     <div class="flex flex-col items-center justify-center gap-0 max-h-full">
       {#if gauge.showName}
-        <span class="truncate max-w-full uppercase tracking-widest" style="color: {gauge.textColor}; opacity: 0.5; font-size: {labelTopLabelSize}px; line-height: 1.2;">
+        <span class="truncate max-w-full uppercase tracking-widest" style="color: {displayTextColor}; opacity: 0.5; font-size: {labelTopLabelSize}px; line-height: 1.2;">
           {gauge.name}
         </span>
       {/if}
       {#if gauge.showValue}
-        <span class="font-bold" style="color: {gauge.textColor}; font-size: {labelTopValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+        <span class="font-bold" style="color: {displayTextColor}; font-size: {labelTopValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
           {gauge.formattedValue}
         </span>
       {/if}
       {#if gauge.showUnit}
-        <span style="color: {gauge.textColor}; opacity: 0.6; font-size: {labelTopUnitSize}px; line-height: 1.2;">
+        <span style="color: {displayTextColor}; opacity: 0.6; font-size: {labelTopUnitSize}px; line-height: 1.2;">
           {gauge.unit}
         </span>
       {/if}
@@ -170,22 +209,22 @@
              style="width: {dim * 0.55}px; height: {dim * 0.55}px; min-width: 50px; min-height: 50px;">
           <!-- Glow ring -->
           <div class="absolute inset-0 rounded-full"
-               style="border: 2px solid {gauge.textColor}; box-shadow: 0 0 8px {gauge.textColor}40, inset 0 0 6px {gauge.textColor}20;"></div>
+               style="border: 2px solid {displayTextColor}; box-shadow: 0 0 8px {displayTextColor}40, inset 0 0 6px {displayTextColor}20;"></div>
           <!-- Value -->
-          <span class="relative z-10 font-bold" style="color: {gauge.textColor}; font-size: {glowValueSize}px; text-shadow: 0 0 6px {gauge.textColor}60; line-height: 1.1;">
+          <span class="relative z-10 font-bold" style="color: {displayTextColor}; font-size: {glowValueSize}px; text-shadow: 0 0 6px {displayTextColor}60; line-height: 1.1;">
             {gauge.formattedValue}
           </span>
         </div>
       {/if}
       <div class="flex items-baseline gap-1">
         {#if gauge.showUnit}
-          <span style="color: {gauge.textColor}; opacity: 0.7; font-size: {glowUnitSize}px; line-height: 1.2;">
+          <span style="color: {displayTextColor}; opacity: 0.7; font-size: {glowUnitSize}px; line-height: 1.2;">
             {gauge.unit}
           </span>
         {/if}
       </div>
       {#if gauge.showName}
-        <span class="truncate max-w-full" style="color: {gauge.textColor}; opacity: 0.6; font-size: {glowNameSize}px; line-height: 1.2;">
+        <span class="truncate max-w-full" style="color: {displayTextColor}; opacity: 0.6; font-size: {glowNameSize}px; line-height: 1.2;">
           {gauge.name}
         </span>
       {/if}
@@ -198,7 +237,7 @@
            style="background: #0a0a0a; border: 1px solid #333; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), inset 0 -1px 1px rgba(255,255,255,0.05);">
         {#if gauge.showValue}
           <div class="text-center">
-            <span class="block font-mono font-bold" style="color: #00ff88; font-size: {insetValueSize}px; text-shadow: 0 0 4px #00ff8840; line-height: 1.2;">
+            <span class="block font-mono font-bold" style="color: {valueTextColor || '#00ff88'}; font-size: {insetValueSize}px; text-shadow: 0 0 4px #00ff8840; line-height: 1.2;">
               {gauge.formattedValue}
             </span>
           </div>
@@ -212,7 +251,7 @@
         {/if}
       </div>
       {#if gauge.showName}
-        <span class="truncate max-w-full" style="color: {gauge.textColor}; opacity: 0.7; font-size: {insetNameSize}px; line-height: 1.2;">
+        <span class="truncate max-w-full" style="color: {displayTextColor}; opacity: 0.7; font-size: {insetNameSize}px; line-height: 1.2;">
           {gauge.name}
         </span>
       {/if}
@@ -226,7 +265,7 @@
           {#each digits as ch}
             <div class="flex items-center justify-center rounded-sm"
                  style="background: {_digitBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span style="color: {gauge.textColor}; font-size: {segmentDigitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+              <span style="color: {displayTextColor}; font-size: {segmentDigitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
                 {ch}
               </span>
             </div>
@@ -234,15 +273,22 @@
         {/if}
       </div>
       {#if gauge.showUnit}
-        <span style="color: {gauge.textColor}; font-size: {unitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+        <span style="color: {displayTextColor}; font-size: {unitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.unit}
         </span>
       {/if}
       {#if gauge.showName}
-        <span class="truncate max-w-full" style="color: {gauge.textColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+        <span class="truncate max-w-full" style="color: {displayTextColor}; font-size: {nameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.name}
         </span>
       {/if}
     </div>
+  {/if}
+
+  {#if sparklinePath && valueHistory.length > 1}
+    <svg class="pointer-events-none absolute inset-0" width={pixelWidth} height={pixelHeight}>
+      <path d={sparklineFillPath} fill={displayTextColor ?? gauge.textColor} opacity="0.08" />
+      <path d={sparklinePath} fill="none" stroke={displayTextColor ?? gauge.textColor} stroke-width="1.5" opacity="0.35" />
+    </svg>
   {/if}
 </div>

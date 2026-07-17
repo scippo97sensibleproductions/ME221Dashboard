@@ -134,6 +134,8 @@ export interface GaugeConfigEntry {
   colorHysteresis: number;
   smoothingEnabled: boolean;
   smoothingFactor: number;
+  smoothingResponseMs: number;
+  spikeGatePercent: number;
   fractionX: number;
   fractionY: number;
   widthFraction: number;
@@ -153,6 +155,8 @@ export interface GaugeConfigEntry {
   // Value transforms
   transformSteps?: ValueTransformStep[];
   customUnitLabel?: string | null;
+  // Histogram
+  showHistogram?: boolean;
 }
 
 export interface DashboardTableEntry {
@@ -165,6 +169,8 @@ export interface DashboardTableEntry {
   colorScheme?: ColorScheme;
   showLabels?: boolean;
   showDimensionBadge?: boolean;
+  traceXLink?: number | null;
+  traceYLink?: number | null;
 }
 
 export interface EntityInfo {
@@ -202,6 +208,8 @@ export interface SaveLayoutPayload {
   iconSize?: number;
   smoothingEnabled?: boolean;
   smoothingFactor?: number;
+  smoothingResponseMs?: number;
+  spikeGatePercent?: number;
   barValuePosition?: number;
   barUnitPosition?: number;
   barNamePosition?: number;
@@ -222,6 +230,8 @@ export interface SaveLayoutPayload {
   zIndex?: number;
   transformSteps?: ValueTransformStep[];
   customUnitLabel?: string | null;
+  traceXLink?: number | null;
+  traceYLink?: number | null;
 }
 
 // ─── Vehicle Config ──────────────────────────────────────────────────────────
@@ -246,6 +256,8 @@ export interface AvailableSensor {
   name: string;
   category: string;
   unit: string;
+  minValue: number;
+  maxValue: number;
   inEntityMap: boolean;
   isSelected: boolean;
   customization: SensorCustomization | null;
@@ -256,6 +268,8 @@ export interface SensorCustomization {
   customUnit: string | null;
   minRange: number | null;
   maxRange: number | null;
+  minRangeBypass: boolean;
+  maxRangeBypass: boolean;
 }
 
 export interface AvailableSensorsResult {
@@ -404,6 +418,49 @@ export interface DataLinkDefinition {
 export interface DataLinksResult {
   dataLinks: DataLinkDefinition[];
   error?: string;
+}
+
+// ─── Warning Centre Types ────────────────────────────────────────────────────
+
+export type WarningSettingStatus = 'Typical' | 'Custom' | 'Disabled';
+
+export interface DataLinkWarningSetting {
+  dataId: number;
+  enabled: boolean;
+  minWarning: number | null;
+  maxWarning: number | null;
+  name: string;
+  unit: string;
+  category: string;
+  status: WarningSettingStatus;
+}
+
+export interface WarningHistoryEntry {
+  id: number;
+  dataId: number;
+  name: string;
+  unit: string;
+  category: string;
+  value: number;
+  severity: string;
+  threshold: number;
+  thresholdType: string;
+  triggeredAt: number;
+  clearedAt: number | null;
+}
+
+// ─── User Preferences Types ────────────────────────────────────────────────
+
+export interface ConnectionPreference {
+  type: string;
+  host?: string;
+  port?: number;
+  serialPort?: string;
+}
+
+export interface LambdaSettings {
+  useLambdaMode: boolean;
+  stoichAfr: number;
 }
 
 // ─── HybridWebView Global ───────────────────────────────────────────────────

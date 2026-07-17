@@ -420,7 +420,7 @@
 <div class="flex h-full flex-col" role="grid">
   <!-- Data Grid -->
   <div class="shrink-0" style="border-bottom: 1px solid var(--metro-border);">
-    <div class="overflow-x-auto">
+    <div class="overflow-hidden">
       <div class="grid w-fit" style={gridStyle}>
         <!-- Corner -->
         <div

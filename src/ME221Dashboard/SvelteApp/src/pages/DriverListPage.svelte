@@ -17,17 +17,15 @@
   let loading = $state(true);
   let mounted = false;
 
-  function loadFavorites() {
+  async function loadFavorites() {
     try {
-      const stored = localStorage.getItem('me221-driver-favorites');
-      if (stored) favorites = new Set(JSON.parse(stored));
+      const stored = await HybridBridge.getFavoriteDrivers();
+      if (Array.isArray(stored)) favorites = new Set(stored);
     } catch {}
   }
 
   function saveFavorites() {
-    try {
-      localStorage.setItem('me221-driver-favorites', JSON.stringify([...favorites]));
-    } catch {}
+    HybridBridge.saveFavoriteDrivers([...favorites]).catch(() => {});
   }
 
   function toggleFavorite(id: number) {
@@ -38,19 +36,17 @@
     saveFavorites();
   }
 
-  function loadRecent() {
+  async function loadRecent() {
     try {
-      const stored = localStorage.getItem('me221-recent-drivers');
-      if (stored) recentIds = JSON.parse(stored);
+      const stored = await HybridBridge.getRecentDrivers();
+      if (Array.isArray(stored)) recentIds = stored;
     } catch {}
   }
 
   function trackRecent(id: number) {
     const newRecent = [id, ...recentIds.filter(r => r !== id)].slice(0, 10);
     recentIds = newRecent;
-    try {
-      localStorage.setItem('me221-recent-drivers', JSON.stringify(newRecent));
-    } catch {}
+    HybridBridge.saveRecentDrivers(newRecent).catch(() => {});
   }
 
   let categories = $derived.by(() => {

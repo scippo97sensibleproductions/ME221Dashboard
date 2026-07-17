@@ -135,6 +135,40 @@
   });
   let range = $derived(tableData ? getDataRange(tableData.output) : { min: 0, max: 100 });
 
+  const MAX_GHOST_DOTS = 50;
+
+  let ghostTrailDots = $derived.by(() => {
+    const history = liveDataStore.operatingPointHistory;
+    if (!history || history.length === 0 || !tableDef || !tableData) return [];
+    const step = Math.max(1, Math.floor(history.length / MAX_GHOST_DOTS));
+    const dots: { x: number; y: number; opacity: number }[] = [];
+    const len = history.length;
+    for (let i = 0; i < len; i += step) {
+      const sample = history[i];
+      const raw0 = tableDef.input0LinkId ? sample.values[String(tableDef.input0LinkId)] : null;
+      if (raw0 == null) continue;
+      const x = fromRaw(raw0, tableDef.input0UnitType ?? 0);
+      const colRange = findInterpolationRange(x, tableData.input0);
+      let colFrac = colRange.lower + (colRange.lower === colRange.upper ? 0.5 : colRange.fraction);
+      colFrac = Math.max(0, Math.min(tableDef.cols, colFrac));
+      let rowFrac = 0.5;
+      if (!is1D && tableDef.input1LinkId && tableDef.input1LinkId !== 0) {
+        const raw1 = sample.values[String(tableDef.input1LinkId)];
+        if (raw1 == null) continue;
+        const y = fromRaw(raw1, tableDef.input1UnitType ?? 0);
+        const rowRange = findInterpolationRange(y, tableData.input1);
+        rowFrac = rowRange.lower + (rowRange.lower === rowRange.upper ? 0.5 : rowRange.fraction);
+        rowFrac = Math.max(0, Math.min(tableDef.rows, rowFrac));
+      }
+      const dotX = colFrac * layout.cellW;
+      const dotY = is1D ? layout.gridH / 2 : rowFrac * layout.cellH;
+      const t = len > 1 ? i / (len - 1) : 1;
+      const opacity = 0.1 + 0.9 * t;
+      dots.push({ x: dotX, y: dotY, opacity });
+    }
+    return dots;
+  });
+
   // Pick cell dimensions to fit
   let layout = $derived.by(() => {
     if (!tableDef || !tableData) {
@@ -333,6 +367,17 @@
             </tr>
           </tbody>
         </table>
+        {#if ghostTrailDots.length > 0}
+          <div class="pointer-events-none absolute" style="z-index: 10; left: 0; top: {layout.labelH}px; width: {layout.cellW * layout.cols}px; height: {layout.gridH}px;">
+            {#each ghostTrailDots as dot}
+              <div
+                class="absolute rounded-full"
+                style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
+                aria-hidden="true"
+              ></div>
+            {/each}
+          </div>
+        {/if}
         {#if opColRange && liveOutputVal != null}
           {@const dotX = (opColRange.lower + (opColRange.lower === opColRange.upper ? 0.5 : opColRange.fraction)) * layout.cellW}
           <div class="pointer-events-none absolute rounded-full" style="left: {dotX - 5}px; top: {layout.gridH / 2 - 5}px; width: 10px; height: 10px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.95), 0 0 0 2px rgba(0,0,0,0.4); z-index: 20;" aria-hidden="true"></div>
@@ -398,6 +443,17 @@
             {/each}
           </tbody>
         </table>
+        {#if ghostTrailDots.length > 0}
+          <div class="pointer-events-none absolute" style="z-index: 10; left: 0; top: 0; width: {layout.gridW}px; height: {layout.gridH}px;">
+            {#each ghostTrailDots as dot}
+              <div
+                class="absolute rounded-full"
+                style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
+                aria-hidden="true"
+              ></div>
+            {/each}
+          </div>
+        {/if}
         {#if opColRange && opRowRange && liveOutputVal != null}
           {@const dotX = (opColRange.lower + (opColRange.lower === opColRange.upper ? 0.5 : opColRange.fraction)) * layout.cellW}
           {@const dotY = (opRowRange.lower + (opRowRange.lower === opRowRange.upper ? 0.5 : opRowRange.fraction)) * layout.cellH}

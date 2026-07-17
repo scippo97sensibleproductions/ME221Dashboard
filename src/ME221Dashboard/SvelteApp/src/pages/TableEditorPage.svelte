@@ -22,6 +22,9 @@
   import type { Bookmark } from '../lib/tables/tableUndoRedo';
   import HistoryViewer from '../lib/tables/HistoryViewer.svelte';
   import LiveSidePanel from '../lib/tables/LiveSidePanel.svelte';
+  import { IconPointer, IconCopy, IconClipboard, IconTransform, IconRowInsertTop, IconColumnInsertRight, IconSelectAll, IconTarget } from '@tabler/icons-svelte';
+  import TracePanel from '../lib/tables/TracePanel.svelte';
+  import Graph3D from '../lib/tables/Graph3D.svelte';
   import type { DataLinkDefinition } from '../lib/HybridBridgeTypes';
 
   let { tableId, onNavigate, onBack }: {
@@ -197,14 +200,15 @@
 
   // Notes
   let notesOpen = $state(false);
-  let hasNote = $derived.by(() => {
-    if (!tableId) return false;
+  let hasNote = $state(false);
+
+  async function refreshHasNote() {
+    if (!tableId) { hasNote = false; return; }
     try {
-      return !!localStorage.getItem(`me221-note-${tableId}`);
-    } catch {
-      return false;
-    }
-  });
+      const notes = await HybridBridge.getTableNotes();
+      hasNote = !!notes[tableId];
+    } catch { hasNote = false; }
+  }
 
   // Cell editor
   let editorOpen = $state(false);
@@ -223,6 +227,55 @@
   let livePanelSensorIds = $state<number[]>([]);
   let allDataLinks = $state<DataLinkDefinition[]>([]);
   let liveValues = $derived(liveDataStore.values);
+
+  // Trace panel
+  let tracePanelOpen = $state(true);
+  let traceXLinkId = $state<number | null>(null);
+  let traceYLinkId = $state<number | null>(null);
+  let traceXLabel = $state('Time');
+  let traceYLabel = $state('RPM');
+
+  // 3D view
+  let view3D = $state(false);
+  let graph3dRef = $state<any>(null);
+
+  function loadTracePanelState() {
+    try {
+      const raw = localStorage.getItem(`table-trace-panel-${tableId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        tracePanelOpen = parsed.open ?? true;
+        traceXLinkId = parsed.xLinkId ?? null;
+        traceYLinkId = parsed.yLinkId ?? null;
+      }
+    } catch {}
+    updateTraceLabels();
+  }
+
+  function saveTracePanelState() {
+    try {
+      localStorage.setItem(`table-trace-panel-${tableId}`, JSON.stringify({
+        open: tracePanelOpen,
+        xLinkId: traceXLinkId,
+        yLinkId: traceYLinkId,
+      }));
+    } catch {}
+  }
+
+  function updateTraceLabels() {
+    if (traceXLinkId === null) {
+      traceXLabel = 'Time';
+    } else {
+      const link = allDataLinks.find(l => l.id === traceXLinkId);
+      traceXLabel = link ? link.name : 'X';
+    }
+    if (traceYLinkId === null) {
+      traceYLabel = 'RPM';
+    } else {
+      const link = allDataLinks.find(l => l.id === traceYLinkId);
+      traceYLabel = link ? link.name : 'Y';
+    }
+  }
 
   function loadLivePanelState() {
     try {
@@ -413,6 +466,13 @@
       }
       tableDef = def;
 
+      // Default trace Y axis to this table's primary input (RPM) if not configured
+      if (traceYLinkId === null && def.input0LinkId) {
+        traceYLinkId = def.input0LinkId;
+        updateTraceLabels();
+        saveTracePanelState();
+      }
+
       const data = await HybridBridge.readTableData(tableId);
       if (!mounted) return;
       if (!data.success || !data.input0 || !data.output) {
@@ -427,24 +487,20 @@
         output: data.output,
       };
 
-      // Restore session cache if it exists (user navigated away and came back)
+      // Always set originalData to fresh ECU data (dirty is computed against this)
+      originalData = JSON.parse(JSON.stringify(tableData));
+
+      // Restore bookmarks from session cache if it exists
       const cached = loadSessionCache(tableId);
       if (cached) {
-        undoStack = cached.undoStack;
-        redoStack = cached.redoStack;
-        originalData = cached.originalData;
         bookmarks = cached.bookmarks ?? [];
-      } else {
-        originalData = JSON.parse(JSON.stringify(tableData));
-        undoStack = [];
-        redoStack = [];
-        bookmarks = [];
       }
+      undoStack = [];
+      redoStack = [];
 
       dirtyCells = new Set();
       dirtyInput0 = new Set();
       dirtyInput1 = new Set();
-      recalculateDirty();
     } catch (e) {
       if (!mounted) return;
       error = e instanceof Error ? e.message : 'Unknown error';
@@ -546,6 +602,48 @@
     redoStack = [];
     recalculateDirty();
     toast('All changes reverted', 'info');
+  }
+
+  // ─── 3D editing ──────────────────────────────────────────────────────────
+
+  function handle3DEditCell(row: number, col: number, newVal: number) {
+    if (!tableData || !tableDef) return;
+    const groupId = newGroupId();
+    const key = cellKey(row, col);
+    const oldVal = getOutputValue(tableData, row, col, tableDef.cols);
+    if (oldVal === newVal) return;
+    const newOutput = [...tableData.output];
+    newOutput[row * tableDef.cols + col] = newVal;
+    tableData = { ...tableData, output: newOutput };
+    undoStack = [...undoStack, { type: 'output', key, row, col, oldVal, newVal, groupId }];
+    redoStack = [];
+    recalculateDirty();
+  }
+
+  function handle3DSelectionChange(row: number, col: number) {
+    selectedRow = row;
+    selectedCol = col;
+    editMode = 'output';
+  }
+
+  function handle3DBatchEdit(edits: Array<{ row: number; col: number; newVal: number }>) {
+    if (!tableData || !tableDef) return;
+    const groupId = newGroupId();
+    const newOutput = [...tableData.output];
+    const entries: typeof undoStack = [];
+    for (const edit of edits) {
+      const key = cellKey(edit.row, edit.col);
+      const oldVal = getOutputValue(tableData, edit.row, edit.col, tableDef.cols);
+      if (oldVal === edit.newVal) continue;
+      newOutput[edit.row * tableDef.cols + edit.col] = edit.newVal;
+      entries.push({ type: 'output', key, row: edit.row, col: edit.col, oldVal, newVal: edit.newVal, groupId });
+    }
+    if (entries.length > 0) {
+      tableData = { ...tableData, output: newOutput };
+      undoStack = [...undoStack, ...entries];
+      redoStack = [];
+      recalculateDirty();
+    }
   }
 
   // ─── Copy/Paste ──────────────────────────────────────────────────────
@@ -1043,11 +1141,14 @@
     loadTable();
     loadAllTables();
     loadLivePanelState();
+    loadTracePanelState();
+    refreshHasNote();
 
-    // Load data links for side panel sensor picker
+    // Load data links for side panel sensor picker and trace axis labels
     HybridBridge.getDataLinks().then(result => {
       if (!mounted) return;
       allDataLinks = result.dataLinks ?? [];
+      updateTraceLabels();
     }).catch(() => {});
   });
 
@@ -1235,6 +1336,8 @@
       onOpenHistory={() => { historyOpen = true; }}
       {livePanelOpen}
       onToggleLivePanel={() => { livePanelOpen = !livePanelOpen; saveLivePanelState(); }}
+      {view3D}
+      onToggleView3D={is1D ? undefined : () => { view3D = !view3D; }}
     />
 
     <!-- Selection hint -->
@@ -1268,91 +1371,137 @@
     {/if}
 
     <!-- Editor area + Live side panel -->
-    <div class="flex flex-1 min-h-0 overflow-hidden">
-      <div class="relative flex-1 min-h-0 overflow-hidden">
-      {#if is1D}
-        <CurveEditor
-          {tableDef}
-          {tableData}
-          {selectedCol}
-          opColRange={opColRange}
-          {minVal}
-          {maxVal}
-          {anchor}
-          {selection}
-          {selectionType}
-          {dirtyCells}
-          {dirtyInput0}
-          {diffMode}
-          {originalData}
-          {colorScheme}
-          {liveOutputValue}
-          onCellClick={handleCellClick}
-          onAxis0Click={handleAxis0Click}
-          onAnchorSet={handleAnchorSet}
-          onSelectionComplete={handleSelectionComplete}
-          onSelectionClear={clearSelection}
-          onContextMenu={handleContextMenu}
-        />
-      {:else}
-  <TableGrid
-    {tableDef}
-    {tableData}
-    {selectedRow}
-    {selectedCol}
-    {editMode}
-    opRowRange={opRowRange}
-    opColRange={opColRange}
-    {dirtyCells}
-    {dirtyInput0}
-    {dirtyInput1}
-    {minVal}
-    {maxVal}
-    {anchor}
-    {selection}
-    {selectionType}
-    {diffMode}
-    {originalData}
-    {colorScheme}
-    {showContours}
-    {liveOutputValue}
-    onCellClick={handleCellClick}
-          onAxis0Click={handleAxis0Click}
-          onAxis1Click={handleAxis1Click}
-          onAnchorSet={handleAnchorSet}
-          onSelectionComplete={handleSelectionComplete}
-          onSelectionClear={clearSelection}
-          onContextMenu={handleContextMenu}
-        />
-      {/if}
-
-      <CellEditor
-        open={editorOpen}
-        tableName={tableDef.name}
-        label={editorLabel}
-        value={editorValue}
-        originalValue={editorOriginalValue}
-        increment={tableDef.incrementValue}
-        {editMode}
-        axisName={editMode === 'input0' ? tableDef.input0Name : editMode === 'input1' ? tableDef.input1Name : ''}
-        onApply={handleApplyValue}
-        onRevert={handleRevertCell}
-        onClose={() => { editorOpen = false; }}
-      />
-    </div>
-
-    <LiveSidePanel
-      open={livePanelOpen}
+    <div class="flex flex-1 min-h-0 overflow-hidden flex-col">
+      <div class="flex flex-1 min-h-0 overflow-hidden">
+        <div class="relative flex-1 min-h-0 overflow-hidden">
+        {#if is1D}
+          <CurveEditor
+            {tableDef}
+            {tableData}
+            {selectedCol}
+            opColRange={opColRange}
+            {minVal}
+            {maxVal}
+            {anchor}
+            {selection}
+            {selectionType}
+            {dirtyCells}
+            {dirtyInput0}
+            {diffMode}
+            {originalData}
+            {colorScheme}
+            {liveOutputValue}
+            onCellClick={handleCellClick}
+            onAxis0Click={handleAxis0Click}
+            onAnchorSet={handleAnchorSet}
+            onSelectionComplete={handleSelectionComplete}
+            onSelectionClear={clearSelection}
+            onContextMenu={handleContextMenu}
+          />
+        {:else if view3D}
+          <Graph3D
+            {tableDef}
+            {tableData}
+            {colorScheme}
+            showContours={showContours}
+            {opRow}
+            {opCol}
+            operatingPointHistory={liveDataStore.operatingPointHistory}
+            onEditCell={handle3DEditCell}
+            onBatchEdit={handle3DBatchEdit}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onSelectionChange={handle3DSelectionChange}
+          />
+        {:else}
+    <TableGrid
       {tableDef}
-      {liveValues}
-      dataLinks={allDataLinks}
-      sensorIds={livePanelSensorIds}
-      onAddSensor={handleAddLiveSensor}
-      onRemoveSensor={handleRemoveLiveSensor}
-      onClose={() => { livePanelOpen = false; saveLivePanelState(); }}
-    />
-  </div>
-  {/if}
+      {tableData}
+      {selectedRow}
+      {selectedCol}
+      {editMode}
+      opRowRange={opRowRange}
+      opColRange={opColRange}
+      {dirtyCells}
+      {dirtyInput0}
+      {dirtyInput1}
+      {minVal}
+      {maxVal}
+      {anchor}
+      {selection}
+      {selectionType}
+      {diffMode}
+      {originalData}
+      {colorScheme}
+      {showContours}
+      {liveOutputValue}
+      opHistory={liveDataStore.operatingPointHistory}
+      onCellClick={handleCellClick}
+            onAxis0Click={handleAxis0Click}
+            onAxis1Click={handleAxis1Click}
+            onAnchorSet={handleAnchorSet}
+            onSelectionComplete={handleSelectionComplete}
+            onSelectionClear={clearSelection}
+            onContextMenu={handleContextMenu}
+          />
+        {/if}
+
+        <CellEditor
+          open={editorOpen}
+          tableName={tableDef.name}
+          label={editorLabel}
+          value={editorValue}
+          originalValue={editorOriginalValue}
+          increment={tableDef.incrementValue}
+          {editMode}
+          axisName={editMode === 'input0' ? tableDef.input0Name : editMode === 'input1' ? tableDef.input1Name : ''}
+          onApply={handleApplyValue}
+          onRevert={handleRevertCell}
+          onClose={() => { editorOpen = false; }}
+        />
+        </div>
+
+        <LiveSidePanel
+          open={livePanelOpen}
+          {tableDef}
+          {liveValues}
+          dataLinks={allDataLinks}
+          sensorIds={livePanelSensorIds}
+          onAddSensor={handleAddLiveSensor}
+          onRemoveSensor={handleRemoveLiveSensor}
+          onClose={() => { livePanelOpen = false; saveLivePanelState(); }}
+        />
+      </div>
+
+      <!-- Trace Panel -->
+      <div class="flex-shrink-0" style="border-top: 1px solid var(--metro-border-subtle, rgba(255,255,255,0.08));">
+        <button
+          class="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150"
+          style="background-color: var(--metro-surface, rgba(0,0,0,0.3)); color: var(--metro-text-secondary, rgba(255,255,255,0.5));"
+          onclick={() => { tracePanelOpen = !tracePanelOpen; saveTracePanelState(); }}
+        >
+          <span class="inline-block transition-transform duration-150 {tracePanelOpen ? 'rotate-90' : ''}">&#9654;</span>
+          Trace Panel
+          {#if tracePanelOpen}
+            <span class="ml-auto text-[10px] opacity-60">{traceXLabel} vs {traceYLabel}</span>
+          {/if}
+        </button>
+        {#if tracePanelOpen}
+          <div class="px-2 pb-2" style="background-color: var(--metro-bg);">
+            <TracePanel
+              history={liveDataStore.operatingPointHistory}
+              xAxisLabel={traceXLabel}
+              yAxisLabel={traceYLabel}
+              xAxisLinkId={traceXLinkId}
+              yAxisLinkId={traceYLinkId}
+              width={600}
+              height={220}
+            />
+          </div>
+        {/if}
+      </div>
+    </div>
+    {/if}
 </div>
 
 <ConfirmDialog
@@ -1384,8 +1533,6 @@
         : Math.abs(selection.endRow - selection.startRow) + 1}
     {selectionType}
     onApply={handleTransform}
-    onImportYaml={handleImportYaml}
-    onExportYaml={handleExportYaml}
     onClose={() => { opsSheetOpen = false; }}
   />
 {/if}
@@ -1395,7 +1542,7 @@
     open={notesOpen}
     tableId={tableDef.id}
     tableName={tableDef.name}
-    onclose={() => { notesOpen = false; hasNote = !!localStorage.getItem(`me221-note-${tableDef!.id}`); }}
+    onclose={() => { notesOpen = false; refreshHasNote(); }}
   />
 {/if}
 
@@ -1404,14 +1551,14 @@
   x={contextMenuX}
   y={contextMenuY}
   items={[
-    { label: 'Select Cell', action: 'selectCell' },
-    { label: 'Copy', action: 'copy' },
-    { label: 'Paste', action: 'paste' },
-    { label: 'Transform', action: 'transform' },
-    { label: 'Select Row', action: 'selectRow' },
-    { label: 'Select Column', action: 'selectCol' },
-    { label: 'Select All', action: 'selectAll' },
-    { label: 'Jump to Operating Point', action: 'jumpToOp', disabled: opRow < 0 || opCol < 0 },
+    { label: 'Select Cell', action: 'selectCell', icon: IconPointer },
+    { label: 'Copy', action: 'copy', icon: IconCopy },
+    { label: 'Paste', action: 'paste', icon: IconClipboard },
+    { label: 'Transform', action: 'transform', icon: IconTransform },
+    { label: 'Select Row', action: 'selectRow', icon: IconRowInsertTop },
+    { label: 'Select Column', action: 'selectCol', icon: IconColumnInsertRight },
+    { label: 'Select All', action: 'selectAll', icon: IconSelectAll },
+    { label: 'Jump to Op Point', action: 'jumpToOp', icon: IconTarget, disabled: opRow < 0 || opCol < 0 },
   ]}
   onSelect={handleContextMenuAction}
   onClose={() => { contextMenuOpen = false; }}

@@ -1,3 +1,5 @@
+using ME221.Data;
+using ME221.Data.Infrastructure;
 using ME221.Data.Models;
 using ME221.Emulator.Application;
 using ME221.Emulator.Application.Handlers;
@@ -65,7 +67,35 @@ try
             cal = loader.Load(fallbackPath);
         }
         if (cal is null)
-            throw new InvalidOperationException($"Failed to load calibration from '{calibrationPath}'");
+        {
+            serilogLogger.Information("No calibration.json found. Provide a .mefw file to create one.");
+            Console.Write("Enter path to .mefw file (or press Enter to exit): ");
+            var mefwPath = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(mefwPath))
+                throw new InvalidOperationException("No .mefw file provided — exiting.");
+
+            mefwPath = Path.GetFullPath(mefwPath);
+            if (!File.Exists(mefwPath))
+                throw new FileNotFoundException($"File not found: {mefwPath}");
+
+            serilogLogger.Information("Loading .mefw from '{Path}'", mefwPath);
+            var defXml = MefwReader.ReadDefXml(mefwPath);
+            cal = DefXmlParser.Parse(defXml);
+
+            var saveDir = Path.GetDirectoryName(Path.GetFullPath(calibrationPath))!;
+            Directory.CreateDirectory(saveDir);
+            var json = System.Text.Json.JsonSerializer.Serialize(cal, CalibrationJsonContext.Default.CalibrationData);
+            File.WriteAllText(Path.Combine(saveDir, "calibration.json"), json);
+            serilogLogger.Information("Saved calibration.json from .mefw — {Links} links, {Tables} tables, {Drivers} drivers",
+                cal.DataLinks.Count, cal.Tables.Count, cal.Drivers.Count);
+
+            var appDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ME221", "calibration.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(appDataPath)!);
+            File.WriteAllText(appDataPath, json);
+            serilogLogger.Information("Also saved to '{Path}'", appDataPath);
+        }
         return cal;
     });
     services.AddSingleton<CalibrationLoader>();

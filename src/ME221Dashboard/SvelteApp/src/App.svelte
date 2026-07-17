@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type GpsLocation, type UpdateCheckResult } from './lib/HybridBridge';
+  import type { DataLinkWarningSetting } from './lib/HybridBridgeTypes';
+  import { computeWarningState, buildWarningMap } from './lib/gauges/types';
   import WelcomePage from './pages/WelcomePage.svelte';
   import ConnectionPage from './pages/ConnectionPage.svelte';
   import CalibrationPage from './pages/CalibrationPage.svelte';
@@ -12,6 +14,7 @@
   import DriverEditorPage from './pages/DriverEditorPage.svelte';
   import LogsPage from './pages/LogsPage.svelte';
   import EcuMonitorPage from './pages/EcuMonitorPage.svelte';
+  import WarningSettingsPage from './pages/WarningSettingsPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
   import type { NotificationType } from './lib/NotificationModal.svelte';
   import ToastContainer from './lib/ToastContainer.svelte';
@@ -20,6 +23,8 @@
   import NewDashboardDialog from './lib/NewDashboardDialog.svelte';
   import VehicleConfigModal from './lib/VehicleConfigModal.svelte';
   import UpdateAvailableModal from './lib/UpdateAvailableModal.svelte';
+  import WarningPanel from './lib/WarningPanel.svelte';
+  import { warningStore } from './lib/stores/warningStore.svelte';
 
   let _updateChecked = false;
 
@@ -41,7 +46,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'warnings';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -64,6 +69,46 @@
   let allSensors = $state<{ id: number; name: string }[]>([]);
   let updateCheckResult = $state<UpdateCheckResult | null>(null);
   let updateModalOpen = $state(false);
+
+  // ─── Global warning computation ───────────────────────────────────────
+  let warningSettings = $state<DataLinkWarningSetting[] | null>(null);
+  let warningMap = $state<Map<number, DataLinkWarningSetting> | null>(null);
+
+  // Load warning settings when connected
+  $effect(() => {
+    if (isConnected) {
+      HybridBridge.getWarningSettings().then(s => {
+        warningSettings = s;
+        warningMap = s ? buildWarningMap(s) : null;
+      }).catch(() => {});
+    } else {
+      warningSettings = null;
+      warningMap = null;
+    }
+  });
+
+  // Compute warnings globally — runs regardless of which page is mounted
+  $effect(() => {
+    void liveDataStore.frameCount;
+    const ws = warningMap;
+    if (!ws || ws.size === 0) return;
+    const v = liveDataStore.values;
+    for (const [dataId, setting] of ws) {
+      if (!setting.enabled) continue;
+      const val = v[String(dataId)];
+      if (val == null) continue;
+      const newState = computeWarningState(val, ws, dataId);
+      warningStore.updateWarning(
+        dataId,
+        setting.name,
+        setting.unit,
+        setting.category,
+        val,
+        newState,
+        warningSettings
+      );
+    }
+  });
 
   let showBottomBar = $derived(sidebarVisible && isConnected && currentPage !== 'welcome' && currentPage !== 'connection' && currentPage !== 'calibration');
 
@@ -155,6 +200,7 @@
     connectionState = { state: 'Disconnected' };
     currentPage = 'connection';
     isManualDisconnect = false;
+    warningStore.reset();
   }
 
   async function exportDashboard() {
@@ -228,7 +274,7 @@
     navigateTo(page, params);
   }
 
-  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor'];
+  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor', 'warnings'];
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_BASE_DELAY_MS = 1500;
 
@@ -323,11 +369,11 @@
       return;
     }
 
-    // Read last connection params from localStorage
+    // Read last connection params from native file
     let params: { type?: string; host?: string; port?: number; serialPort?: string } = {};
     try {
-      const raw = localStorage.getItem('me221_lastConnection');
-      if (raw) params = JSON.parse(raw);
+      const last = await HybridBridge.getLastConnection();
+      if (last) params = last;
     } catch {}
 
     if (!params.type) {
@@ -349,14 +395,12 @@
       }
 
       if (result.success) {
-        // Update localStorage if device was renamed (Android USB re-enumeration)
+        // Update native file if device was renamed (Android USB re-enumeration)
         if (result.deviceName && result.deviceName !== params.serialPort) {
-          try {
-            localStorage.setItem('me221_lastConnection', JSON.stringify({
-              type: params.type,
-              serialPort: result.deviceName,
-            }));
-          } catch {}
+          HybridBridge.saveLastConnection({
+            type: params.type ?? 'serial',
+            serialPort: result.deviceName,
+          }).catch(() => {});
         }
         // Reconnected — serialize: reporting → names → restore page
         const restorePage = pageBeforeDisconnect;
@@ -431,6 +475,7 @@
   onMount(() => {
     startup();
     liveDataStore.start();
+    warningStore.loadHistory();
 
     // Check for updates once per session (non-blocking)
     if (!_updateChecked) {
@@ -549,6 +594,8 @@
         <LogsPage onNavigate={navigateTo} />
       {:else if currentPage === 'ecuMonitor'}
         <EcuMonitorPage onNavigate={navigateTo} {connectionState} />
+      {:else if currentPage === 'warnings'}
+        <WarningSettingsPage onNavigate={navigateTo} />
       {/if}
     </main>
   </div>
@@ -578,6 +625,7 @@
   {/if}
 
   <NotificationModal bind:open={notification.show} type={notification.type} title={notification.title} message={notification.message} />
+  <WarningPanel />
   <ToastContainer />
 </div>
 

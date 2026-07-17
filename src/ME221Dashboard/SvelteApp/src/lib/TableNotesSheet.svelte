@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Modal, Button } from 'flowbite-svelte';
+  import { HybridBridge } from './HybridBridge';
 
   let { open, tableId, tableName, onclose }: {
     open: boolean;
@@ -12,29 +13,30 @@
 
   $effect(() => {
     if (open) {
-      try {
-        const stored = localStorage.getItem(`me221-note-${tableId}`);
-        noteText = stored || '';
-      } catch {
-        noteText = '';
-      }
+      HybridBridge.getTableNotes().then(notes => {
+        noteText = notes[tableId] ?? '';
+      }).catch(() => { noteText = ''; });
     }
   });
 
-  function save() {
+  async function save() {
     try {
+      const notes = await HybridBridge.getTableNotes();
       if (noteText.trim()) {
-        localStorage.setItem(`me221-note-${tableId}`, noteText);
+        notes[tableId] = noteText;
       } else {
-        localStorage.removeItem(`me221-note-${tableId}`);
+        delete notes[tableId];
       }
+      await HybridBridge.saveTableNotes(notes);
     } catch {}
     onclose();
   }
 
-  function deleteNote() {
+  async function deleteNote() {
     try {
-      localStorage.removeItem(`me221-note-${tableId}`);
+      const notes = await HybridBridge.getTableNotes();
+      delete notes[tableId];
+      await HybridBridge.saveTableNotes(notes);
     } catch {}
     noteText = '';
     onclose();

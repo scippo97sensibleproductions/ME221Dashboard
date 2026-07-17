@@ -56,6 +56,7 @@ public static class DefXmlParser
                 MaxValue = (float?)elem.Element("MaxValue") ?? 0f,
                 DataKey = (string?)elem.Element("DataKey"),
                 TextValues = [.. ParseTextValues(elem)],
+                Feedbacks = [.. ParseFeedbacks(elem)],
             };
         }
     }
@@ -86,6 +87,83 @@ public static class DefXmlParser
                 Value = (float)tv.Element("value")!,
                 Text = (string?)tv.Element("text") ?? "",
             };
+        }
+    }
+
+    private static IEnumerable<DataLinkFeedback> ParseFeedbacks(XElement parent)
+    {
+        var feedbacks = parent.Element("Feedbacks");
+        if (feedbacks is null) yield break;
+
+        foreach (var elem in feedbacks.Elements())
+        {
+            if (!TryParseFeedbackSeverity(elem.Name.LocalName, out var severity))
+                continue;
+
+            var constraints = elem.Element("Constraints");
+            float? minValue = null;
+            float? maxValue = null;
+
+            if (constraints is not null)
+            {
+                foreach (var c in constraints.Elements())
+                {
+                    var valStr = c.Attribute("Value")?.Value;
+                    if (string.IsNullOrEmpty(valStr)) continue;
+
+                    // Eq constraints have space-separated array values (e.g. "3 4") — skip, no range equivalent
+                    if (c.Name.LocalName == "Eq" || valStr.Contains(' ')) continue;
+
+                    if (!float.TryParse(valStr, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var val))
+                        continue;
+
+                    switch (c.Name.LocalName)
+                    {
+                        case "Gt":
+                            minValue = val;
+                            break;
+                        case "GtEq":
+                            minValue = minValue.HasValue ? Math.Max(minValue.Value, val) : val;
+                            break;
+                        case "Lt":
+                            maxValue = val;
+                            break;
+                        case "LtEq":
+                            maxValue = maxValue.HasValue ? Math.Min(maxValue.Value, val) : val;
+                            break;
+                    }
+                }
+            }
+
+            var flashing = (bool?)elem.Attribute("Flashing") ?? false;
+
+            yield return new DataLinkFeedback
+            {
+                Severity = severity,
+                MinValue = minValue,
+                MaxValue = maxValue,
+                Flashing = flashing,
+            };
+        }
+    }
+
+    private static bool TryParseFeedbackSeverity(string name, out DataLinkFeedbackSeverity severity)
+    {
+        switch (name)
+        {
+            case "Ok":
+                severity = DataLinkFeedbackSeverity.Ok;
+                return true;
+            case "Warning":
+                severity = DataLinkFeedbackSeverity.Warning;
+                return true;
+            case "Alarm":
+                severity = DataLinkFeedbackSeverity.Alarm;
+                return true;
+            default:
+                severity = default;
+                return false;
         }
     }
 
