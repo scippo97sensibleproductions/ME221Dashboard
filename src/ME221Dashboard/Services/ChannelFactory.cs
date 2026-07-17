@@ -156,7 +156,12 @@ public sealed class ChannelFactory(ILoggerFactory? loggerFactory = null) : IChan
                 // Try to create a generic UsbSerialPort using the driver factory
                 try
                 {
-                    var genericDriver = new Anotherlab.UsbSerialForAndroid.Driver.CdcAcmSerialDriver(device);
+                    // Force enableAsyncReads=false: the async path uses
+                    // RequestWait() which blocks indefinitely with no timeout,
+                    // starving writes and causing connection loss under load.
+                    // BulkTransfer respects the timeout parameter and returns
+                    // promptly, matching MEITE's SerialPort.Read(350ms) behavior.
+                    var genericDriver = new Anotherlab.UsbSerialForAndroid.Driver.CdcAcmSerialDriver(device, enableAsyncReads: false);
                     if (genericDriver.Ports.Count > 0)
                     {
                         _logger?.LogInformation("FindSerialInterface: created CdcAcmSerialDriver with {Count} port(s)", genericDriver.Ports.Count);

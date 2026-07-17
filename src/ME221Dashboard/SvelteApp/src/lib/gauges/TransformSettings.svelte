@@ -1,19 +1,18 @@
 <script lang="ts">
   import { ValueTransformOperation, applyTransform, stepError, isTransformable } from './transformUtils';
   import type { ValueTransformStep } from './transformUtils';
-  import { formatValue } from './types';
   import { IconX, IconPlus, IconChevronUp, IconChevronDown } from '@tabler/icons-svelte';
 
-  let { gaugeDef, entityInfo, onchange }: {
-    gaugeDef: { entityId: number; transformSteps?: ValueTransformStep[]; customUnitLabel?: string | null };
+  let { gaugeDef, entityInfo, customUnitLabel = null, onchange }: {
+    gaugeDef: { entityId: number; transformSteps?: ValueTransformStep[] };
     entityInfo: { name: string; unit: string; minValue?: number; maxValue?: number } | null;
+    customUnitLabel?: string | null;
     onchange: (def: any) => void;
   } = $props();
 
   let steps = $state<ValueTransformStep[]>(
     gaugeDef.transformSteps?.map(s => ({ ...s })) ?? []
   );
-  let customUnit = $state(gaugeDef.customUnitLabel ?? '');
 
   const eligible = $derived(isTransformable(gaugeDef.entityId));
   const rawPreviewValue = $derived(
@@ -28,7 +27,6 @@
     onchange({
       ...gaugeDef,
       transformSteps: steps,
-      customUnitLabel: customUnit || null,
     });
   }
 
@@ -69,11 +67,6 @@
     emit();
   }
 
-  function clearCustomUnit() {
-    customUnit = '';
-    emit();
-  }
-
   const operations = [
     { value: ValueTransformOperation.Multiply, label: 'Multiply by' },
     { value: ValueTransformOperation.Add, label: 'Add' },
@@ -87,29 +80,6 @@
 {#if !eligible}
   <p class="text-xs text-gray-500 py-2">Transforms are not available for this gauge type.</p>
 {:else}
-  <!-- Custom unit label -->
-  <div class="mb-3">
-    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Unit Label Override</p>
-    <div class="relative">
-      <input
-        type="text"
-        maxlength="50"
-        value={customUnit}
-        oninput={(e) => { customUnit = (e.target as HTMLInputElement).value; emit(); }}
-        placeholder={entityInfo?.unit ?? 'Default'}
-        class="w-full rounded bg-gray-700/80 px-3 py-2 pr-7 text-sm text-gray-100 placeholder-gray-500 outline-none focus:ring-1 focus:ring-cyan-500/50"
-      />
-      {#if customUnit}
-        <button
-          class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-200 hover:bg-gray-600"
-          onclick={clearCustomUnit}
-        >
-          <IconX size={12} />
-        </button>
-      {/if}
-    </div>
-  </div>
-
   <!-- Operation list -->
   <div class="space-y-2 mb-3">
     {#each steps as step, i (i)}
@@ -192,8 +162,8 @@
         <span class="text-gray-600">→</span>
         {#if previewIsValid}
           <span class="text-cyan-300 font-bold">{transformedPreview.toFixed(1)}</span>
-          {#if customUnit}
-            <span class="text-gray-500 text-xs">{customUnit}</span>
+          {#if customUnitLabel}
+            <span class="text-gray-500 text-xs">{customUnitLabel}</span>
           {/if}
         {:else}
           <span class="text-gray-500">—</span>

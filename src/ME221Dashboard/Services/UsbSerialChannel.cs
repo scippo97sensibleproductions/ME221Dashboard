@@ -6,16 +6,12 @@ using ME221.Comms.Channels;
 using ME221.Comms.Internal;
 using ME221.Comms.Messages;
 using ME221Dashboard.Comms;
+using ME221Dashboard.Platforms.Android.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ME221Dashboard.Services;
 
-/// <summary>
-/// Android-specific IChannel implementation using UsbSerialForAndroid.
-/// Bypasses System.IO.Ports (which doesn't work on Android) by using the
-/// Android USB Host API directly via the UsbSerialForAndroid library.
-/// </summary>
 public sealed class UsbSerialChannel(
     UsbManager usbManager,
     UsbSerialPort port,
@@ -31,49 +27,48 @@ public sealed class UsbSerialChannel(
     private readonly int _stopBits = options.StopBits;
     private readonly int _parity = options.Parity;
     private readonly int _sendTimeoutMs = options.SendTimeoutMs;
-    private readonly int _receiveTimeoutMs = options.ReceiveTimeoutMs;
+
+    /// <summary>Serializes writes — BulkTransfer is not thread-safe on the same endpoint.</summary>
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     /// <summary>
-    /// Serializes all access to the USB port (read AND write).
-    ///
-    /// The CdcAcmSerialPort uses mEnableAsyncReads (RequestWait) for reads and
-    /// BulkTransfer for writes, both on the same UsbDeviceConnection. Android's
-    /// UsbDeviceConnection is NOT thread-safe for concurrent RequestWait +
-    /// BulkTransfer — this is a known cause of Java.IO.IOException.
-    ///
-    /// This lock ensures only one thread touches the port at any time,
-    /// preventing the read/write collision that triggers connection loss.
+    /// More retries with exponential backoff — transient USB errors are common
+    /// during engine cranking/running due to electrical noise.
     /// </summary>
-    private readonly SemaphoreSlim _portLock = new(1, 1);
+    private const int MaxSendRetries = 5;
+    private const int RetryDelayMs = 100;
 
     /// <summary>
-    /// Number of transient IOException retries before declaring the channel dead.
+    /// Read timeout — must be short enough to not starve writes, long enough to
+    /// avoid busy-spinning. With BulkTransfer (enableAsyncReads: false) this
+    /// actually works — RequestWait() ignore the timeout.
     /// </summary>
-    private const int MaxSendRetries = 2;
-    private const int RetryDelayMs = 150;
+    private const int ReadTimeoutMs = 350;
 
     /// <summary>
-    /// Number of transient receive-loop IO failures before declaring the channel
-    /// dead. The CDC-ACM async read path (RequestWait) can return null on USB
-    /// interrupts (e.g. ECU brownout). Multiple transient failures point to a
-    /// real disconnect.
+    /// Number of confirmed-device-removal IOExceptions before declaring dead.
+    /// Transient errors (device still attached) don't count — only increments
+    /// when IsDeviceStillAttached() returns false.
     /// </summary>
-    private const int MaxReceiveFailures = 5;
+    private const int MaxHardReceiveFailures = 10;
+
+    private const int ReadBufferSize = 8192;
 
     private readonly System.Threading.Channels.Channel<MessageFrame> _incomingChannel =
-        System.Threading.Channels.Channel.CreateBounded<MessageFrame>(new BoundedChannelOptions(200)
+        System.Threading.Channels.Channel.CreateBounded<MessageFrame>(new BoundedChannelOptions(512)
         {
             SingleReader = true,
             SingleWriter = false,
             FullMode = BoundedChannelFullMode.DropOldest
         });
 
-    private readonly FrameBuffer _frameBuffer = new(bufferSize: 16384);
+    private readonly FrameBuffer _frameBuffer = new(bufferSize: 32768);
     private UsbDeviceConnection? _connection;
     private Task? _receiveTask;
     private CancellationTokenSource? _receiveCts;
     private volatile DeviceStatus _status = DeviceStatus.Closed;
     private volatile bool _isOpen;
+    private UsbPowerManager? _powerManager;
 
     public bool IsOpen => _status is DeviceStatus.Opened or DeviceStatus.Connected;
     public DeviceStatus Status => _status;
@@ -84,10 +79,11 @@ public sealed class UsbSerialChannel(
         if (_port == null || _connection == null)
             throw new InvalidOperationException("USB serial port is not open");
 
-        await _portLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var bytes = frame.ToArray();
+            int backoffMs = RetryDelayMs;
 
             for (int attempt = 0; ; attempt++)
             {
@@ -96,33 +92,43 @@ public sealed class UsbSerialChannel(
                     _port.Write(bytes, _sendTimeoutMs);
                     return;
                 }
-                catch (Java.IO.IOException) when (attempt < MaxSendRetries)
+                catch (Java.IO.IOException ex) when (attempt < MaxSendRetries && !cancellationToken.IsCancellationRequested)
                 {
-                    _logger.LogWarning("UsbSerialChannel: write failed on {DeviceName} (attempt {Attempt}/{Max}), retrying in {Delay}ms",
-                        _port.Driver?.Device?.DeviceName, attempt + 1, MaxSendRetries + 1, RetryDelayMs);
-                    await Task.Delay(RetryDelayMs, cancellationToken).ConfigureAwait(false);
+                    _logger.LogDebug("UsbSerialChannel: write failed (attempt {Attempt}/{Max}) — {Message}",
+                        attempt + 1, MaxSendRetries + 1, ex.Message);
+
+                    if (!IsDeviceStillAttached())
+                    {
+                        _logger.LogWarning("UsbSerialChannel: USB device removed during write — aborting");
+                        throw;
+                    }
+
+                    await Task.Delay(backoffMs + Random.Shared.Next(0, 50), cancellationToken).ConfigureAwait(false);
+                    backoffMs = Math.Min(backoffMs * 2, 1000);
+                }
+                catch (Java.IO.IOException)
+                {
+                    _logger.LogError("UsbSerialChannel: write failed after {0} retries — request will fail, channel stays open", MaxSendRetries + 1);
+                    throw;
                 }
             }
         }
-        catch (Exception ex)
-        {
-            _isOpen = false;
-            _status = DeviceStatus.Closed;
-            _logger.LogError(ex, "UsbSerialChannel: send failed on {DeviceName}",
-                _port.Driver?.Device?.DeviceName);
-            throw;
-        }
         finally
         {
-            _portLock.Release();
+            _writeLock.Release();
         }
     }
 
     public async Task OpenAsync(CancellationToken cancellationToken = default)
     {
         if (_connection != null) return;
-
         _status = DeviceStatus.Opening;
+
+        // Hold a partial WakeLock while the channel is open. Without this,
+        // Android doze mode can suspend the USB host controller.
+        _powerManager = new UsbPowerManager(_logger);
+        _powerManager.Acquire();
+
         try
         {
             var device = _port.Driver?.Device;
@@ -133,20 +139,9 @@ public sealed class UsbSerialChannel(
             if (_connection == null)
                 throw new InvalidOperationException($"Failed to open USB device {device.DeviceName}. Check USB permission.");
 
-            var stopBits = _stopBits switch
-            {
-                2 => StopBits.Two,
-                _ => StopBits.One
-            };
+            var stopBits = _stopBits switch { 2 => StopBits.Two, _ => StopBits.One };
+            var parity = _parity switch { 1 => Parity.Odd, 2 => Parity.Even, _ => Parity.None };
 
-            var parity = _parity switch
-            {
-                1 => Parity.Odd,
-                2 => Parity.Even,
-                _ => Parity.None
-            };
-
-            // Open the port with a timeout — port.Open() can block on unsupported devices
             using var openCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             openCts.CancelAfter(TimeSpan.FromSeconds(5));
             try
@@ -155,26 +150,24 @@ public sealed class UsbSerialChannel(
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new TimeoutException($"USB port open timed out after 5s — device may not be supported");
+                throw new TimeoutException("USB port open timed out after 5s — device may not be supported");
             }
 
-            // CDC ACM sends control transfers while applying parameters, so the
-            // library port must be opened before SetParameters is called.
             _port.SetParameters(_baudRate, _dataBits, stopBits, parity);
 
             _isOpen = true;
             _status = DeviceStatus.Opened;
-            _logger.LogInformation("UsbSerialChannel: opened {DeviceName} at {BaudRate} baud",
+            _logger.LogInformation("UsbSerialChannel: opened {DeviceName} at {BaudRate} baud (WakeLock held)",
                 device.DeviceName, _baudRate);
 
             _receiveCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _receiveTask = Task.Run(() => ReceiveLoop(_receiveCts.Token), _receiveCts.Token);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             _status = DeviceStatus.Closed;
-            _logger.LogError(ex, "UsbSerialChannel: failed to open {DeviceName}",
-                _port.Driver?.Device?.DeviceName);
+            _powerManager?.Release();
+            _powerManager = null;
             throw;
         }
     }
@@ -199,18 +192,16 @@ public sealed class UsbSerialChannel(
             _receiveTask = null;
         }
 
-        try
-        {
-            if (_isOpen)
-                _port.Close();
-        }
+        try { if (_isOpen) _port.Close(); }
         catch { /* ignore close errors */ }
-
         _isOpen = false;
 
         _connection?.Close();
         _connection?.Dispose();
         _connection = null;
+
+        _powerManager?.Release();
+        _powerManager = null;
 
         _status = DeviceStatus.Closed;
         _incomingChannel.Writer.TryComplete();
@@ -225,86 +216,94 @@ public sealed class UsbSerialChannel(
 
     private async Task ReceiveLoop(CancellationToken cancellationToken)
     {
-        var buffer = new byte[4096];
-        int consecutiveReadFailures = 0;
+        var buffer = new byte[ReadBufferSize];
+        int hardFailures = 0;
+        int backoffMs = 50;
+
         while (!cancellationToken.IsCancellationRequested && _isOpen)
         {
             try
             {
-                // Extract completed frames first — frees buffer space before we
-                // decide whether to reset. Avoids the old Reset() that dropped
-                // partial frames and their remaining useful bytes.
-                while (_frameBuffer.TryExtractFrame(out var readyFrame))
-                {
-                    if (readyFrame is not null)
-                    {
-                        _status = DeviceStatus.Connected;
-                        await _incomingChannel.Writer.WriteAsync(readyFrame, cancellationToken).ConfigureAwait(false);
-                    }
-                }
+                DrainFrames();
 
-                // Now acquire the port lock and read
-                await _portLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                int bytesRead;
-                try
-                {
-                    bytesRead = _port.Read(buffer, _receiveTimeoutMs);
-                }
-                finally
-                {
-                    _portLock.Release();
-                }
+                // BulkTransfer (enableAsyncRead=false) respects the timeout.
+                int bytesRead = _port.Read(buffer, ReadTimeoutMs);
 
                 if (bytesRead > 0)
                 {
-                    consecutiveReadFailures = 0;
+                    hardFailures = 0;
+                    backoffMs = 50;
 
-                    // Copy into frame buffer
                     var dest = _frameBuffer.AppendMemory;
                     var count = Math.Min(bytesRead, dest.Length);
                     buffer.AsSpan(0, count).CopyTo(dest.Span);
                     _frameBuffer.Advance(count);
 
-                    // Extract any complete frames that resulted from the new data
-                    while (_frameBuffer.TryExtractFrame(out var frame))
-                    {
-                        if (frame is not null)
-                        {
-                            _status = DeviceStatus.Connected;
-                            await _incomingChannel.Writer.WriteAsync(frame, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
+                    DrainFrames();
 
-                    // If buffer is full and we couldn't extract any frames,
-                    // compact by shifting unread bytes to the front
-                    if (_frameBuffer.BufferedLength >= _frameBuffer.AppendMemory.Length && _frameBuffer.BufferedLength > 0)
-                        _frameBuffer.Reset();
+                    // If buffer is full despite extraction, invoke compaction
+                    // via TryExtractFrame — avoids Reset() which drops pending
+                    // response frames (heartbeat responses etc.).
+                    if (_frameBuffer.BufferedLength >= _frameBuffer.AppendMemory.Length)
+                        _frameBuffer.TryExtractFrame(out _);
                 }
             }
             catch (OperationCanceledException) { break; }
             catch (Java.IO.IOException ex)
             {
-                consecutiveReadFailures++;
-                _logger.LogError(ex, "UsbSerialChannel: receive IO error #{FailureCount} for {DeviceName}",
-                    consecutiveReadFailures, _port.Driver?.Device?.DeviceName);
-                if (consecutiveReadFailures >= MaxReceiveFailures)
+                if (!IsDeviceStillAttached())
                 {
-                    _logger.LogError("UsbSerialChannel: too many consecutive receive failures, declaring channel dead");
-                    _status = DeviceStatus.Closed;
-                    break;
+                    hardFailures++;
+                    if (hardFailures >= MaxHardReceiveFailures)
+                    {
+                        _status = DeviceStatus.Closed;
+                        _isOpen = false;
+                        _logger.LogError("UsbSerialChannel: device removed — declaring channel dead");
+                        break;
+                    }
                 }
-                await Task.Delay(RetryDelayMs, cancellationToken).ConfigureAwait(false);
+
+                try { await Task.Delay(backoffMs, cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                backoffMs = Math.Min(backoffMs * 2, 1000);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.LogError(ex, "UsbSerialChannel: receive loop error for {DeviceName}",
-                    _port.Driver?.Device?.DeviceName);
-                if (!_isOpen)
-                {
-                    _status = DeviceStatus.Closed;
-                    break;
-                }
+                _logger.LogError("UsbSerialChannel: unexpected receive loop error");
+                if (!_isOpen) { _status = DeviceStatus.Closed; break; }
+                try { await Task.Delay(100, cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
             }
+        }
+    }
+
+    private void DrainFrames()
+    {
+        while (_frameBuffer.TryExtractFrame(out var frame))
+        {
+            if (frame is null) continue;
+            _status = DeviceStatus.Connected;
+            if (!_incomingChannel.Writer.TryWrite(frame))
+                _logger.LogTrace("UsbSerialChannel: incoming channel full — dropping frame");
+        }
+    }
+
+    private bool IsDeviceStillAttached()
+    {
+        try
+        {
+            var device = _port.Driver?.Device;
+            if (device == null) return false;
+            var devices = _usbManager.DeviceList;
+            if (devices == null) return false;
+            foreach (var entry in devices)
+                if (entry.Value?.DeviceId == device.DeviceId)
+                    return true;
+            return false;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

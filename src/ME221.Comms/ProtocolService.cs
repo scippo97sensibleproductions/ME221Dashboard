@@ -20,25 +20,29 @@ public sealed class ProtocolService : IAsyncDisposable
     private readonly Timer _heartbeatTimer;
     private volatile bool _isReportingActive;
     private int _consecutiveHeartbeatFailures;
+    private long _lastFrameReceivedTick;
+    private int _heartbeatInFlight;
 
     /// <summary>
-    /// Number of consecutive heartbeat failures before declaring connection lost.
-    /// Prevents false disconnects during brief I/O interruptions (e.g. Android file picker).
+    /// Default per-request timeout when the caller doesn't supply a cancelable token.
+    /// Prevents hung requests from blocking indefinitely when a response is lost
+    /// (e.g. FrameBuffer overflow, USB stutter).
+    /// </summary>
+    private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>
+    /// Number of consecutive heartbeat write failures before declaring connection lost.
     /// At 1.5s interval × 3 failures = 4.5s tolerance.
     /// </summary>
     private const int MaxConsecutiveHeartbeatFailures = 3;
 
     /// <summary>
-    /// Guards against heartbeat re-entrancy. The System.Threading.Timer fires
-    /// OnHeartbeat every 1.5s on a thread-pool thread. Since OnHeartbeat is
-    /// async void, the await inside releases the thread and the next timer fire
-    /// can start a second heartbeat while the first is blocked on USB write
-    /// (3s timeout × 3 retries = potentially 9s). Two concurrent writes on
-    /// the same UsbDeviceConnection cause Java.IO.IOException.
-    ///
-    /// Setting this flag sync immediately (not awaited) prevents overlap.
+    /// Watchdog: if no frames arrive for this long during active reporting,
+    /// declare the connection dead. The ECU sends at ~10Hz, so 5s of total
+    /// silence is a definitive signal. This is a secondary check — the
+    /// primary liveness signal is successful heartbeat writes.
     /// </summary>
-    private int _heartbeatInFlight;
+    private const int ReportingDeadIntervalMs = 5000;
 
     public event EventHandler? HeartbeatFailed;
 
@@ -55,6 +59,7 @@ public sealed class ProtocolService : IAsyncDisposable
             FullMode = BoundedChannelFullMode.DropOldest
         });
 
+        _lastFrameReceivedTick = Environment.TickCount64;
         _heartbeatTimer = new Timer(OnHeartbeat, null, Timeout.Infinite, 1500);
 
         _receiveLoop = Task.Run(async () =>
@@ -65,6 +70,8 @@ public sealed class ProtocolService : IAsyncDisposable
                     .WithCancellation(_disposeCts.Token)
                     .ConfigureAwait(false))
                 {
+                    Interlocked.Exchange(ref _lastFrameReceivedTick, Environment.TickCount64);
+
                     MessageFrame captured = frame;
                     if (_logger is not null)
                         LogFrameArrived(_logger, captured.Type, captured.Class, captured.Command);
@@ -104,19 +111,48 @@ public sealed class ProtocolService : IAsyncDisposable
         }, _disposeCts.Token);
     }
 
+    /// <summary>
+    /// Heartbeat: fire-and-forget SendAck to keep the ECU in reporting mode.
+    ///
+    /// MEITE sends SendAckResponse (a Response-type frame) every 1.5s with no
+    /// expected response — pure write, no await, no correlation, no TCS.
+    /// We do the same here via SendAsync(MessageFrame) which just writes bytes.
+    ///
+    /// Previously we used SendAsync<SendAckResponse>(SendAckRequest) which
+    /// registered a TCS and awaited a response with _disposeCts.Token — a token
+    /// that never cancels until dispose. If the response was lost (e.g. buffer
+    /// overflow dropped it), the await hung forever, and the _heartbeatInFlight
+    /// guard blocked all future heartbeats → silent connection death.
+    ///
+    /// As a secondary liveness check, we also verify data activity: if reporting
+    /// is active but no frames arrive for 5s, declare dead.
+    /// </summary>
     private async void OnHeartbeat(object? state)
     {
         if (!IsOpen || !_isReportingActive)
             return;
 
-        // Re-entrancy guard: skip if a previous heartbeat is still blocked on USB write.
-        // Interlocked.Exchange returns the original value, atomically setting in-flight=1.
         if (Interlocked.Exchange(ref _heartbeatInFlight, 1) == 1)
             return;
 
         try
         {
-            await SendAsync(SendAckRequest.Instance, _disposeCts.Token).ConfigureAwait(false);
+            // Primary check: data-activity watchdog. If no frames arrived for 5s
+            // during active reporting, the channel is dead — the ECU sends ~10Hz.
+            var silenceMs = Environment.TickCount64 - Interlocked.Read(ref _lastFrameReceivedTick);
+            if (silenceMs > ReportingDeadIntervalMs)
+            {
+                _logger?.LogWarning("ProtocolService: no frames for {Ms}ms during reporting — connection dead", silenceMs);
+                HeartbeatFailed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            // Send heartbeat: fire-and-forget, no response awaited.
+            // Use SendAckResponse (Response type) — matches MEITE's behaviour.
+            // SendAsync(MessageFrame) just writes bytes via the channel; no TCS.
+            await SendAsync(SendAckResponse.Instance, _disposeCts.Token).ConfigureAwait(false);
+            if (_logger is not null)
+                LogSentFireAndForget(_logger, SendAckResponse.Instance.Type, SendAckResponse.Instance.Class, SendAckResponse.Instance.Command);
             Interlocked.Exchange(ref _consecutiveHeartbeatFailures, 0);
         }
         catch (Exception ex)
@@ -164,6 +200,11 @@ public sealed class ProtocolService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Send a request and await its response. A default 2.5s timeout is applied
+    /// when the caller doesn't supply a cancelable token, preventing infinite hangs
+    /// when a response is lost.
+    /// </summary>
     public async Task<TResponse> SendAsync<TResponse>(Request request, CancellationToken cancellationToken = default)
         where TResponse : Response
     {
@@ -178,20 +219,32 @@ public sealed class ProtocolService : IAsyncDisposable
         if (_logger is not null)
             LogSendingRequest(_logger, request.Type, request.Class, request.Command);
 
+        // Apply default timeout when caller didn't provide a cancelable token.
+        // Callers with their own CancellationToken are expected to manage their own timeout.
+        CancellationTokenSource? linkedCts = null;
+        var effectiveToken = cancellationToken;
+        if (cancellationToken.CanBeCanceled == false)
+        {
+            linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_disposeCts.Token);
+            linkedCts.CancelAfter(DefaultRequestTimeout);
+            effectiveToken = linkedCts.Token;
+        }
+
         TaskCompletionSource<Response> tcs = _correlator.Register<TResponse>(request);
 
         try
         {
             using var pooled = FrameBuilder.Build(request);
-            await _channel.SendAsync(pooled.Memory, cancellationToken).ConfigureAwait(false);
+            await _channel.SendAsync(pooled.Memory, effectiveToken).ConfigureAwait(false);
 
-            Response response = await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            Response response = await tcs.Task.WaitAsync(effectiveToken).ConfigureAwait(false);
             if (_logger is not null)
                 LogReceivedResponse(_logger, response.Type, response.Class, response.Command);
 
             if (request is SetStateRequest { Enabled: true })
             {
                 _isReportingActive = true;
+                Interlocked.Exchange(ref _lastFrameReceivedTick, Environment.TickCount64);
                 _heartbeatTimer.Change(1500, 1500);
             }
 
@@ -211,8 +264,16 @@ public sealed class ProtocolService : IAsyncDisposable
                 LogTimeoutWaitingForResponse(_logger, request.Type, request.Class, request.Command);
             throw;
         }
+        finally
+        {
+            linkedCts?.Dispose();
+        }
     }
 
+    /// <summary>
+    /// Fire-and-forget send: writes a frame without awaiting any response.
+    /// Used for heartbeats (SendAckResponse) and other one-way messages.
+    /// </summary>
     public async Task SendAsync(MessageFrame frame, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(frame);

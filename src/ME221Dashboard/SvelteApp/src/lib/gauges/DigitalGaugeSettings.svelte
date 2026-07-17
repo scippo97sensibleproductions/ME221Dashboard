@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { GaugeConfigEntry } from '../HybridBridge';
-  import SmoothingSettings from './SmoothingSettings.svelte';
 
   let { gaugeDef, onchange }: {
     gaugeDef: GaugeConfigEntry;
@@ -42,7 +41,4 @@
       {/each}
     </div>
   </div>
-
-  <!-- Smoothing -->
-  <SmoothingSettings {gaugeDef} {onchange} />
 </div>

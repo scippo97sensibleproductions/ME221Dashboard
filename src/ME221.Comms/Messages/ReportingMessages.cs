@@ -221,7 +221,14 @@ public sealed class SendReportResponse : Response
 /// Response to a SendAck request (used for ECU heartbeat/lifesign).
 /// </summary>
 public sealed class SendAckResponse(MessageStatus status)
-    : Response(WireFormat.ClassReporting, WireFormat.ReportingSendAck, status);
+    : Response(WireFormat.ClassReporting, WireFormat.ReportingSendAck, status)
+{
+    /// <summary>
+    /// Stateless singleton for heartbeat/lifesign — the ECU ignores the status byte.
+    /// Matches MEITE's fire-and-forget SendAckResponse pattern.
+    /// </summary>
+    public static readonly SendAckResponse Instance = new(MessageStatus.Success);
+}
 
 /// <summary>
 /// Response to a SetState request.
