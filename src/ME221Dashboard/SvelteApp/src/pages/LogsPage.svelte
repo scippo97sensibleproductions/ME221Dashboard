@@ -302,8 +302,8 @@
 
 <div class="flex h-full flex-col" style="background-color: var(--metro-bg);">
   <!-- Header -->
-  <div class="flex shrink-0 items-center justify-between px-4 py-3" style="border-bottom: 1px solid var(--metro-border);">
-    <div class="flex items-center gap-3">
+  <div class="flex shrink-0 flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3" style="border-bottom: 1px solid var(--metro-border);">
+    <div class="flex flex-wrap items-center gap-3">
       <div class="flex items-center gap-3" style="border-left: 4px solid var(--metro-red); padding-left: 12px;">
         <IconMessage size="18" style="color: var(--metro-red);" />
         <h1 class="text-[16px] font-extrabold uppercase tracking-wider text-white" style="line-height: 1.2;">Logs</h1>
@@ -312,7 +312,7 @@
         {filteredLogs.length} entries
       </span>
     </div>
-    <div class="flex items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-1.5">
       <input
         type="file"
         accept=".csv"
@@ -652,11 +652,11 @@
             {/if}
           </button>
 
-          <span class="shrink-0" style="color: #555;">{formatTimestamp(log.timestamp)}</span>
-          <span class="shrink-0 w-16 text-right font-bold" style="color: {LEVEL_COLORS[log.level] ?? 'var(--metro-text-secondary)'};">
+          <span class="shrink-0 tabular-nums" style="color: #555; min-width: 88px;">{formatTimestamp(log.timestamp)}</span>
+          <span class="shrink-0 w-12 text-right font-bold" style="color: {LEVEL_COLORS[log.level] ?? 'var(--metro-text-secondary)'};">
             {log.level.substring(0, 4)}
           </span>
-          <span class="shrink-0 w-28 truncate" style="color: var(--metro-text-muted);" title={log.category}>
+          <span class="shrink-0 w-20 truncate" style="color: var(--metro-text-muted);" title={log.category}>
             {truncateCategory(log.category)}
           </span>
           <span class="flex-1 break-all" style="color: #CCC;">{log.message}</span>
@@ -674,7 +674,7 @@
           {/if}
         </div>
         {#if log.exception}
-          <div class="px-4 py-1 pl-[10.5rem]" style="border-bottom: 1px solid var(--metro-border-subtle); background-color: #1A0A0A;">
+          <div class="px-4 py-1 pl-[16rem] sm:pl-[12rem]" style="border-bottom: 1px solid var(--metro-border-subtle); background-color: #1A0A0A;">
             <pre class="whitespace-pre-wrap break-all text-[10px]" style="color: var(--metro-red); opacity: 0.8;">{log.exception}</pre>
           </div>
         {/if}

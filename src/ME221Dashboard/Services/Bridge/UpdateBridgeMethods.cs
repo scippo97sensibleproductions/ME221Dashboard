@@ -13,8 +13,37 @@ public partial class HybridBridgeService
     {
         try
         {
-            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
-                await Launcher.OpenAsync(uri);
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                _logger.LogWarning("OpenExternalUrl: invalid URL '{Url}'", url);
+                return;
+            }
+
+#if ANDROID
+            // Launcher.OpenAsync silently fails when invoked off the UI thread in
+            // some MAUI contexts. Build the Intent ourselves and dispatch it on
+            // the main thread — this is the canonical Android way to open a
+            // browser and matches what PermissionBridgeMethods does for the
+            // storage permission settings activity.
+            var context = global::Android.App.Application.Context;
+            var intent = new global::Android.Content.Intent(global::Android.Content.Intent.ActionView);
+            intent.SetData(global::Android.Net.Uri.Parse(uri.ToString()));
+            intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                try
+                {
+                    context.StartActivity(intent);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "StartActivity failed for URL: {Url}", url);
+                }
+            });
+#else
+            await Launcher.OpenAsync(uri);
+#endif
         }
         catch (Exception ex)
         {
