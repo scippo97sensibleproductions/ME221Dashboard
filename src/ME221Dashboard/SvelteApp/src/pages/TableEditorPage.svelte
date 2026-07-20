@@ -1164,6 +1164,20 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (!tableData || !tableDef) return;
+    // Skip our global table shortcuts when the user is typing into a text
+    // input so that natural browser behaviour wins (Ctrl+A selects text in
+    // the field, Ctrl+Z undoes the keystroke, etc). The component-level
+    // input handler still runs and can still call e.preventDefault if it
+    // wants to (e.g. CellEditor swallows Enter / Tab).
+    const t = e.target as HTMLElement | null;
+    if (t && (
+      t.tagName === 'INPUT' ||
+      t.tagName === 'TEXTAREA' ||
+      t.tagName === 'SELECT' ||
+      t.isContentEditable
+    )) {
+      return;
+    }
     if (e.key === 'Escape') {
       if (anchor || selection) {
         clearSelection();
