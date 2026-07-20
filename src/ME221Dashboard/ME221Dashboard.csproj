@@ -17,8 +17,8 @@
 
         <ApplicationTitle>ME221 Dashboard</ApplicationTitle>
         <ApplicationId>com.scippo97sensibleproductions.me221dashboard</ApplicationId>
-        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
-        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">1.0.0</ApplicationDisplayVersion>
+        <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">1</ApplicationVersion>
 
         <Authors>Scippo97 Sensible Productions</Authors>
         <Company>Scippo97 Sensible Productions</Company>

@@ -23,7 +23,7 @@ var csproj = Path.Combine(root, "src", "ME221Dashboard", "ME221Dashboard.csproj"
 var wwwroot = Path.Combine(root, "src", "ME221Dashboard", "wwwroot");
 
 // ── Parse CLI args (bypass interactive) ────────────────────────────────────
-string? forcePlatform = null, forceConfig = null;
+string? forcePlatform = null, forceConfig = null, forceVersion = null;
 bool? forceClean = null, forcePublish = null, forceInstall = null;
 var extraMsbuild = new List<string>();
 
@@ -33,6 +33,7 @@ for (int i = 0; i < args.Length; i++)
     {
         case "-p" or "--platform" when i + 1 < args.Length: forcePlatform = args[++i]; break;
         case "-c" or "--config"   when i + 1 < args.Length: forceConfig = args[++i]; break;
+        case "--version"          when i + 1 < args.Length: forceVersion = args[++i]; break;
         case "--clean":       forceClean = true; break;
         case "--no-clean":    forceClean = false; break;
         case "--publish":     forcePublish = true; break;
@@ -51,6 +52,31 @@ AnsiConsole.Write(new Panel(new Markup("[cyan]ME221 Dashboard Builder[/]"))
     .BorderStyle(new Style(Color.Cyan))
     .Padding(2, 0)
     .Expand());
+AnsiConsole.WriteLine();
+
+// ── Version detection ──────────────────────────────────────────────────────
+string displayVersion;
+string appVersion;
+
+if (forceVersion != null)
+{
+    displayVersion = forceVersion.TrimStart('v');
+    appVersion = RunGit("rev-list --count HEAD", root).ToString().Trim();
+    AnsiConsole.MarkupLine($"[dim]Using explicit version: {displayVersion} (build {appVersion})[/]");
+}
+else
+{
+    var tag = RunGit("describe --tags --abbrev=0", root).ToString().Trim();
+    displayVersion = tag.TrimStart('v');
+    appVersion = RunGit("rev-list --count HEAD", root).ToString().Trim();
+
+    if (string.IsNullOrEmpty(displayVersion) || displayVersion.Contains("fatal"))
+    {
+        AnsiConsole.MarkupLine("[yellow]⚠ No git tags found — falling back to 1.0.0. Use --version to set explicitly.[/]");
+        displayVersion = "1.0.0";
+    }
+    AnsiConsole.MarkupLine($"[dim]Auto-detected version: {displayVersion} (build {appVersion})[/]");
+}
 AnsiConsole.WriteLine();
 
 // ── Platform ───────────────────────────────────────────────────────────────
@@ -122,6 +148,7 @@ AnsiConsole.Write(new Table()
     .AddRow("Platform", $"[cyan]{platforms.First(p => p.Key == platformKey).Label}[/]")
     .AddRow("Target",   $"[dim]{tfm}[/]")
     .AddRow("Config",   $"[cyan]{config}[/]")
+    .AddRow("Version",  $"[cyan]{displayVersion}[/] [dim](build {appVersion})[/]")
     .AddRow("Clean",    doClean   ? "[green]Yes[/]" : "[dim]No[/]")
     .AddRow("Publish",  doPublish ? "[green]Yes[/]" : "[dim]No[/]")
     .AddRow("Install",  doInstall ? "[green]Yes[/]" : "[dim]No[/]"));
@@ -165,6 +192,7 @@ await AnsiConsole.Progress()
         {
             var t = ctx.AddTask($"[green].NET build[/] [dim]{tfm} {config}[/]");
             var msbuildArgs = extraMsbuild.Count > 0 ? " " + string.Join(" ", extraMsbuild.Select(m => $"-p:{m}")) : "";
+            msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion} -p:ApplicationVersion={appVersion}";
             exitCode = Run("dotnet", $"build \"{csproj}\" -f {tfm} -c {config}{msbuildArgs}", root);
             if (exitCode != 0) { Fail(t); return; }
             t.Increment(100);
@@ -177,6 +205,7 @@ await AnsiConsole.Progress()
                 : platformRid != null ? new[] { platformRid } : Array.Empty<string>();
 
             var msbuildArgs = extraMsbuild.Count > 0 ? " " + string.Join(" ", extraMsbuild.Select(m => $"-p:{m}")) : "";
+            msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion} -p:ApplicationVersion={appVersion}";
 
             if (rids.Length == 0)
             {
@@ -253,6 +282,19 @@ static int RunNpm(string script, string workDir)
     return Run("npm", script, workDir);
 }
 
+static string RunGit(string args, string workDir)
+{
+    var psi = new ProcessStartInfo("git", args)
+    {
+        WorkingDirectory = workDir,
+        RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
+    };
+    using var p = Process.Start(psi)!;
+    var stdout = p.StandardOutput.ReadToEnd();
+    p.WaitForExit();
+    return stdout;
+}
+
 static void PrintHelp()
 {
     AnsiConsole.MarkupLine("");
@@ -266,6 +308,7 @@ static void PrintHelp()
     AnsiConsole.MarkupLine("[yellow]Flags:[/]");
     AnsiConsole.MarkupLine("  [cyan]-p[/], [cyan]--platform[/] NAME    Skip platform prompt");
     AnsiConsole.MarkupLine("  [cyan]-c[/], [cyan]--config[/] NAME      Skip config prompt");
+    AnsiConsole.MarkupLine("  [cyan]--version[/] [dim]X.Y.Z[/]          Set app version (default: auto-detect from git tag)");
     AnsiConsole.MarkupLine("  [cyan]--clean[/] / [cyan]--no-clean[/]       Clean before build");
     AnsiConsole.MarkupLine("  [cyan]--publish[/] / [cyan]--no-publish[/]   Publish after build");
     AnsiConsole.MarkupLine("  [cyan]--install[/] / [cyan]--no-install[/]   Install on device after publish");
