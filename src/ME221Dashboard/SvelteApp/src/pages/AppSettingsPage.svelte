@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import { IconDownload, IconUpload, IconCar, IconPackage, IconFileCode, IconCheck, IconX, IconLoader2, IconInfoCircle } from '@tabler/icons-svelte';
+  import MecalImportPreview from '../lib/MecalImportPreview.svelte';
 
   let connected = $state(false);
   let ecuInfo = $state<{ product: string; model: string; version: string } | null>(null);
@@ -9,8 +10,6 @@
   // ── Calibration state ──
   let calExporting = $state(false);
   let calImporting = $state(false);
-  let calImportSummary = $state<any>(null);
-  let calImportConfirming = $state(false);
   let calResult = $state<{ success: boolean; message: string } | null>(null);
 
   // ── Dashboard package state ──
@@ -76,23 +75,33 @@
   }
 
   // ── Calibration Import ──
+  let mecalPreviewOpen = $state(false);
+  let mecalFileContent = $state('');
+
   async function handleCalImport() {
     calImporting = true;
     calResult = null;
-    calImportSummary = null;
-    calImportConfirming = false;
     try {
-      const result = await HybridBridge.importMecal();
-      if (result.picked && result.success) {
-        calResult = { success: true, message: `Imported: ${result.tablesWritten} tables, ${result.driversWritten} drivers written${result.tablesFailed ? ', ' + result.tablesFailed + ' tables failed' : ''}${result.driversFailed ? ', ' + result.driversFailed + ' drivers failed' : ''}` };
-      } else if (result.picked && !result.success) {
-        calResult = { success: false, message: result.error || 'Import failed' };
+      const result = await HybridBridge.pickMecalFile();
+      if (result.picked && result.content) {
+        mecalFileContent = result.content;
+        mecalPreviewOpen = true;
       }
     } catch (e: any) {
       calResult = { success: false, message: e.message };
     } finally {
       calImporting = false;
     }
+  }
+
+  function handleMecalApplied() {
+    mecalPreviewOpen = false;
+    calResult = { success: true, message: 'Calibration imported successfully' };
+  }
+
+  function handleMecalCancel() {
+    mecalPreviewOpen = false;
+    mecalFileContent = '';
   }
 
   // ── Dashboard Export ──
@@ -399,3 +408,10 @@
     </section>
   </div>
 </div>
+
+<MecalImportPreview
+  bind:open={mecalPreviewOpen}
+  fileContent={mecalFileContent}
+  onApply={handleMecalApplied}
+  onCancel={handleMecalCancel}
+/>

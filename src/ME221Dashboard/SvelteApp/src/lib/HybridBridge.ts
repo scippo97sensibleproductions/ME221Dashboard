@@ -377,6 +377,15 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
+  writeTableDataBatch: async (tables: Array<{ tableId: number; input0: number[]; input1: number[]; output: number[] }>): Promise<{
+    success: boolean; written?: number; failed?: number; error?: string;
+  }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const payload = JSON.stringify(tables);
+    const result = await invokeDotNetLogged('WriteTableDataBatch', [payload]);
+    return JSON.parse(result);
+  },
+
   // ─── File Export ──────────────────────────────────────────────────────────
 
   saveFile: async (filename: string, content: string, fileExtension: string): Promise<{
@@ -481,9 +490,47 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
+  pickMecalFile: async (): Promise<{ picked: boolean; content?: string; error?: string }> => {
+    if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('PickMecalFile');
+    return JSON.parse(result);
+  },
+
   getMecalSummary: async (fileContent: string): Promise<{ success: boolean; metadata?: { productName: string; modelName: string; version: string }; tableCount?: number; driverCount?: number; dataLinkCount?: number; tables?: any[]; drivers?: any[]; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
-    const result = await invokeDotNetLogged('GetMecalSummary', [fileContent]);
+    const b64 = btoa(unescape(encodeURIComponent(fileContent)));
+    const result = await invokeDotNetLogged('GetMecalSummary', [b64]);
+    return JSON.parse(result);
+  },
+
+  getMecalImportPreview: async (fileContent: string): Promise<{
+    success: boolean;
+    metadata?: { productName: string; modelName: string; version: string };
+    tables?: Array<{
+      id: number; name: string; category: string; tableType: string;
+      cols: number; rows: number; existsInEcu: boolean;
+      input0Name: string; input1Name: string; outputName: string;
+      currentInput0Name: string | null; currentInput1Name: string | null; currentOutputName: string | null;
+      import: { enabled: boolean; input0: number[]; input1: number[]; output: number[] };
+      current: { enabled: boolean; input0: number[]; input1: number[]; output: number[] } | null;
+    }>;
+    drivers?: Array<{
+      id: number; name: string; category: string;
+      numberOfConfigs: number; existsInEcu: boolean;
+    }>;
+    dataLinkCount?: number;
+    error?: string;
+  }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const b64 = btoa(unescape(encodeURIComponent(fileContent)));
+    const result = await invokeDotNetLogged('GetMecalImportPreview', [b64]);
+    return JSON.parse(result);
+  },
+
+  applyMecalImport: async (fileContent: string, selectedTableIds: number[], selectedDriverIds: number[]): Promise<{ success: boolean; tablesWritten?: number; tablesFailed?: number; tablesSkipped?: number; driversWritten?: number; driversFailed?: number; driversSkipped?: number; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const b64 = btoa(unescape(encodeURIComponent(fileContent)));
+    const result = await invokeDotNetLogged('ApplyMecalImport', [b64, JSON.stringify(selectedTableIds), JSON.stringify(selectedDriverIds)]);
     return JSON.parse(result);
   },
 

@@ -39,6 +39,35 @@
     ? `grid-template-columns: 40px repeat(${tableDef.cols}, ${cellW}px); grid-template-rows: 24px repeat(${tableDef.rows}, 1fr); font-size: 8px; height: 100%;`
     : `grid-template-columns: 48px repeat(${tableDef.cols}, ${cellW}px); grid-template-rows: 28px repeat(${tableDef.rows}, 28px); font-size: 10px;`);
 
+  // Max absolute delta for diff mode gradient normalization
+  let maxDelta = $derived.by(() => {
+    if (!diffMode || !originalData) return 1;
+    let mx = 0;
+    for (let r = 0; r < tableDef.rows; r++) {
+      for (let c = 0; c < tableDef.cols; c++) {
+        const cur = getOutputValue(originalData, r, c, tableDef.cols);
+        const imp = getOutputValue(tableData, r, c, tableDef.cols);
+        const d = Math.abs(imp - cur);
+        if (d > mx) mx = d;
+      }
+    }
+    return mx > 0.001 ? mx : 1;
+  });
+
+  function diffColor(delta: number, maxD: number): string {
+    if (Math.abs(delta) < 0.001) return 'rgb(100, 100, 100)';
+    const t = Math.min(1, Math.abs(delta) / maxD);
+    // Smooth curve: low changes are subtle, high changes are vivid
+    const intensity = Math.sqrt(t);
+    if (delta > 0) {
+      const g = Math.round(80 + intensity * 159);
+      return `rgb(30, ${g}, 60)`;
+    } else {
+      const r = Math.round(120 + intensity * 135);
+      return `rgb(${r}, 40, 40)`;
+    }
+  }
+
   let isMobile = $state(false);
   let mql: MediaQueryList | null = null;
 
@@ -373,7 +402,7 @@
             {@const origVal = diffMode && originalData ? getOutputValue(originalData, r, c, tableDef.cols) : val}
             {@const delta = diffMode ? val - origVal : 0}
             {@const color = diffMode
-              ? (Math.abs(delta) < 0.001 ? 'rgb(100, 100, 100)' : delta > 0 ? 'rgb(34, 139, 80)' : 'rgb(200, 50, 50)')
+              ? diffColor(delta, maxDelta)
               : heatColor(val, minVal, maxVal, colorScheme)}
             {@const isCurrentCell = r === selectedRow && c === selectedCol && editMode === 'output'}
             {@const isDirty = dirtyCells.has(cellKey(r, c))}

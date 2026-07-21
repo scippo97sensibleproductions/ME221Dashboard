@@ -42,6 +42,31 @@
     return () => mql?.removeEventListener('change', checkMobile);
   });
 
+  // Max absolute delta for diff mode gradient normalization
+  let maxDelta = $derived.by(() => {
+    if (!diffMode || !originalData) return 1;
+    let mx = 0;
+    const len = Math.min(tableData.output.length, originalData.output.length);
+    for (let i = 0; i < len; i++) {
+      const d = Math.abs(tableData.output[i] - originalData.output[i]);
+      if (d > mx) mx = d;
+    }
+    return mx > 0.001 ? mx : 1;
+  });
+
+  function diffColor(delta: number, maxD: number): string {
+    if (Math.abs(delta) < 0.001) return 'rgb(100, 100, 100)';
+    const t = Math.min(1, Math.abs(delta) / maxD);
+    const intensity = Math.sqrt(t);
+    if (delta > 0) {
+      const g = Math.round(80 + intensity * 159);
+      return `rgb(30, ${g}, 60)`;
+    } else {
+      const r = Math.round(120 + intensity * 135);
+      return `rgb(${r}, 40, 40)`;
+    }
+  }
+
   let containerEl = $state<HTMLDivElement>();
   let svgEl = $state<SVGSVGElement>();
   let w = $state(0);
@@ -474,7 +499,7 @@
           {@const origVal = diffMode && originalData ? originalData.output[c] : val}
           {@const delta = diffMode ? val - origVal : 0}
           {@const color = diffMode
-            ? (Math.abs(delta) < 0.001 ? 'rgb(100, 100, 100)' : delta > 0 ? 'rgb(34, 139, 80)' : 'rgb(200, 50, 50)')
+            ? diffColor(delta, maxDelta)
             : heatColor(val, minVal, maxVal, colorScheme)}
           {@const isAnc = selectionType === 'output' && anchor?.row === 0 && anchor?.col === c}
           {@const inSel = isSelectedOutput(c)}

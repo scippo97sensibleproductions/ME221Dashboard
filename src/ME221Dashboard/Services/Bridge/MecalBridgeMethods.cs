@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ME221.Comms.Messages;
 using ME221.Data.Infrastructure;
 using ME221.Data.Models;
@@ -383,15 +385,67 @@ public partial class HybridBridgeService
     }
 
     /// <summary>
+    /// Pick a .mecal file and return its content without importing.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('PickMecalFile')
+    /// </summary>
+    public async Task<string> PickMecalFile()
+    {
+        _logger.LogInformation("PickMecalFile called");
+        try
+        {
+            var isWindows = DeviceInfo.Current.Platform == DevicePlatform.WinUI;
+            var fileResult = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select Calibration File (.mecal)",
+                FileTypes = new FilePickerFileType(isWindows
+                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                    {
+                        { DevicePlatform.WinUI, [".mecal"] }
+                    }
+                    : new Dictionary<DevicePlatform, IEnumerable<string>>
+                    {
+                        { DevicePlatform.Android, ["text/xml", "application/octet-stream"] }
+                    })
+            }).ConfigureAwait(false);
+
+            if (fileResult == null)
+                return JsonSerializer.Serialize(new { picked = false });
+
+            var xml = await File.ReadAllTextAsync(fileResult.FullPath).ConfigureAwait(false);
+            _logger.LogInformation("PickMecalFile: read {Bytes} bytes from {Path}", xml.Length, fileResult.FullPath);
+            return JsonSerializer.Serialize(new { picked = true, content = xml });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("PickMecalFile failed: {Error}", ex.Message);
+            return JsonSerializer.Serialize(new { picked = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get summary of a .mecal file without writing to ECU.
+    /// Compared against current calibration so UI can show what would change.
     /// Called from JS: window.HybridWebView.InvokeDotNet('GetMecalSummary', [fileContent])
     /// </summary>
-    public async Task<string> GetMecalSummary(string fileContent)
+    public async Task<string> GetMecalSummary(string fileContentB64)
     {
         _logger.LogInformation("GetMecalSummary called");
         try
         {
+            var fileContent = Encoding.UTF8.GetString(Convert.FromBase64String(fileContentB64));
             var importCalibration = DefXmlParser.Parse(fileContent);
+
+            // Get current calibration for comparison
+            var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
+            var currentCal = calResult.Data;
+
+            var currentTableIds = currentCal != null
+                ? new HashSet<ushort>(currentCal.Tables.Select(t => t.Id))
+                : new HashSet<ushort>();
+            var currentDriverIds = currentCal != null
+                ? new HashSet<ushort>(currentCal.Drivers.Select(d => d.Id))
+                : new HashSet<ushort>();
+
             return JsonSerializer.Serialize(new
             {
                 success = true,
@@ -412,6 +466,7 @@ public partial class HybridBridgeService
                     tableType = t.TableType,
                     cols = t.Cols,
                     rows = t.Rows,
+                    existsInEcu = currentTableIds.Contains(t.Id),
                 }),
                 drivers = importCalibration.Drivers.Select(d => new
                 {
@@ -419,13 +474,406 @@ public partial class HybridBridgeService
                     name = d.Name,
                     category = d.Category,
                     numberOfConfigs = d.NumberOfConfigs,
+                    existsInEcu = currentDriverIds.Contains(d.Id),
                 }),
             }, SJsonOptions);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GetMecalSummary failed");
+            _logger.LogError("GetMecalSummary failed: {Error}", ex.Message);
             return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get full import preview with current ECU data for comparison.
+    /// Returns both import data and current ECU data side-by-side for each table.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('GetMecalImportPreview', [fileContentB64])
+    /// </summary>
+    public async Task<string> GetMecalImportPreview(string fileContentB64)
+    {
+        _logger.LogInformation("GetMecalImportPreview called");
+        _connection.PauseHeartbeat();
+        try
+        {
+            var fileContent = Encoding.UTF8.GetString(Convert.FromBase64String(fileContentB64));
+            var importCalibration = DefXmlParser.Parse(fileContent);
+
+            var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
+            if (calResult.Data is null)
+                return JsonSerializer.Serialize(new { success = false, error = "No calibration loaded" });
+
+            var protocol = _connection.GetProtocolService();
+            var currentCal = calResult.Data;
+
+            // Read current ECU data for all tables in the import file
+            var tableResults = new List<object>();
+            foreach (var importTable in importCalibration.Tables)
+            {
+                var currentTable = currentCal.Tables.FirstOrDefault(t => t.Id == importTable.Id);
+                if (currentTable is null)
+                {
+                tableResults.Add(new
+                {
+                    id = importTable.Id,
+                    name = importTable.Name,
+                    category = importTable.Category,
+                    tableType = importTable.TableType,
+                    cols = importTable.Cols,
+                    rows = importTable.Rows,
+                    existsInEcu = false,
+                    input0Name = importTable.Input0Name,
+                    input1Name = importTable.Input1Name,
+                    outputName = importTable.OutputName,
+                    currentInput0Name = (string?)null,
+                    currentInput1Name = (string?)null,
+                    currentOutputName = (string?)null,
+                    import = new
+                        {
+                            enabled = importTable.Enabled,
+                            input0 = importTable.Input0?.ToArray() ?? [],
+                            input1 = importTable.Input1?.ToArray() ?? [],
+                            output = importTable.Output?.ToArray() ?? [],
+                        },
+                        current = (object?)null,
+                    });
+                    continue;
+                }
+
+                // Read live data from ECU
+                float[] currentInput0 = [], currentInput1 = [], currentOutput = [];
+                var readSuccess = false;
+                try
+                {
+                    var request = new GetTableRequest(importTable.Id);
+                    var response = await protocol.SendAsync<GetTableResponse>(request).ConfigureAwait(false);
+                    if (response.Status == MessageStatus.Success)
+                    {
+                        var wireData = TableSerializer.Deserialize(currentTable, response.SerializedTable.Span);
+                        currentInput0 = wireData.Input0;
+                        currentInput1 = wireData.Input1;
+                        currentOutput = wireData.Output;
+                        readSuccess = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Preview: failed to read table {TableId} from ECU", importTable.Id);
+                }
+
+                tableResults.Add(new
+                {
+                    id = importTable.Id,
+                    name = importTable.Name,
+                    category = importTable.Category,
+                    tableType = importTable.TableType,
+                    cols = importTable.Cols,
+                    rows = importTable.Rows,
+                    existsInEcu = true,
+                    input0Name = importTable.Input0Name,
+                    input1Name = importTable.Input1Name,
+                    outputName = importTable.OutputName,
+                    currentInput0Name = currentTable.Input0Name,
+                    currentInput1Name = currentTable.Input1Name,
+                    currentOutputName = currentTable.OutputName,
+                    import = new
+                    {
+                        enabled = importTable.Enabled,
+                        input0 = importTable.Input0?.ToArray() ?? [],
+                        input1 = importTable.Input1?.ToArray() ?? [],
+                        output = importTable.Output?.ToArray() ?? [],
+                    },
+                    current = readSuccess ? new
+                    {
+                        enabled = currentTable.Enabled,
+                        input0 = currentInput0,
+                        input1 = currentInput1,
+                        output = currentOutput,
+                    } : null,
+                });
+            }
+
+            // Drivers — summary only (no live data read for drivers)
+            var driverResults = importCalibration.Drivers.Select(d => new
+            {
+                id = d.Id,
+                name = d.Name,
+                category = d.Category,
+                numberOfConfigs = d.NumberOfConfigs,
+                existsInEcu = currentCal.Drivers.Any(cd => cd.Id == d.Id),
+            });
+
+            return JsonSerializer.Serialize(new
+            {
+                success = true,
+                metadata = new
+                {
+                    productName = importCalibration.Metadata.ProductName,
+                    modelName = importCalibration.Metadata.ModelName,
+                    version = importCalibration.Metadata.Version,
+                },
+                tables = tableResults,
+                drivers = driverResults,
+                dataLinkCount = importCalibration.DataLinks.Count,
+            }, SJsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("GetMecalImportPreview failed: {Error}", ex.Message);
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+        finally
+        {
+            _connection.ResumeHeartbeat();
+        }
+    }
+
+    /// <summary>
+    /// Apply a .mecal import with selective table/driver selection.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('ApplyMecalImport', [fileContent, selectedTableIds, selectedDriverIds])
+    /// </summary>
+    public async Task<string> ApplyMecalImport(string fileContentB64, string selectedTableIdsJson, string selectedDriverIdsJson)
+    {
+        _logger.LogInformation("ApplyMecalImport called");
+        _connection.PauseHeartbeat();
+        try
+        {
+            var fileContent = Encoding.UTF8.GetString(Convert.FromBase64String(fileContentB64));
+            var importCalibration = DefXmlParser.Parse(fileContent);
+            var selectedTableIds = JsonSerializer.Deserialize<ushort[]>(selectedTableIdsJson) ?? [];
+            var selectedDriverIds = JsonSerializer.Deserialize<ushort[]>(selectedDriverIdsJson) ?? [];
+            var selectedTableSet = new HashSet<ushort>(selectedTableIds);
+            var selectedDriverSet = new HashSet<ushort>(selectedDriverIds);
+
+            var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
+            if (calResult.Data is null)
+                return JsonSerializer.Serialize(new { success = false, error = "No calibration loaded in app" });
+
+            var protocol = _connection.GetProtocolService();
+            var currentCal = calResult.Data;
+
+            // Write selected tables to ECU
+            var tablesWritten = 0;
+            var tablesFailed = 0;
+            var tablesSkipped = 0;
+            foreach (var importTable in importCalibration.Tables)
+            {
+                if (!selectedTableSet.Contains(importTable.Id))
+                {
+                    tablesSkipped++;
+                    continue;
+                }
+
+                var currentTable = currentCal.Tables.FirstOrDefault(t => t.Id == importTable.Id);
+                if (currentTable is null)
+                {
+                    _logger.LogWarning("Import: table {Id} not found in current calibration, skipping", importTable.Id);
+                    tablesFailed++;
+                    continue;
+                }
+
+                try
+                {
+                    var input0 = importTable.Input0?.ToArray() ?? [];
+                    var input1 = importTable.Input1?.ToArray() ?? [];
+                    var output = importTable.Output?.ToArray() ?? [];
+
+                    var serialized = TableSerializer.Serialize(currentTable, importTable.Enabled, input0, input1, output);
+                    var setRequest = new SetTableRequest(importTable.Id, serialized);
+                    var setResponse = await protocol.SendAsync<SetTableResponse>(setRequest).ConfigureAwait(false);
+
+                    if (setResponse.Status != MessageStatus.Success)
+                    {
+                        tablesFailed++;
+                        continue;
+                    }
+
+                    var storeRequest = new StoreTableRequest(importTable.Id);
+                    var storeResponse = await protocol.SendAsync<StoreTableResponse>(storeRequest).ConfigureAwait(false);
+
+                    if (storeResponse.Status != MessageStatus.Success)
+                    {
+                        tablesFailed++;
+                        continue;
+                    }
+
+                    tablesWritten++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Import: failed to write table {TableId}", importTable.Id);
+                    tablesFailed++;
+                }
+            }
+
+            // Write selected drivers to ECU
+            var driversWritten = 0;
+            var driversFailed = 0;
+            var driversSkipped = 0;
+            foreach (var importDriver in importCalibration.Drivers)
+            {
+                if (!selectedDriverSet.Contains(importDriver.Id))
+                {
+                    driversSkipped++;
+                    continue;
+                }
+
+                var currentDriver = currentCal.Drivers.FirstOrDefault(d => d.Id == importDriver.Id);
+                if (currentDriver is null)
+                {
+                    _logger.LogWarning("Import: driver {Id} not found in current calibration, skipping", importDriver.Id);
+                    driversFailed++;
+                    continue;
+                }
+
+                try
+                {
+                    var configs = importDriver.Configs.Select(c => c.Value).ToArray();
+                    var outputLinkIds = importDriver.OutputLinkIds;
+                    var inputLinkIds = importDriver.InputLinkIds;
+
+                    var serialized = DriverSerializer.Serialize(configs, outputLinkIds, inputLinkIds);
+                    var setRequest = new SetDriverRequest(importDriver.Id, serialized);
+                    var setResponse = await protocol.SendAsync<SetDriverResponse>(setRequest).ConfigureAwait(false);
+
+                    if (setResponse.Status != MessageStatus.Success)
+                    {
+                        driversFailed++;
+                        continue;
+                    }
+
+                    var storeRequest = new StoreDriverRequest(importDriver.Id);
+                    var storeResponse = await protocol.SendAsync<StoreDriverResponse>(storeRequest).ConfigureAwait(false);
+
+                    if (storeResponse.Status != MessageStatus.Success)
+                    {
+                        driversFailed++;
+                        continue;
+                    }
+
+                    driversWritten++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Import: failed to write driver {DriverId}", importDriver.Id);
+                    driversFailed++;
+                }
+            }
+
+            _logger.LogInformation("ApplyMecalImport complete: {TablesWritten}/{TablesSelected} tables, {DriversWritten}/{DriversSelected} drivers",
+                tablesWritten, selectedTableSet.Count, driversWritten, selectedDriverSet.Count);
+
+            return JsonSerializer.Serialize(new
+            {
+                success = true,
+                tablesWritten,
+                tablesFailed,
+                tablesSkipped,
+                driversWritten,
+                driversFailed,
+                driversSkipped,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("ApplyMecalImport failed: {Error}", ex.Message);
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+        finally
+        {
+            _connection.ResumeHeartbeat();
+        }
+    }
+
+    /// <summary>
+    /// Write multiple tables to ECU with pre-computed data.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('WriteTableDataBatch', [jsonPayload])
+    /// </summary>
+    public async Task<string> WriteTableDataBatch(string jsonPayload)
+    {
+        _logger.LogInformation("WriteTableDataBatch called");
+        _connection.PauseHeartbeat();
+        try
+        {
+            var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
+            if (calResult.Data is null)
+                return JsonSerializer.Serialize(new { success = false, error = "No calibration loaded" });
+
+            var protocol = _connection.GetProtocolService();
+            var linkDict = calResult.Data.DataLinks.ToDictionary(l => l.Id);
+
+            var payload = JsonNode.Parse(jsonPayload);
+            var tablesArray = payload?.AsArray() ?? [];
+
+            var written = 0;
+            var failed = 0;
+
+            foreach (var entry in tablesArray)
+            {
+                var tableId = (ushort)(entry?["tableId"]?.GetValue<ushort>() ?? 0);
+                var input0 = entry?["input0"]?.Deserialize<float[]>() ?? [];
+                var input1 = entry?["input1"]?.Deserialize<float[]>() ?? [];
+                var output = entry?["output"]?.Deserialize<float[]>() ?? [];
+
+                var tableDef = calResult.Data.Tables.FirstOrDefault(t => t.Id == tableId);
+                if (tableDef is null)
+                {
+                    _logger.LogWarning("WriteTableDataBatch: table {TableId} not found", tableId);
+                    failed++;
+                    continue;
+                }
+
+                try
+                {
+                    // Convert display values back to raw
+                    if (linkDict.TryGetValue(tableDef.Input0LinkId, out var input0Link))
+                        input0 = MeasurementUnitConverter.ToRawArray(input0, input0Link.MeasurementUnitTypes);
+                    if (linkDict.TryGetValue(tableDef.Input1LinkId, out var input1Link))
+                        input1 = MeasurementUnitConverter.ToRawArray(input1, input1Link.MeasurementUnitTypes);
+                    if (linkDict.TryGetValue(tableDef.OutputLinkId, out var outputLink))
+                        output = MeasurementUnitConverter.ToRawArray(output, outputLink.MeasurementUnitTypes);
+
+                    var serialized = TableSerializer.Serialize(tableDef, true, input0, input1, output);
+                    var setRequest = new SetTableRequest(tableId, serialized);
+                    var setResponse = await protocol.SendAsync<SetTableResponse>(setRequest).ConfigureAwait(false);
+
+                    if (setResponse.Status != MessageStatus.Success)
+                    {
+                        _logger.LogWarning("WriteTableDataBatch: table {TableId} SET failed: {Status}", tableId, setResponse.Status);
+                        failed++;
+                        continue;
+                    }
+
+                    var storeRequest = new StoreTableRequest(tableId);
+                    var storeResponse = await protocol.SendAsync<StoreTableResponse>(storeRequest).ConfigureAwait(false);
+
+                    if (storeResponse.Status != MessageStatus.Success)
+                    {
+                        _logger.LogWarning("WriteTableDataBatch: table {TableId} STORE failed: {Status}", tableId, storeResponse.Status);
+                        failed++;
+                        continue;
+                    }
+
+                    written++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "WriteTableDataBatch: table {TableId} failed", tableId);
+                    failed++;
+                }
+            }
+
+            _logger.LogInformation("WriteTableDataBatch complete: {Written} written, {Failed} failed", written, failed);
+            return JsonSerializer.Serialize(new { success = true, written, failed });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("WriteTableDataBatch failed: {Error}", ex.Message);
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+        finally
+        {
+            _connection.ResumeHeartbeat();
         }
     }
 }
