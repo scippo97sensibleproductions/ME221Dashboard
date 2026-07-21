@@ -144,5 +144,9 @@ public class TcpChannel(string host, int port, ILogger<TcpChannel>? logger = nul
             _logger.LogError(ex, "TcpChannel: receive loop error on {Host}:{Port}", host, port);
             _status = DeviceStatus.Closed;
         }
+        finally
+        {
+            _incomingChannel.Writer.TryComplete();
+        }
     }
 }

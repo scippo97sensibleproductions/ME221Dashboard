@@ -170,7 +170,7 @@
                     <span class="text-xs font-mono text-cyan-400">{(gaugeDef.scale ?? 1.0).toFixed(2)}x</span>
                   </div>
                   <input
-                    type="range" step="0.05" min="0.2" max="3"
+                    type="range" step="0.05" min="0.2" max="10"
                     value={gaugeDef.scale ?? 1.0}
                     oninput={(e) => onchange({ ...gaugeDef, scale: parseFloat((e.target as HTMLInputElement).value) })}
                     class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
@@ -179,10 +179,10 @@
                   />
                   <div class="relative mt-0.5 h-4 text-[9px] text-gray-600 overflow-visible select-none">
                     <span style="position:absolute;left:0;white-space:nowrap">0.2x</span>
-                    <span style="position:absolute;left:10.7%;transform:translateX(-50%);white-space:nowrap">0.5x</span>
-                    <span style="position:absolute;left:28.6%;transform:translateX(-50%);white-space:nowrap">1.0x</span>
-                    <span style="position:absolute;left:64.3%;transform:translateX(-50%);white-space:nowrap">2.0x</span>
-                    <span style="position:absolute;right:0;white-space:nowrap">3.0x</span>
+                    <span style="position:absolute;left:8.2%;transform:translateX(-50%);white-space:nowrap">1.0x</span>
+                    <span style="position:absolute;left:18.4%;transform:translateX(-50%);white-space:nowrap">2.0x</span>
+                    <span style="position:absolute;left:49%;transform:translateX(-50%);white-space:nowrap">5.0x</span>
+                    <span style="position:absolute;right:0;white-space:nowrap">10x</span>
                   </div>
                 </div>
 
@@ -249,7 +249,7 @@
                     <span class="text-xs font-mono text-cyan-400">{(gaugeDef.fontSizeScale ?? 1.0).toFixed(2)}x</span>
                   </div>
                   <input
-                    type="range" step="0.05" min="0.5" max="2"
+                    type="range" step="0.05" min="0.5" max="10"
                     value={gaugeDef.fontSizeScale ?? 1.0}
                     oninput={(e) => onchange({ ...gaugeDef, fontSizeScale: parseFloat((e.target as HTMLInputElement).value) })}
                     class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
@@ -258,10 +258,10 @@
                   />
                   <div class="relative mt-0.5 h-4 text-[9px] text-gray-600 overflow-visible select-none">
                     <span style="position:absolute;left:0;white-space:nowrap">0.5x</span>
-                    <span style="position:absolute;left:16.7%;transform:translateX(-50%);white-space:nowrap">0.75x</span>
-                    <span style="position:absolute;left:33.3%;transform:translateX(-50%);white-space:nowrap">1.0x</span>
-                    <span style="position:absolute;left:66.7%;transform:translateX(-50%);white-space:nowrap">1.5x</span>
-                    <span style="position:absolute;right:0;white-space:nowrap">2.0x</span>
+                    <span style="position:absolute;left:5.3%;transform:translateX(-50%);white-space:nowrap">1.0x</span>
+                    <span style="position:absolute;left:15.8%;transform:translateX(-50%);white-space:nowrap">2.0x</span>
+                    <span style="position:absolute;left:47.4%;transform:translateX(-50%);white-space:nowrap">5.0x</span>
+                    <span style="position:absolute;right:0;white-space:nowrap">10x</span>
                   </div>
                 </div>
 

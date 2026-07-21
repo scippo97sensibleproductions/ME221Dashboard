@@ -46,6 +46,8 @@ internal static class MessageRegistry
 
         // ── Drivers (class 0x02) ─────────────────────────────────────────
         { (WireFormat.ResponseType, WireFormat.ClassDrivers, WireFormat.DriversSetDriver), p => new SetDriverResponse(p) },
+        { (WireFormat.RequestType,  WireFormat.ClassDrivers, WireFormat.DriversSetDriver),
+            p => { var id = BinaryPrimitives.ReadUInt16LittleEndian(p); var sz = BinaryPrimitives.ReadUInt16LittleEndian(p[2..]); return new SetDriverRequest(id, p.Slice(4, sz).ToArray()); } },
 
         { (WireFormat.ResponseType, WireFormat.ClassDrivers, WireFormat.DriversGetDriver), p => new GetDriverResponse(p) },
         { (WireFormat.RequestType,  WireFormat.ClassDrivers, WireFormat.DriversGetDriver), p => new GetDriverRequest(BinaryPrimitives.ReadUInt16LittleEndian(p)) },

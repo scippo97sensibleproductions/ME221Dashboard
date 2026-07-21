@@ -709,6 +709,7 @@ public partial class HybridBridgeService
                 BackgroundImagePath = backgroundImagePath,
                 Odometer = existingDef?.Odometer,
                 Vehicle = existingDef?.Vehicle,
+                WarningHistory = existingDef?.WarningHistory ?? [],
             };
 
             config.ActiveDashboard = dashboardName;

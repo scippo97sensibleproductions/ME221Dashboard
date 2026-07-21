@@ -119,6 +119,15 @@
     });
   });
 
+  // Push live odometer updates from C# into entityValues so the gauge updates
+  $effect(() => {
+    const od = liveDataStore.odometer;
+    if (od != null) {
+      entityValues[String(ODOMETER)] = od;
+      updateGaugeValue(ODOMETER, od);
+    }
+  });
+
   // ── Derived value computation ──────────────────────────────────────────
   let derivedLookupInjected = false;
 
@@ -192,8 +201,23 @@
       ? (entInfo?.maxValue ?? 10000) : 10000;
     const transformSteps = def.transformSteps;
 
+    // Regenerate needleCurve if entity min/max changed from when the curve was saved
+    let needleCurve = def.needleCurve;
+    if (needleCurve && needleCurve.length >= 2) {
+      const curveMin = needleCurve[0].rawValue;
+      const curveMax = needleCurve[needleCurve.length - 1].rawValue;
+      if (curveMin !== minValue || curveMax !== maxValue) {
+        const oldRange = curveMax - curveMin;
+        const newRange = maxValue - minValue;
+        needleCurve = needleCurve.map(p => ({
+          rawValue: oldRange === 0 ? minValue : minValue + ((p.rawValue - curveMin) / oldRange) * newRange,
+          angle: p.angle,
+        }));
+      }
+    }
+
     return {
-      config: def,
+      config: { ...def, needleCurve },
       entityIdStr: String(def.entityId),
       name,
       unit,
@@ -766,6 +790,7 @@
   let resizeObserver: ResizeObserver | null = null;
   let parentWidth = $state(800);
   let parentHeight = $state(600);
+  let isAndroid = $state(false);
   const ASPECT = 16 / 9;
 
   function observeContainer() {
@@ -782,11 +807,13 @@
   }
 
   let canvasWidth = $derived.by(() => {
+    if (isAndroid) return Math.round(parentWidth);
     const byW = parentWidth;
     const byH = parentHeight * ASPECT;
     return Math.round(Math.min(byW, byH));
   });
   let canvasHeight = $derived.by(() => {
+    if (isAndroid) return Math.round(parentHeight);
     const byH = parentHeight;
     const byW = parentWidth / ASPECT;
     return Math.round(Math.min(byH, byW));
@@ -802,6 +829,7 @@
   });
 
   onMount(() => {
+    HybridBridge.getPlatform().then(p => { isAndroid = p === 'Android'; }).catch(() => {});
     loadRealConfig();
     const od = liveDataStore.odometer;
     if (od != null) entityValues[String(ODOMETER)] = od;
@@ -816,6 +844,7 @@
   });
 
   onDestroy(() => {
+    if (layoutDirty) persistLayout();
     if (saveTimer) clearTimeout(saveTimer);
     if (resizeObserver) resizeObserver.disconnect();
   });

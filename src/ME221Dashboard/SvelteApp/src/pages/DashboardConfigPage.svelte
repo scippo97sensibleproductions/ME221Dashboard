@@ -318,16 +318,24 @@
         error = result.error || 'Save failed';
         return;
       }
-      // Save table selections — first table on this dashboard auto-fits for legibility.
+      // Save table selections — preserve existing positions, only default new ones.
+      const existingTableMap = new Map<number, DashboardTableEntry>();
+      if (dashConfig.tables) {
+        for (const t of dashConfig.tables) existingTableMap.set(t.tableId, t);
+      }
       const tables: DashboardTableEntry[] = [];
-      const isFirst = selectedTableIds.size === 1;
-      let idx = 0;
+      let newIdx = 0;
       for (const tid of selectedTableIds) {
-        const entry: DashboardTableEntry = isFirst
-          ? { tableId: tid, fractionX: 0.025, fractionY: 0.075, widthFraction: 0.95, heightFraction: 0.85, zIndex: 0 }
-          : { tableId: tid, fractionX: 0.1 + idx * 0.2, fractionY: 0.1, widthFraction: 0.2, heightFraction: 0.3, zIndex: 0 };
-        tables.push(entry);
-        idx++;
+        const existing = existingTableMap.get(tid);
+        if (existing) {
+          tables.push({ ...existing, tableId: tid });
+        } else {
+          const entry: DashboardTableEntry = selectedTableIds.size === 1
+            ? { tableId: tid, fractionX: 0.025, fractionY: 0.075, widthFraction: 0.95, heightFraction: 0.85, zIndex: 0 }
+            : { tableId: tid, fractionX: 0.1 + newIdx * 0.2, fractionY: 0.1, widthFraction: 0.2, heightFraction: 0.3, zIndex: 0 };
+          tables.push(entry);
+          newIdx++;
+        }
       }
       await HybridBridge.saveDashboardTables(dashboardName, tables);
       onNavigate('dashboard');

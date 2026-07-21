@@ -1,12 +1,19 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import { SessionRecorder, type RecordingState } from './SessionRecorder';
+  import type { DataLinkDefinition } from '../HybridBridgeTypes';
+  import { IconPlayerPlay, IconPlayerStop, IconCamera } from '@tabler/icons-svelte';
 
   let {
     selectedSensorIds = [],
+    dataLinks = [],
     onExport,
+    onFreezeFrame,
   }: {
     selectedSensorIds: number[];
+    dataLinks?: DataLinkDefinition[];
     onExport?: (format: 'csv' | 'yaml') => void;
+    onFreezeFrame?: () => void;
   } = $props();
 
   let tick = $state(0);
@@ -27,13 +34,27 @@
     }
   }
 
+  onMount(() => {
+    if (SessionRecorder.state === 'recording') {
+      startTimer();
+    }
+  });
+
+  onDestroy(() => {
+    stopTimer();
+  });
+
   function toggleRecording() {
     if (SessionRecorder.state === 'recording') {
       finalDurationMs = SessionRecorder.durationMs;
       SessionRecorder.stop();
       stopTimer();
     } else {
-      SessionRecorder.start(selectedSensorIds);
+      const nameMap = new Map<number, string>();
+      for (const dl of dataLinks) {
+        nameMap.set(dl.id, dl.name);
+      }
+      SessionRecorder.start(selectedSensorIds, nameMap);
       startTimer();
     }
     recorderState = SessionRecorder.state;
@@ -53,19 +74,19 @@
 
 <div class="flex items-center gap-3 px-3 py-1.5 bg-[#1a1a1a] border-t border-[#333]">
   <button
-    class="flex items-center gap-1.5 px-2 py-1 rounded transition-colors
+    class="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors text-[11px] font-bold uppercase tracking-wider
       {recorderState === 'recording'
         ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
         : 'bg-[#2a2a2a] text-gray-400 hover:bg-[#333]'}"
     onclick={toggleRecording}
-    title={recorderState === 'recording' ? 'Stop recording session' : 'Start recording session to CSV/YAML'}
+    title={recorderState === 'recording' ? 'Stop recording session' : 'Start recording session'}
   >
     {#if recorderState === 'recording'}
-      <div class="w-2.5 h-2.5 bg-red-500 rounded-sm"></div>
-      <span class="text-[11px]">Stop</span>
+      <IconPlayerStop size={14} />
+      <span>Stop</span>
     {:else}
-      <div class="w-2.5 h-2.5 bg-red-500 rounded-full"></div>
-      <span class="text-[11px]">Record</span>
+      <IconPlayerPlay size={14} />
+      <span>Record</span>
     {/if}
   </button>
 
@@ -79,15 +100,26 @@
     {/if}
   </div>
 
-  <div class="text-[10px] text-gray-500">
+  <div class="text-[10px] font-bold uppercase tracking-wider">
     {#if recorderState === 'recording'}
       <span class="text-red-400">Recording</span>
     {:else if recorderState === 'stopped'}
       <span class="text-amber-400">Stopped</span>
     {:else}
-      Session
+      <span class="text-gray-600">Ready</span>
     {/if}
   </div>
+
+  {#if recorderState === 'recording'}
+    <button
+      class="flex items-center gap-1 px-2 py-1 text-[10px] text-sky-400 bg-sky-400/10 rounded hover:bg-sky-400/20 transition-colors"
+      title="Freeze-frame: bookmark this moment"
+      onclick={onFreezeFrame}
+    >
+      <IconCamera size={12} />
+      Freeze
+    </button>
+  {/if}
 
   <div class="flex-1"></div>
 
@@ -97,14 +129,14 @@
       title="Export recorded data as CSV"
       onclick={() => handleExport('csv')}
     >
-      Export CSV
+      CSV
     </button>
     <button
       class="px-2 py-1 text-[10px] text-gray-400 bg-[#2a2a2a] rounded hover:bg-[#333] transition-colors"
       title="Export recorded data as YAML"
       onclick={() => handleExport('yaml')}
     >
-      Export YAML
+      YAML
     </button>
   {/if}
 </div>

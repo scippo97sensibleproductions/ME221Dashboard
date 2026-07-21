@@ -86,7 +86,30 @@
   let panOffset = { x: 0, y: 0, z: 0 };
   let pivotPoint = new THREE.Vector3(0, 0, 0);
 
-  const { min: zMin, max: zMax } = $derived(getDataRange(tableData.output));
+  // Touch state
+  let touchState = {
+    isDragging: false,
+    isPanning: false,
+    lastTouch: { x: 0, y: 0 },
+    lastPinchDist: 0,
+    lastPinchCenter: { x: 0, y: 0 },
+    touchCount: 0,
+    wasDragged: false,
+    pressStartTime: 0,
+    pressStartPos: { x: 0, y: 0 },
+    longPressTimer: 0 as any,
+    longPressFired: false,
+  };
+
+  const LONG_PRESS_DELAY_MS = 400;
+  const LONG_PRESS_MOVE_TOLERANCE = 12;
+
+  // Reactive min/max over the output data — used by the color/height mapping.
+  // NOTE: don't destructure the $derived result — it wraps a SvelteDerived object;
+  // access .value explicitly to read the underlying range reactively.
+  const dataRange = $derived(getDataRange(tableData.output));
+  const zMin = $derived(dataRange.min);
+  const zMax = $derived(dataRange.max);
 
   function getColor(val: number): THREE.Color {
     const css = heatColor(val, zMin, zMax, colorScheme);
@@ -788,6 +811,148 @@
     e.preventDefault();
   }
 
+  // ─── ViewCube responsive sizing ─────────────────────────────────────────
+
+  function getViewCubeSize(): number {
+    if (!containerEl) return 50;
+    const w = containerEl.clientWidth;
+    const h = containerEl.clientHeight;
+    const minDim = Math.min(w, h);
+    // Scale ViewCube: 12.5% of smallest dimension, clamped between 15-75px
+    return Math.max(15, Math.min(75, Math.floor(minDim * 0.125)));
+  }
+
+  function updateViewCubeSize() {
+    if (!vcRenderer || !containerEl) return;
+    const size = getViewCubeSize();
+    vcRenderer.setSize(size, size);
+    vcRenderer.domElement.style.top = `${44}px`;
+    vcRenderer.domElement.style.right = `${Math.max(4, Math.floor(size * 0.05))}px`;
+  }
+
+  // ─── Touch handlers ──────────────────────────────────────────────────────
+
+  function getTouchDistance(t1: Touch, t2: Touch): number {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function getTouchCenter(t1: Touch, t2: Touch): { x: number; y: number } {
+    return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+  }
+
+  function fireLongPressSelect() {
+    touchState.longPressFired = true;
+    const vert = findNearestVertex(touchState.pressStartPos.x, touchState.pressStartPos.y);
+    if (vert) {
+      selRow = vert.row;
+      selCol = vert.col;
+      updateSelectionMarker();
+      updateSmoothRadiusRing();
+      onSelectionChange?.(vert.row, vert.col);
+    }
+  }
+
+  function cancelLongPress() {
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+      touchState.longPressTimer = 0;
+    }
+  }
+
+  function onTouchStart(e: TouchEvent) {
+    e.preventDefault();
+    const touches = e.touches;
+    touchState.touchCount = touches.length;
+    touchState.longPressFired = false;
+
+    if (touches.length === 1) {
+      touchState.isDragging = true;
+      touchState.isPanning = false;
+      touchState.lastTouch = { x: touches[0].clientX, y: touches[0].clientY };
+      touchState.pressStartTime = Date.now();
+      touchState.pressStartPos = { x: touches[0].clientX, y: touches[0].clientY };
+      // Start long-press timer — fires selection if finger stays still
+      cancelLongPress();
+      touchState.longPressTimer = setTimeout(fireLongPressSelect, LONG_PRESS_DELAY_MS);
+    } else if (touches.length === 2) {
+      touchState.isDragging = false;
+      touchState.isPanning = true;
+      cancelLongPress();
+      touchState.lastPinchDist = getTouchDistance(touches[0], touches[1]);
+      touchState.lastPinchCenter = getTouchCenter(touches[0], touches[1]);
+      touchState.lastTouch = { ...touchState.lastPinchCenter };
+    }
+  }
+
+  function onTouchMove(e: TouchEvent) {
+    e.preventDefault();
+    const touches = e.touches;
+
+    if (touches.length === 1 && touchState.isDragging) {
+      // Cancel long-press if finger moved beyond tolerance
+      const moveDx = touches[0].clientX - touchState.pressStartPos.x;
+      const moveDy = touches[0].clientY - touchState.pressStartPos.y;
+      const moveDist = Math.sqrt(moveDx * moveDx + moveDy * moveDy);
+      if (moveDist > LONG_PRESS_MOVE_TOLERANCE) {
+        cancelLongPress();
+        touchState.wasDragged = true;
+      }
+
+      // Orbit (delta from last touch position)
+      const dx = touches[0].clientX - touchState.lastTouch.x;
+      const dy = touches[0].clientY - touchState.lastTouch.y;
+      // Touch: natural direction — drag right rotates view right (opposite of mouse)
+      spherical.theta += dx * 0.008;
+      spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, spherical.phi - dy * 0.008));
+      updateCamera();
+      touchState.lastTouch = { x: touches[0].clientX, y: touches[0].clientY };
+    } else if (touches.length === 2 && touchState.isPanning) {
+      cancelLongPress();
+      touchState.wasDragged = true;
+      const newDist = getTouchDistance(touches[0], touches[1]);
+      const scale = touchState.lastPinchDist / newDist;
+      spherical.radius = Math.max(2, Math.min(30, spherical.radius * scale));
+      touchState.lastPinchDist = newDist;
+
+      const newCenter = getTouchCenter(touches[0], touches[1]);
+      const dx = newCenter.x - touchState.lastPinchCenter.x;
+      const dy = newCenter.y - touchState.lastPinchCenter.y;
+      const panSpeed = spherical.radius * 0.003;
+      const right = new THREE.Vector3();
+      const up = new THREE.Vector3(0, 1, 0);
+      camera.getWorldDirection(right);
+      right.cross(up).normalize();
+      panOffset.x += (-dx * right.x + dy * up.x) * panSpeed;
+      panOffset.y += (-dx * right.y + dy * up.y) * panSpeed;
+      panOffset.z += (-dx * right.z + dy * up.z) * panSpeed;
+      updateCamera();
+      touchState.lastPinchCenter = newCenter;
+      touchState.lastTouch = { ...newCenter };
+    }
+  }
+
+  function onTouchEnd(e: TouchEvent) {
+    const touches = e.touches;
+    cancelLongPress();
+
+    if (touches.length === 0) {
+      touchState.isDragging = false;
+      touchState.isPanning = false;
+      touchState.touchCount = 0;
+      touchState.wasDragged = false;
+      touchState.longPressFired = false;
+    } else if (touches.length === 1) {
+      // Went from 2 fingers to 1 — resume orbit
+      touchState.isDragging = true;
+      touchState.isPanning = false;
+      touchState.lastTouch = { x: touches[0].clientX, y: touches[0].clientY };
+      touchState.touchCount = 1;
+      touchState.wasDragged = true; // already moved, don't allow long-press now
+    }
+  }
+
   // ─── Keyboard ────────────────────────────────────────────────────────────
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -1072,11 +1237,12 @@
 
     // Renderer
     vcRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    vcRenderer.setSize(120, 120);
+    const vcSize = getViewCubeSize();
+    vcRenderer.setSize(vcSize, vcSize);
     vcRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     vcRenderer.setClearColor(0x000000, 0);
     vcRenderer.domElement.id = 'viewcube-canvas';
-    vcRenderer.domElement.style.cssText = 'position:absolute;top:44px;right:8px;border-radius:6px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.12);cursor:pointer;z-index:15;';
+    vcRenderer.domElement.style.cssText = `position:absolute;top:44px;right:${Math.max(4, Math.floor(vcSize * 0.05))}px;border-radius:6px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.12);cursor:pointer;z-index:15;touch-action:none;`;
     containerEl.appendChild(vcRenderer.domElement);
 
     vcRenderer.domElement.addEventListener('click', (e: MouseEvent) => {
@@ -1091,6 +1257,31 @@
         if (faceIdx >= 0 && faceIdx < viewMap.length) setView(viewMap[faceIdx]);
       }
     });
+
+    // Touch support for ViewCube — prevent gestures from reaching main canvas
+    vcRenderer.domElement.addEventListener('touchstart', (e: TouchEvent) => {
+      e.stopPropagation();
+    }, { passive: true });
+    vcRenderer.domElement.addEventListener('touchmove', (e: TouchEvent) => {
+      e.stopPropagation();
+    }, { passive: true });
+    vcRenderer.domElement.addEventListener('touchend', (e: TouchEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const rect = vcRenderer.domElement.getBoundingClientRect();
+        vcMouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+        vcMouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+        vcRaycaster.setFromCamera(vcMouse, vcCamera);
+        const hits = vcRaycaster.intersectObject(boxMesh, false);
+        if (hits.length > 0) {
+          const faceIdx = hits[0].face?.materialIndex ?? -1;
+          const viewMap = ['front', 'back', 'top', 'bottom', 'right', 'left'];
+          if (faceIdx >= 0 && faceIdx < viewMap.length) setView(viewMap[faceIdx]);
+        }
+      }
+    }, { passive: false });
 
     // Animation loop
     let lastTime = performance.now();
@@ -1139,8 +1330,14 @@
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      updateViewCubeSize();
     });
     resizeObs.observe(containerEl);
+
+    // Touch events via addEventListener (more reliable than Svelte bindings for touch)
+    containerEl.addEventListener('touchstart', onTouchStart, { passive: false });
+    containerEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    containerEl.addEventListener('touchend', onTouchEnd, { passive: false });
 
     // Focus for keyboard
     containerEl.tabIndex = 0;
@@ -1150,6 +1347,10 @@
   onDestroy(() => {
     mounted = false;
     if (animFrameId) cancelAnimationFrame(animFrameId);
+    cancelLongPress();
+    containerEl?.removeEventListener('touchstart', onTouchStart);
+    containerEl?.removeEventListener('touchmove', onTouchMove);
+    containerEl?.removeEventListener('touchend', onTouchEnd);
     renderer?.dispose();
     containerEl?.removeChild(renderer?.domElement);
     vcRenderer?.dispose();
@@ -1186,7 +1387,7 @@
 <div
   bind:this={containerEl}
   class="relative h-full w-full outline-none"
-  style="background-color: #0a0a0a;"
+  style="background-color: #0a0a0a; touch-action: none;"
   onmousedown={onMouseDown}
   onmousemove={onMouseMove}
   onmouseup={onMouseUp}
@@ -1197,10 +1398,10 @@
   aria-label="3D table surface"
 >
   <!-- ─── Top Bar ────────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute top-0 left-0 right-0 z-10 flex items-center gap-3 border-b px-3 py-2"
-    style="background-color: var(--metro-surface); border-color: var(--metro-border);"
+    style="background-color: var(--metro-surface); border-color: var(--metro-border); touch-action: none;"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
@@ -1284,9 +1485,10 @@
   </div>
 
   <!-- ─── Mobile Touch Toolbar (right side, hidden on desktop) ──────── -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute right-2 top-1/2 z-20 -translate-y-1/2 flex flex-col gap-1 lg:hidden"
+    style="touch-action: none;"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
@@ -1354,10 +1556,10 @@
   </div>
 
   <!-- ─── Bottom Bar ──────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute bottom-0 left-0 right-0 z-10 flex items-center gap-3 border-t px-3 py-1.5"
-    style="background-color: var(--metro-surface); border-color: var(--metro-border);"
+    style="background-color: var(--metro-surface); border-color: var(--metro-border); touch-action: none;"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}

@@ -19,8 +19,23 @@ public partial class HybridBridgeService
         try
         {
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
-            var def = config?.Dashboards.GetValueOrDefault(config?.ActiveDashboard ?? "default");
-            var persisted = def?.WarningSettings ?? [];
+
+            // Migrate: pull per-dashboard warnings into global config on first read
+            if (config != null && config.WarningSettings.Count == 0)
+            {
+                foreach (var dashboard in config.Dashboards.Values)
+                {
+                    if (dashboard.LegacyWarningSettings is { Count: > 0 })
+                    {
+                        config.WarningSettings = dashboard.LegacyWarningSettings;
+                        dashboard.LegacyWarningSettings = null;
+                        await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+                        break;
+                    }
+                }
+            }
+
+            var persisted = config?.WarningSettings ?? [];
 
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var dataLinks = calResult.Data?.DataLinks ?? [];
@@ -79,12 +94,8 @@ public partial class HybridBridgeService
         {
             var settings = JsonSerializer.Deserialize<List<DataLinkWarningSetting>>(settingsJson, SJsonOptions) ?? [];
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
-            var activeName = config.ActiveDashboard ?? "default";
 
-            if (!config.Dashboards.ContainsKey(activeName))
-                config.Dashboards[activeName] = new DashboardDefinition();
-
-            config.Dashboards[activeName].WarningSettings = settings;
+            config.WarningSettings = settings;
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
             _logger.LogInformation("[WARN] SaveWarningSettings: saved {Count} settings", settings.Count);
 

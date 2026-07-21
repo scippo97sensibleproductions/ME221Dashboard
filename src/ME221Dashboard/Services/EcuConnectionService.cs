@@ -263,6 +263,12 @@ public sealed class EcuConnectionService(
     {
         if (_state != ConnectionState.Connected) return;
         _logger.LogWarning("Connection lost");
+
+        // Fire Disconnected event so JS layer knows the connection dropped.
+        // This also resets _state to Disconnected, which is critical — without it,
+        // ConnectAsync sees _state == Connected and returns immediately (no-op).
+        State = ConnectionState.Disconnected;
+
         await CleanupAsync().ConfigureAwait(false);
 
         // Auto-reconnect: attempt up to 3 times with backoff for serial connections.
@@ -279,6 +285,8 @@ public sealed class EcuConnectionService(
                 var success = await ConnectAsync(_lastTarget).ConfigureAwait(false);
                 if (success)
                 {
+                    // ConnectAsync sets State = Connected, firing ConnectionStateChanged.
+                    // JS layer receives Connected event → calls enableReporting() → LiveDataService restarts.
                     _logger.LogInformation("Auto-reconnect succeeded on attempt {Attempt}", _autoReconnectAttempts);
                     return;
                 }

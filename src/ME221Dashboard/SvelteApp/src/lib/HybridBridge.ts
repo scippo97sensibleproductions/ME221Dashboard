@@ -467,6 +467,26 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
+  // ─── .mecal Calibration Import/Export ──────────────────────────────────
+
+  exportMecal: async (): Promise<{ success: boolean; path?: string; message?: string; tables?: number; drivers?: number; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('ExportMecal');
+    return JSON.parse(result);
+  },
+
+  importMecal: async (): Promise<{ picked: boolean; success?: boolean; metadata?: { productName: string; modelName: string; version: string }; tablesWritten?: number; tablesFailed?: number; driversWritten?: number; driversFailed?: number; error?: string }> => {
+    if (!isWebViewAvailable()) return { picked: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('ImportMecal');
+    return JSON.parse(result);
+  },
+
+  getMecalSummary: async (fileContent: string): Promise<{ success: boolean; metadata?: { productName: string; modelName: string; version: string }; tableCount?: number; driverCount?: number; dataLinkCount?: number; tables?: any[]; drivers?: any[]; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('GetMecalSummary', [fileContent]);
+    return JSON.parse(result);
+  },
+
   // ─── Log Streaming ─────────────────────────────────────────────────────
 
   startLogStreaming: async (): Promise<{ success: boolean }> => {

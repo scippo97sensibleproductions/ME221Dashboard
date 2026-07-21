@@ -15,6 +15,7 @@
   import LogsPage from './pages/LogsPage.svelte';
   import EcuMonitorPage from './pages/EcuMonitorPage.svelte';
   import WarningSettingsPage from './pages/WarningSettingsPage.svelte';
+  import AppSettingsPage from './pages/AppSettingsPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
   import type { NotificationType } from './lib/NotificationModal.svelte';
   import ToastContainer from './lib/ToastContainer.svelte';
@@ -46,7 +47,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'warnings';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'warnings' | 'settings';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -526,9 +527,6 @@
       onNewDashboard={() => { newDashboardDialog = true; newDashboardName = ''; newDashboardError = null; }}
       onNavigate={navigateTo}
       onDisconnect={disconnectEcu}
-      onExportDashboard={exportDashboard}
-      onImportDashboard={importDashboard}
-      onVehicleConfig={openVehicleConfig}
       onHideSidebar={() => { sidebarVisible = false; }}
       onShowSidebar={() => { sidebarVisible = true; }}
     />
@@ -596,6 +594,8 @@
         <EcuMonitorPage onNavigate={navigateTo} {connectionState} />
       {:else if currentPage === 'warnings'}
         <WarningSettingsPage onNavigate={navigateTo} />
+      {:else if currentPage === 'settings'}
+        <AppSettingsPage />
       {/if}
     </main>
   </div>

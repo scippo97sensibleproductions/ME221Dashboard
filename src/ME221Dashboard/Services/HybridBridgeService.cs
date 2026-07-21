@@ -191,7 +191,7 @@ public partial class HybridBridgeService : IDisposable
             _liveDataSb.Append(idStr);
             _liveDataSb.Append("\":");
             var val = _liveData[id];
-            if (val.HasValue)
+            if (val.HasValue && !float.IsNaN(val.Value))
                 _liveDataSb.Append(val.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             else
                 _liveDataSb.Append("null");

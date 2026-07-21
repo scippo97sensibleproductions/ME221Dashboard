@@ -244,7 +244,7 @@ public sealed class SensorSimulator
             var input1Value = _entityStore.GetDataLinkValue(table.Input1LinkId);
 
             var interpolated = _entityStore.InterpolateTable(table.Id, input0Value, input1Value);
-            if (interpolated.HasValue)
+            if (interpolated.HasValue && !float.IsNaN(interpolated.Value))
                 _entityStore.SetDataLinkValue(outputLinkId, interpolated.Value);
         }
 

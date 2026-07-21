@@ -9,12 +9,24 @@
     yMin,
     yMax,
     showDataZoom = true,
+    mode = 'live',
+    playbackData,
+    playbackTimeMs,
+    overlaySessions,
+    markerA,
+    markerB,
   }: {
     series: SeriesConfig[];
     timeWindowSec?: number;
     yMin?: number;
     yMax?: number;
     showDataZoom?: boolean;
+    mode?: 'live' | 'playback';
+    playbackData?: Map<string, Array<{ t: number; v: number }>>;
+    playbackTimeMs?: number;
+    overlaySessions?: Array<{ name: string; color: string; data: Map<string, Array<{ t: number; v: number }>> }>;
+    markerA?: number | null;
+    markerB?: number | null;
   } = $props();
 
   let container: HTMLDivElement;
@@ -38,11 +50,29 @@
   function renderChart() {
     if (!chart) return;
     const now = Date.now();
+
+    let data: Map<string, Pt[]>;
+    let renderNow: number;
+
+    if (mode === 'playback' && playbackData) {
+      data = new Map();
+      for (const [id, pts] of playbackData) {
+        data.set(id, pts);
+      }
+      renderNow = playbackTimeMs ?? now;
+    } else {
+      data = buffer.getAllSeries();
+      renderNow = now;
+    }
+
     const option = buildMultiSeriesOption(
       series,
-      buffer.getAllSeries(),
+      data,
       { timeWindowSec, yMin, yMax, showDataZoom },
-      now,
+      renderNow,
+      overlaySessions,
+      markerA,
+      markerB,
     );
     chart.setOption(option, { replaceMerge: ['series'] });
   }
@@ -53,6 +83,14 @@
       lastRenderTime = now;
       renderChart();
     }
+  }
+
+  export function pushData(seriesId: string, timeMs: number, value: number) {
+    buffer.push(seriesId, timeMs, value);
+  }
+
+  export function getBuffer(): TimeSeriesBuffer {
+    return buffer;
   }
 
   $effect(() => {
@@ -85,6 +123,8 @@
 
   $effect(() => {
     void timeWindowSec;
+    void mode;
+    void playbackTimeMs;
     renderChart();
   });
 </script>

@@ -220,60 +220,67 @@ public sealed class UsbSerialChannel(
         int hardFailures = 0;
         int backoffMs = 50;
 
-        while (!cancellationToken.IsCancellationRequested && _isOpen)
+        try
         {
-            try
+            while (!cancellationToken.IsCancellationRequested && _isOpen)
             {
-                DrainFrames();
-
-                // BulkTransfer (enableAsyncRead=false) respects the timeout.
-                int bytesRead = _port.Read(buffer, ReadTimeoutMs);
-
-                if (bytesRead > 0)
+                try
                 {
-                    hardFailures = 0;
-                    backoffMs = 50;
-
-                    var dest = _frameBuffer.AppendMemory;
-                    var count = Math.Min(bytesRead, dest.Length);
-                    buffer.AsSpan(0, count).CopyTo(dest.Span);
-                    _frameBuffer.Advance(count);
-
                     DrainFrames();
 
-                    // If buffer is full despite extraction, invoke compaction
-                    // via TryExtractFrame — avoids Reset() which drops pending
-                    // response frames (heartbeat responses etc.).
-                    if (_frameBuffer.BufferedLength >= _frameBuffer.AppendMemory.Length)
-                        _frameBuffer.TryExtractFrame(out _);
-                }
-            }
-            catch (OperationCanceledException) { break; }
-            catch (Java.IO.IOException ex)
-            {
-                if (!IsDeviceStillAttached())
-                {
-                    hardFailures++;
-                    if (hardFailures >= MaxHardReceiveFailures)
+                    // BulkTransfer (enableAsyncRead=false) respects the timeout.
+                    int bytesRead = _port.Read(buffer, ReadTimeoutMs);
+
+                    if (bytesRead > 0)
                     {
-                        _status = DeviceStatus.Closed;
-                        _isOpen = false;
-                        _logger.LogError("UsbSerialChannel: device removed — declaring channel dead");
-                        break;
+                        hardFailures = 0;
+                        backoffMs = 50;
+
+                        var dest = _frameBuffer.AppendMemory;
+                        var count = Math.Min(bytesRead, dest.Length);
+                        buffer.AsSpan(0, count).CopyTo(dest.Span);
+                        _frameBuffer.Advance(count);
+
+                        DrainFrames();
+
+                        // If buffer is full despite extraction, invoke compaction
+                        // via TryExtractFrame — avoids Reset() which drops pending
+                        // response frames (heartbeat responses etc.).
+                        if (_frameBuffer.BufferedLength >= _frameBuffer.AppendMemory.Length)
+                            _frameBuffer.TryExtractFrame(out _);
                     }
                 }
+                catch (OperationCanceledException) { break; }
+                catch (Java.IO.IOException ex)
+                {
+                    if (!IsDeviceStillAttached())
+                    {
+                        hardFailures++;
+                        if (hardFailures >= MaxHardReceiveFailures)
+                        {
+                            _status = DeviceStatus.Closed;
+                            _isOpen = false;
+                            _logger.LogError("UsbSerialChannel: device removed — declaring channel dead");
+                            break;
+                        }
+                    }
 
-                try { await Task.Delay(backoffMs, cancellationToken).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                backoffMs = Math.Min(backoffMs * 2, 1000);
+                    try { await Task.Delay(backoffMs, cancellationToken).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                    backoffMs = Math.Min(backoffMs * 2, 1000);
+                }
+                catch (Exception)
+                {
+                    _logger.LogError("UsbSerialChannel: unexpected receive loop error");
+                    if (!_isOpen) { _status = DeviceStatus.Closed; break; }
+                    try { await Task.Delay(100, cancellationToken).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                }
             }
-            catch (Exception)
-            {
-                _logger.LogError("UsbSerialChannel: unexpected receive loop error");
-                if (!_isOpen) { _status = DeviceStatus.Closed; break; }
-                try { await Task.Delay(100, cancellationToken).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-            }
+        }
+        finally
+        {
+            _incomingChannel.Writer.TryComplete();
         }
     }
 

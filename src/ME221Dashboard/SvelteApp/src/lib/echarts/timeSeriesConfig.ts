@@ -13,30 +13,64 @@ export interface ChartOptions {
   showDataZoom?: boolean;
 }
 
+interface OverlaySession {
+  name: string;
+  color: string;
+  data: Map<string, Array<{ t: number; v: number }>>;
+}
+
 export function buildMultiSeriesOption(
   series: SeriesConfig[],
   data: Map<string, Pt[]>,
   opts: ChartOptions,
   now: number,
+  overlaySessions?: OverlaySession[],
+  markerATimeMs?: number | null,
+  markerBTimeMs?: number | null,
 ) {
   const windowMs = opts.timeWindowSec * 1000;
   const cutoff = now - windowMs;
 
-  const echartsSeries = series.map((s) => {
+  const echartsSeries: any[] = [];
+
+  // Main series (live or playback)
+  for (const s of series) {
     const pts = data.get(s.id) ?? [];
     const visible = pts.filter((p) => p.t >= cutoff);
-    return {
+    echartsSeries.push({
       name: s.name,
-      type: 'line' as const,
+      type: 'line',
       data: visible.map((p) => [p.t, p.v]),
-      symbol: 'none' as const,
+      symbol: 'none',
       lineStyle: { width: 1.5, color: s.color },
       itemStyle: { color: s.color },
-      sampling: 'lttb' as const,
+      sampling: 'lttb',
       large: true,
       largeThreshold: 500,
-    };
-  });
+    });
+  }
+
+  // Overlay sessions (dashed lines, dimmer)
+  if (overlaySessions) {
+    for (const overlay of overlaySessions) {
+      for (const s of series) {
+        const pts = overlay.data.get(s.id) ?? [];
+        if (pts.length === 0) continue;
+        const visible = pts.filter((p) => p.t >= cutoff);
+        echartsSeries.push({
+          name: `${overlay.name} - ${s.name}`,
+          type: 'line',
+          data: visible.map((p) => [p.t, p.v]),
+          symbol: 'none',
+          lineStyle: { width: 1, color: overlay.color, type: 'dashed', opacity: 0.6 },
+          itemStyle: { color: overlay.color, opacity: 0.6 },
+          sampling: 'lttb',
+          large: true,
+          largeThreshold: 500,
+        });
+      }
+    }
+  }
 
   const grid = {
     left: 50,
@@ -68,7 +102,7 @@ export function buildMultiSeriesOption(
     max: opts.yMax,
     axisLabel: { color: '#999', fontSize: 10 },
     axisLine: { lineStyle: { color: '#333' } },
-    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.6)' } },
   };
 
   const tooltip = {
@@ -97,8 +131,34 @@ export function buildMultiSeriesOption(
       ]
     : [];
 
+  // A/B marker markLines
+  const markLine: any = {};
+  if (markerATimeMs != null || markerBTimeMs != null) {
+    const markData: any[] = [];
+    if (markerATimeMs != null) {
+      markData.push({
+        xAxis: markerATimeMs,
+        lineStyle: { color: '#3b82f6', type: 'solid', width: 2 },
+        label: { formatter: 'A', color: '#3b82f6', fontSize: 10, fontWeight: 'bold' },
+      });
+    }
+    if (markerBTimeMs != null) {
+      markData.push({
+        xAxis: markerBTimeMs,
+        lineStyle: { color: '#f97316', type: 'solid', width: 2 },
+        label: { formatter: 'B', color: '#f97316', fontSize: 10, fontWeight: 'bold' },
+      });
+    }
+    markLine.data = markData;
+  }
+
+  // Apply markLine to first series if markers exist
+  if (echartsSeries.length > 0 && markLine.data) {
+    echartsSeries[0].markLine = markLine;
+  }
+
   return {
-    animation: false as const,
+    animation: false,
     animationDurationUpdate: 0,
     grid,
     xAxis,

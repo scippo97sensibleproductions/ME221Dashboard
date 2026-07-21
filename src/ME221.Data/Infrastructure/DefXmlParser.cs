@@ -204,6 +204,16 @@ public static class DefXmlParser
     private static List<float>? ParseFloatArray(XElement? element)
     {
         if (element is null) return null;
+
+        // .mecal format uses <float>value</float> child elements
+        var floatElements = element.Elements("float");
+        if (floatElements.Any())
+        {
+            return [.. floatElements.Select(e =>
+                float.TryParse(e.Value, NumberStyles.Float, FloatCulture, out var v) ? v : 0f)];
+        }
+
+        // Fallback: DEF XML uses space-separated text content
         var text = element.Value;
         if (string.IsNullOrWhiteSpace(text)) return null;
 

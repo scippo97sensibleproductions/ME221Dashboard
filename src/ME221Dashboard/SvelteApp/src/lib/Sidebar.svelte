@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconUpload, IconDownload, IconCar, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity, IconAlertTriangle } from '@tabler/icons-svelte';
+  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity, IconAlertTriangle } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
   import { warningStore } from './stores/warningStore.svelte';
 
-  let { isConnected, dashboardNames, activeDashboard, currentPage, sidebarVisible, onSwitchDashboard, onDeleteDashboard, onNewDashboard, onNavigate, onDisconnect, onHideSidebar, onShowSidebar, onExportDashboard, onImportDashboard, onVehicleConfig }: {
+  let { isConnected, dashboardNames, activeDashboard, currentPage, sidebarVisible, onSwitchDashboard, onDeleteDashboard, onNewDashboard, onNavigate, onDisconnect, onHideSidebar, onShowSidebar }: {
     isConnected: boolean;
     dashboardNames: string[];
     activeDashboard: string;
@@ -16,9 +16,6 @@
     onDisconnect: () => void;
     onHideSidebar: () => void;
     onShowSidebar: () => void;
-    onExportDashboard: () => void;
-    onImportDashboard: () => void;
-    onVehicleConfig: () => void;
   } = $props();
 
   function toggleBar() {
@@ -34,6 +31,7 @@
     currentPage === 'driverList' || currentPage === 'driverEditor' ? 'drivers' :
     currentPage === 'ecuMonitor' ? 'monitor' :
     currentPage === 'warnings' ? 'warnings' :
+    currentPage === 'settings' ? 'settings' :
     ''
   );
 
@@ -228,17 +226,9 @@
           <IconMessage size={15} class="shrink-0" />
           <span>Logs</span>
         </DropdownItem>
-        <DropdownItem onclick={onVehicleConfig} class="flex items-center gap-2.5 text-[13px]">
-          <IconCar size={15} class="shrink-0" />
-          <span>Vehicle</span>
-        </DropdownItem>
-        <DropdownItem onclick={onExportDashboard} class="flex items-center gap-2.5 text-[13px]">
-          <IconUpload size={15} class="shrink-0" />
-          <span>Export</span>
-        </DropdownItem>
-        <DropdownItem onclick={onImportDashboard} class="flex items-center gap-2.5 text-[13px]">
-          <IconDownload size={15} class="shrink-0" />
-          <span>Import</span>
+        <DropdownItem onclick={() => onNavigate('settings')} class="flex items-center gap-2.5 text-[13px]">
+          <IconSettings size={15} class="shrink-0" />
+          <span>App Settings</span>
         </DropdownItem>
         <DropdownItem onclick={onDisconnect} class="metro-danger-item flex items-center gap-2.5 text-[13px]" style="background-color: var(--metro-red); color: var(--metro-text-on-accent);">
           <IconPower size={15} class="shrink-0" />

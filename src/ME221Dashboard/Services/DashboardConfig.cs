@@ -14,6 +14,8 @@ public sealed class DashboardConfig
     };
     public VehicleConfig? Vehicle { get; set; }
     public UserPreferences? Preferences { get; set; }
+    public List<DataLinkWarningSetting> WarningSettings { get; set; } = [];
+    public int WarningDelayMs { get; set; } = 500;
 }
 
 public sealed class UserPreferences
@@ -46,8 +48,12 @@ public sealed class DashboardDefinition
     public bool HeaderVisible { get; set; } = true;
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
-    public List<DataLinkWarningSetting> WarningSettings { get; set; } = [];
-    public int WarningDelayMs { get; set; } = 500;
+    [System.Text.Json.Serialization.JsonPropertyName("WarningSettings")]
+    [System.Obsolete("Migrated to DashboardConfig.WarningSettings. Kept for deserialization of old configs.")]
+    public List<DataLinkWarningSetting>? LegacyWarningSettings { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("WarningDelayMs")]
+    [System.Obsolete("Migrated to DashboardConfig.WarningDelayMs. Kept for deserialization of old configs.")]
+    public int? LegacyWarningDelayMs { get; set; }
     public List<WarningHistoryEntry> WarningHistory { get; set; } = [];
 }
 

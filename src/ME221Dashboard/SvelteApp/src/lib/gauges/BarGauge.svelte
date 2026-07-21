@@ -88,7 +88,7 @@
   const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
 </script>
 
-<svg width={pixelWidth} height={pixelHeight} viewBox="0 0 {pixelWidth} {pixelHeight}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
+<svg width={pixelWidth} height={pixelHeight} viewBox="0 0 {pixelWidth} {pixelHeight}" overflow="visible" class="select-none" xmlns="http://www.w3.org/2000/svg">
   {#if isHorizontal}
     <rect x={hBarX} y={hBarY} width={hBarW} height={hBarH} rx="4" fill="#ced4da" />
     {#if valueFraction > 0}

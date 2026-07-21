@@ -1,4 +1,5 @@
 import { liveDataStore } from '../stores/LiveDataStore.svelte';
+import type { FreezeFrame } from './SessionStore';
 
 export type RecordingState = 'idle' | 'recording' | 'stopped';
 
@@ -15,6 +16,8 @@ class SessionRecorderClass {
   #startTime = 0;
   #rafId: number | null = null;
   #recordedSensorIds: number[] = [];
+  #sensorNames = new Map<number, string>();
+  #freezeFrames: FreezeFrame[] = [];
 
   get state(): RecordingState {
     return this.#state;
@@ -29,12 +32,14 @@ class SessionRecorderClass {
     return this.#recordedSensorIds;
   }
 
-  start(sensorIds: number[]): void {
+  start(sensorIds: number[], nameMap?: Map<number, string>): void {
     if (this.#state === 'recording') return;
     this.#state = 'recording';
     this.#startTime = performance.now();
     this.#buffer.clear();
     this.#recordedSensorIds = sensorIds;
+    this.#sensorNames = nameMap ?? new Map();
+    this.#freezeFrames = [];
     for (const id of sensorIds) {
       this.#buffer.set(id, []);
     }
@@ -65,6 +70,15 @@ class SessionRecorderClass {
     }
   }
 
+  freezeFrame(label?: string): void {
+    if (this.#state !== 'recording') return;
+    this.#freezeFrames.push({
+      timeMs: this.durationMs,
+      label: label ?? `Frame ${this.#freezeFrames.length + 1}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   reset(): void {
     this.#state = 'idle';
     if (this.#rafId !== null) {
@@ -73,6 +87,32 @@ class SessionRecorderClass {
     }
     this.#buffer.clear();
     this.#recordedSensorIds = [];
+    this.#sensorNames = new Map();
+    this.#freezeFrames = [];
+  }
+
+  getRecordedData(): {
+    sensorIds: number[];
+    sensorNames: Record<number, string>;
+    data: Record<number, Array<{ t: number; v: number }>>;
+    durationMs: number;
+    freezeFrames: FreezeFrame[];
+  } {
+    const sensorNames: Record<number, string> = {};
+    for (const [id, name] of this.#sensorNames) {
+      sensorNames[id] = name;
+    }
+    const data: Record<number, Array<{ t: number; v: number }>> = {};
+    for (const [id, buf] of this.#buffer) {
+      data[id] = [...buf];
+    }
+    return {
+      sensorIds: [...this.#recordedSensorIds],
+      sensorNames,
+      data,
+      durationMs: this.durationMs,
+      freezeFrames: [...this.#freezeFrames],
+    };
   }
 
   getBuffer(): Map<number, Sample[]> {
@@ -83,7 +123,8 @@ class SessionRecorderClass {
     const ids = this.#recordedSensorIds;
     if (ids.length === 0) return '';
 
-    const headers = ['time_ms', ...ids.map(String)];
+    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    const headers = ['time_ms', ...ids.map(id => escapeCsv(this.#sensorNames.get(id) ?? String(id)))];
     const rows: string[] = [headers.join(',')];
 
     const maxLen = Math.max(...ids.map((id) => this.#buffer.get(id)?.length ?? 0));

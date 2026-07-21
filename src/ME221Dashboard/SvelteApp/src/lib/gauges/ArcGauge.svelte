@@ -96,7 +96,7 @@
   const bgArcPath = $derived(describeArc(cx, cy, r - arcThickness / 2, arcStartAngle, arcEndAngle));
 </script>
 
-<svg width="{arcBox}" height="{arcBox}" viewBox="0 0 {arcBox} {arcBox}" overflow="visible"
+<svg width="{arcBox}" height="{arcBox}" viewBox="0 0 {arcBox} {arcBox}" overflow="visible" class="select-none"
      style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);"
      xmlns="http://www.w3.org/2000/svg">
   {#if textureDataUrl}

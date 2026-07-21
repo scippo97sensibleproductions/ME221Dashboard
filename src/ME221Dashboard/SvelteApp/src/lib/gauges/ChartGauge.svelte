@@ -327,7 +327,7 @@
   $effect(() => { timer = window.setInterval(tick, 100); return () => clearInterval(timer); });
 </script>
 
-<div class="size-full relative overflow-hidden rounded" style="background: rgba(0,0,0,0.2);">
+<div class="size-full relative overflow-hidden rounded select-none" style="background: rgba(0,0,0,0.2);">
   <canvas
     bind:this={canvas}
     class="block"

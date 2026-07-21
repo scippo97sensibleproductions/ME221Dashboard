@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using ME221.Comms.Internal;
 using ME221.Comms.Messages;
 using ME221.Emulator.Application;
@@ -70,8 +71,6 @@ public sealed class TcpClientSession : IDisposable
 
                 _totalBytesRead += bytesRead;
                 _buffer.AddRange(rentBuffer.AsSpan(0, bytesRead));
-                _logger.LogTrace("EmulatorSession[{Endpoint}]: read {BytesRead} bytes, buffer now {BufferSize} bytes (total RX={TotalBytes})",
-                    endpoint, bytesRead, _buffer.Count, _totalBytesRead);
 
                 await ProcessBufferAsync();
             }
@@ -102,9 +101,8 @@ public sealed class TcpClientSession : IDisposable
     {
         while (_buffer.Count > 0)
         {
-            var data = _buffer.ToArray().AsSpan();
-
-            _logger.LogTrace("EmulatorSession: ProcessBuffer — {BufferSize} bytes in buffer, trying TryParse...", _buffer.Count);
+            // Peek into the list's backing array without allocating
+            var data = CollectionsMarshal.AsSpan(_buffer);
 
             if (FrameParser.TryParse(data, out var frame, out var consumed))
             {
@@ -114,54 +112,38 @@ public sealed class TcpClientSession : IDisposable
 
                 if (frame is not null)
                 {
-                    _logger.LogInformation("EmulatorSession: parsed frame #{FramesRX} — {Type} Class={Class:X2} Cmd={Command:X2} PayloadLen={PayloadLen} (consumed={Consumed})",
-                        _framesReceived,
-                        frame.Type == WireFormat.RequestType ? "REQ" : frame.Type == WireFormat.ResponseType ? "RSP" : $"{frame.Type:X2}",
-                        frame.Class, frame.Command, frame.Payload.Length, consumed);
-
                     var response = await DispatchFrameAsync(frame);
                     await SendResponseAsync(response);
-                }
-                else
-                {
-                    _logger.LogWarning("EmulatorSession: TryParse succeeded but frame is null (consumed={Consumed})", consumed);
                 }
             }
             else
             {
-                _logger.LogTrace("EmulatorSession: TryParse FAILED on {BufferSize} bytes", _buffer.Count);
+                // Parse failure — slow path. Discard garbage and notify client.
+                // Only log at Debug level to avoid spam on marginal links.
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    var hexDump = Convert.ToHexString(data[..Math.Min(data.Length, 32)]);
+                    _logger.LogDebug("EmulatorSession: parse fail — {Bytes} bytes, hex: {Hex}", data.Length, hexDump);
+                }
 
-                // Try to extract class/command from partial data to send a failure response
                 if (data.Length >= WireFormat.SyncLength + WireFormat.PayloadLengthFieldLength + WireFormat.HeaderLengthAfterSync)
                 {
                     var type = data[WireFormat.SyncLength + WireFormat.PayloadLengthFieldLength];
                     var classId = data[WireFormat.SyncLength + WireFormat.PayloadLengthFieldLength + 1];
                     var command = data[WireFormat.SyncLength + WireFormat.PayloadLengthFieldLength + 2];
 
-                    // Only send a failure response if this looks like a valid request type
                     if (type == WireFormat.RequestType)
                     {
-                        _logger.LogWarning("EmulatorSession: parse failure — sending error response for class={Class:X2} cmd={Command:X2}", classId, command);
-                        _console.Error($"Frame parse failure -- sending error response for class {classId:X2} cmd {command:X2}");
                         var errorResponse = new StatusResponse(classId, command, MessageStatus.Failure);
                         await SendResponseAsync(errorResponse);
-                        // Don't clear buffer -- try again with remaining data
                         break;
                     }
                 }
 
-                // Buffer too large or invalid sync -- clear to avoid infinite loop
+                // Buffer too large — invalid sync, clear to avoid infinite loop
                 if (data.Length > WireFormat.FixedFrameOverhead + 4096)
                 {
-                    _logger.LogError("EmulatorSession: buffer too large ({BufferSize}), clearing", _buffer.Count);
-                    _console.Error("Frame parse failure -- buffer too large, clearing");
                     _buffer.Clear();
-                }
-                else
-                {
-                    _logger.LogTrace("EmulatorSession: waiting for more data — incomplete frame ({BufferSize} bytes, need >= {Overhead})",
-                        _buffer.Count, WireFormat.FixedFrameOverhead);
-                    _console.Error($"Frame parse failure -- incomplete frame ({data.Length} bytes, need >= {WireFormat.FixedFrameOverhead})");
                 }
                 break;
             }
@@ -172,7 +154,6 @@ public sealed class TcpClientSession : IDisposable
     {
         if (request.Type != WireFormat.RequestType)
         {
-            _logger.LogWarning("EmulatorSession: received non-request frame type={Type}, returning failure", request.Type);
             return new StatusResponse(request.Class, request.Command, MessageStatus.Failure);
         }
 
@@ -180,9 +161,6 @@ public sealed class TcpClientSession : IDisposable
 
         if (handler is not null)
         {
-            _logger.LogDebug("EmulatorSession: dispatching Class={Class:X2} Cmd={Command:X2} to handler={Handler}",
-                request.Class, request.Command, handler.GetType().Name);
-
             var response = await handler.HandleAsync(request);
 
             // Start/stop reporting orchestration based on state changes
@@ -210,27 +188,17 @@ public sealed class TcpClientSession : IDisposable
     private async ValueTask SendResponseAsync(MessageFrame response)
     {
         using var pooled = FrameBuilder.Build(response);
-        var bytes = pooled.Memory;
-        await _stream.WriteAsync(bytes);
+        await _stream.WriteAsync(pooled.Memory);
         _framesSent++;
         _console.FrameSent(_sessionId);
-        _logger.LogDebug("EmulatorSession: sent response #{FramesTX} — {Type} Class={Class:X2} Cmd={Command:X2} ({Bytes} bytes)",
-            _framesSent,
-            response.Type == WireFormat.ResponseType ? "RSP" : $"{response.Type:X2}",
-            response.Class, response.Command, bytes.Length);
     }
 
     private async ValueTask SendReportFrameAsync(MessageFrame report)
     {
         using var pooled = FrameBuilder.Build(report);
-        var bytes = pooled.Memory;
-        await _stream.WriteAsync(bytes);
+        await _stream.WriteAsync(pooled.Memory);
         _framesSent++;
         _console.FrameSent(_sessionId);
-        _logger.LogDebug("EmulatorSession: sent report frame #{FramesTX} — {Type} Class={Class:X2} Cmd={Command:X2} ({Bytes} bytes)",
-            _framesSent,
-            report.Type == WireFormat.ResponseType ? "RSP" : $"{report.Type:X2}",
-            report.Class, report.Command, bytes.Length);
     }
 
     public void Dispose()

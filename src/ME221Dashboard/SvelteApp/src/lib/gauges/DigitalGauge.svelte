@@ -103,7 +103,7 @@
   const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
 </script>
 
-<div class="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
+<div class="relative flex h-full w-full flex-col items-center justify-center overflow-hidden select-none">
   {#if iconDataUrl}
     <img src={iconDataUrl} alt="" class="absolute pointer-events-none"
          style="width: {iconSz}px; height: {iconSz}px; left: calc(50% + {gauge.iconOffsetX * 100}% - {iconSz / 2}px); top: calc(50% + {gauge.iconOffsetY * 100}% - {iconSz / 2}px);" />
