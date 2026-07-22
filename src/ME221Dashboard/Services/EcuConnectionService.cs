@@ -67,9 +67,9 @@ public sealed class EcuConnectionService(
 #if ANDROID
                         if (target is ConnectionTarget.Serial)
                         {
-                            // After USB re-enumeration the ECU's serial bridge needs time
-                            // to settle before it can respond to the probe.
-                            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                            // Give the ECU's USB bridge time to settle after re-enumeration.
+                            // 2s is the minimum reliable delay after a fresh USB open.
+                            await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
                         }
 #endif
 
@@ -91,7 +91,7 @@ public sealed class EcuConnectionService(
                 {
                     _logger.LogWarning(ex, "Connection attempt {Attempt}/{Max} failed, retrying", attempt, maxAttempts);
                     await CleanupAsync().ConfigureAwait(false);
-                    await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -272,13 +272,22 @@ public sealed class EcuConnectionService(
         await CleanupAsync().ConfigureAwait(false);
 
         // Auto-reconnect: attempt up to 3 times with backoff for serial connections.
-        // This handles USB re-enumeration (device path changes) without waiting for the JS layer.
+        // Delays are 2s, 4s, 6s — the USB host controller needs time to clean up
+        // stale endpoint state after bus suspension (phone calls, doze mode, etc.).
+        // 500ms was too short — the old connection's kernel resources weren't released yet.
         if (_lastTarget is ConnectionTarget.Serial && _autoReconnectAttempts < 3)
         {
             _autoReconnectAttempts++;
-            var delayMs = _autoReconnectAttempts * 1000; // 1s, 2s, 3s backoff
+            var delayMs = _autoReconnectAttempts * 2000; // 2s, 4s, 6s backoff
             _logger.LogInformation("Auto-reconnect attempt {Attempt}/3 in {Delay}ms", _autoReconnectAttempts, delayMs);
             await Task.Delay(delayMs).ConfigureAwait(false);
+
+            // Check if user disconnected during the delay
+            if (_state != ConnectionState.Disconnected || _lastTarget is null)
+            {
+                _logger.LogInformation("Auto-reconnect cancelled — user disconnected during backoff");
+                return;
+            }
 
             try
             {
