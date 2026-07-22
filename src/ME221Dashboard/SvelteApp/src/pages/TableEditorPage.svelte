@@ -811,7 +811,7 @@
     lines.push(`# Table: ${tableDef.name}, ${tableDef.rows}×${tableDef.cols}`);
     lines.push(`# Output: ${tableDef.outputName}`);
     // Header row: column headers (input0 axis name + values)
-    const headerCells = [tableDef.input0Name, ...tableData.input0.map(v => v.toLocaleString())];
+    const headerCells = [tableDef.input0Name, ...tableData.input0.map(v => String(v))];
     lines.push(headerCells.join(','));
     // Data rows
     for (let r = 0; r < tableDef.rows; r++) {

@@ -4,6 +4,11 @@ using ME221.Data.Models;
 
 namespace ME221.Data.Infrastructure;
 
+/// <summary>
+/// Serializes CalibrationData to .mecal XML format compatible with MEITE 3.0.
+/// Element order, names, and structure match MEITE's XmlSerializer output exactly.
+/// Based on MEITE source: DataModel, DataLinkModel, TableModel, DriverModel, DriverModelParam.
+/// </summary>
 public static class MecalWriter
 {
     private static readonly CultureInfo FloatCulture = CultureInfo.InvariantCulture;
@@ -35,6 +40,11 @@ public static class MecalWriter
             new XElement("Text", ""));
     }
 
+    // ─── DataLinks ────────────────────────────────────────────────────────
+    // MEITE order: DefaultLocked, id, name, ViewInTree, BoardSpecific, category,
+    //   [DataKey], [Feedbacks], [MeasurementUnitTypes], [measureUnit],
+    //   StandardLogging, [TextValues], DataTypeSet, MinValue, MaxValue
+
     private static XElement SerializeDataLinks(List<DataLinkDefinition> dataLinks)
     {
         var container = new XElement("links");
@@ -47,19 +57,34 @@ public static class MecalWriter
 
     private static XElement SerializeDataLink(DataLinkDefinition dl)
     {
+        // DataModel base: DefaultLocked, id, name, ViewInTree, BoardSpecific, category
         var elem = new XElement("DataLinkModel",
+            new XElement("DefaultLocked", false),
             new XElement("id", dl.Id),
             new XElement("name", dl.Name),
-            new XElement("category", dl.Category),
-            new XElement("DefaultLocked", false),
-            new XElement("BoardSpecific", false),
             new XElement("ViewInTree", dl.ViewInTree),
-            new XElement("DataKey", dl.DataKey ?? ""),
-            new XElement("measureUnit", dl.MeasureUnit),
-            new XElement("StandardLogging", dl.StandardLogging),
-            new XElement("DataTypeSet", dl.DataTypeSet.ToString()),
-            new XElement("MinValue", FormatFloat(dl.MinValue)),
-            new XElement("MaxValue", FormatFloat(dl.MaxValue)));
+            new XElement("BoardSpecific", false),
+            new XElement("category", dl.Category));
+
+        if (!string.IsNullOrEmpty(dl.DataKey))
+            elem.Add(new XElement("DataKey", dl.DataKey));
+
+        if (dl.Feedbacks is { Count: > 0 })
+        {
+            var fbContainer = new XElement("Feedbacks");
+            foreach (var fb in dl.Feedbacks)
+            {
+                fbContainer.Add(SerializeFeedback(fb));
+            }
+            elem.Add(fbContainer);
+        }
+
+        elem.Add(SerializeMeasurementUnits(dl.MeasurementUnitTypes));
+
+        if (!string.IsNullOrEmpty(dl.MeasureUnit))
+            elem.Add(new XElement("measureUnit", dl.MeasureUnit));
+
+        elem.Add(new XElement("StandardLogging", dl.StandardLogging));
 
         if (dl.TextValues is { Count: > 0 })
         {
@@ -73,17 +98,9 @@ public static class MecalWriter
             elem.Add(tvContainer);
         }
 
-        elem.Add(SerializeMeasurementUnits(dl.MeasurementUnitTypes));
-
-        if (dl.Feedbacks is { Count: > 0 })
-        {
-            var fbContainer = new XElement("Feedbacks");
-            foreach (var fb in dl.Feedbacks)
-            {
-                fbContainer.Add(SerializeFeedback(fb));
-            }
-            elem.Add(fbContainer);
-        }
+        elem.Add(new XElement("DataTypeSet", dl.DataTypeSet.ToString()));
+        elem.Add(new XElement("MinValue", FormatFloat(dl.MinValue)));
+        elem.Add(new XElement("MaxValue", FormatFloat(dl.MaxValue)));
 
         return elem;
     }
@@ -131,6 +148,12 @@ public static class MecalWriter
         return elem;
     }
 
+    // ─── Tables ───────────────────────────────────────────────────────────
+    // MEITE order: DefaultLocked, id, name, ViewInTree, BoardSpecific, category,
+    //   enabled, type, function, cols, rows, input_0_LinkId, input_1_LinkId,
+    //   output_LinkId, input_0_name, input_1_name, output_name,
+    //   input_0 (float[]), input_1 (float[]), output (float[])
+
     private static XElement SerializeTables(List<TableDefinition> tables)
     {
         var container = new XElement("tables");
@@ -143,9 +166,13 @@ public static class MecalWriter
 
     private static XElement SerializeTable(TableDefinition table)
     {
-        return new XElement("TableModel",
+        // DataModel base: DefaultLocked, id, name, ViewInTree, BoardSpecific, category
+        var elem = new XElement("TableModel",
+            new XElement("DefaultLocked", false),
             new XElement("id", table.Id),
             new XElement("name", table.Name),
+            new XElement("ViewInTree", table.ViewInTree),
+            new XElement("BoardSpecific", false),
             new XElement("category", table.Category),
             new XElement("enabled", table.Enabled),
             new XElement("type", table.TableType),
@@ -157,13 +184,27 @@ public static class MecalWriter
             new XElement("output_LinkId", table.OutputLinkId),
             new XElement("input_0_name", table.Input0Name),
             new XElement("input_1_name", table.Input1Name),
-            new XElement("output_name", table.OutputName),
-            new XElement("input_0", SerializeFloatArray(table.Input0)),
-            new XElement("input_1", SerializeFloatArray(table.Input1)),
-            new XElement("output", SerializeFloatArray(table.Output)),
-            new XElement("incVal", FormatFloat(table.IncrementValue)),
-            new XElement("defaultValue", table.DefaultValue.HasValue ? FormatFloat(table.DefaultValue.Value) : ""));
+            new XElement("output_name", table.OutputName));
+
+        elem.Add(SerializeFloatArrayElement("input_0", table.Input0));
+        elem.Add(SerializeFloatArrayElement("input_1", table.Input1));
+        elem.Add(SerializeFloatArrayElement("output", table.Output));
+
+        if (table.IncrementValue != 0.1f)
+            elem.Add(new XElement("incVal", FormatFloat(table.IncrementValue)));
+        if (table.DefaultValue.HasValue && table.DefaultValue.Value != 0f)
+            elem.Add(new XElement("defaultValue", FormatFloat(table.DefaultValue.Value)));
+
+        return elem;
     }
+
+    // ─── Drivers ──────────────────────────────────────────────────────────
+    // MEITE order: DefaultLocked, id, name, ViewInTree, BoardSpecific, category,
+    //   ConfigValidation, numberOfConfigs, configParams,
+    //   OutputValidation, numberOfOutputs, outputLinkIds (ushort[]),
+    //   editableOutputs, outputNames (string[]),
+    //   InputValidation, editableInputs, inputNames (string[]),
+    //   numberOfInputs, inputLinkIds (ushort[])
 
     private static XElement SerializeDrivers(List<DriverDefinition> drivers)
     {
@@ -177,12 +218,14 @@ public static class MecalWriter
 
     private static XElement SerializeDriver(DriverDefinition driver)
     {
+        // DataModel base: DefaultLocked, id, name, ViewInTree, BoardSpecific, category
         var elem = new XElement("DriverModel",
+            new XElement("DefaultLocked", false),
             new XElement("id", driver.Id),
             new XElement("name", driver.Name),
-            new XElement("category", driver.Category),
             new XElement("ViewInTree", driver.ViewInTree),
-            new XElement("ConfigValidation", "None"),
+            new XElement("BoardSpecific", false),
+            new XElement("category", driver.Category),
             new XElement("numberOfConfigs", driver.NumberOfConfigs));
 
         if (driver.Configs is { Count: > 0 })
@@ -195,34 +238,38 @@ public static class MecalWriter
             elem.Add(configContainer);
         }
 
-        elem.Add(new XElement("OutputValidation", "None"));
         elem.Add(new XElement("numberOfOutputs", driver.NumberOfOutputs));
-        elem.Add(SerializeUshortList("outputLinkIds", driver.OutputLinkIds));
         elem.Add(new XElement("editableOutputs", driver.EditableOutputs));
-        elem.Add(SerializeStringList("outputNames", driver.OutputNames));
-        elem.Add(new XElement("InputValidation", "None"));
-        elem.Add(new XElement("editableInputs", driver.EditableInputs));
-        elem.Add(SerializeStringList("inputNames", driver.InputNames));
+        elem.Add(SerializeUshortArrayElement("outputLinkIds", driver.OutputLinkIds));
         elem.Add(new XElement("numberOfInputs", driver.NumberOfInputs));
-        elem.Add(SerializeUshortList("inputLinkIds", driver.InputLinkIds));
+        elem.Add(new XElement("editableInputs", driver.EditableInputs));
+        elem.Add(SerializeUshortArrayElement("inputLinkIds", driver.InputLinkIds));
 
         return elem;
     }
+
+    // ─── DriverModelParam ─────────────────────────────────────────────────
+    // MEITE order: name, [DisplayName], [SectionName], type, readOnly,
+    //   [RequiresReset], [ToolTipText], value, min, max, [CheckRange],
+    //   [MeasurementUnitTypes], [options], [ViewConstraint]
 
     private static XElement SerializeDriverParam(DriverParamDefinition param)
     {
         var elem = new XElement("DriverModelParam",
             new XElement("name", param.Name),
-            new XElement("DisplayName", param.DisplayName),
-            new XElement("SectionName", param.SectionName),
             new XElement("type", param.ParamType),
             new XElement("readOnly", param.ReadOnly),
             new XElement("RequiresReset", param.RequiresReset),
             new XElement("ToolTipText", param.ToolTipText),
             new XElement("value", FormatFloat(param.Value)),
-            new XElement("Min", FormatFloat(param.Min)),
-            new XElement("Max", FormatFloat(param.Max)),
+            new XElement("min", FormatFloat(param.Min)),
+            new XElement("max", FormatFloat(param.Max)),
             new XElement("CheckRange", param.CheckRange));
+
+        if (!string.IsNullOrEmpty(param.SectionName))
+            elem.Element("name")!.AddAfterSelf(new XElement("SectionName", param.SectionName));
+
+        elem.Add(SerializeMeasurementUnits(MeasurementUnitType.Unknown));
 
         if (param.Options is { Count: > 0 })
         {
@@ -238,32 +285,47 @@ public static class MecalWriter
 
         if (param.ViewConstraint is not null)
         {
+            var acceptedValuesContainer = new XElement("AcceptedValues");
+            foreach (var v in param.ViewConstraint.AcceptedValues)
+            {
+                acceptedValuesContainer.Add(new XElement("float", FormatFloat(v)));
+            }
+
             var vc = new XElement("ViewConstraint",
                 new XElement("ParamIndex", param.ViewConstraint.ParamIndex),
-                new XElement("AcceptedValues", string.Join(" ",
-                    param.ViewConstraint.AcceptedValues.Select(FormatFloat))));
+                acceptedValuesContainer);
             elem.Add(vc);
         }
 
         return elem;
     }
 
-    private static XElement SerializeUshortList(string name, List<ushort> values)
+    // ─── Array serialization helpers ──────────────────────────────────────
+
+    private static XElement SerializeFloatArrayElement(string name, List<float>? values)
     {
-        return new XElement(name,
-            string.Join(" ", values.Select(v => v.ToString(FloatCulture))));
+        var container = new XElement(name);
+        if (values is { Count: > 0 })
+        {
+            foreach (var v in values)
+            {
+                container.Add(new XElement("float", FormatFloat(v)));
+            }
+        }
+        return container;
     }
 
-    private static XElement SerializeStringList(string name, List<string> values)
+    private static XElement SerializeUshortArrayElement(string name, List<ushort> values)
     {
-        return new XElement(name,
-            string.Join(" ", values));
-    }
-
-    private static string SerializeFloatArray(List<float>? values)
-    {
-        if (values is null || values.Count == 0) return "";
-        return string.Join(" ", values.Select(FormatFloat));
+        var container = new XElement(name);
+        if (values is { Count: > 0 })
+        {
+            foreach (var v in values)
+            {
+                container.Add(new XElement("unsignedShort", v.ToString(FloatCulture)));
+            }
+        }
+        return container;
     }
 
     private static string FormatFloat(float value)

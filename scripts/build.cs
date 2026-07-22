@@ -192,7 +192,10 @@ await AnsiConsole.Progress()
         {
             var t = ctx.AddTask($"[green].NET build[/] [dim]{tfm} {config}[/]");
             var msbuildArgs = extraMsbuild.Count > 0 ? " " + string.Join(" ", extraMsbuild.Select(m => $"-p:{m}")) : "";
-            msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion} -p:ApplicationVersion={appVersion}";
+            if (!extraMsbuild.Any(m => m.StartsWith("ApplicationDisplayVersion=", StringComparison.OrdinalIgnoreCase)))
+                msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion}";
+            if (!extraMsbuild.Any(m => m.StartsWith("ApplicationVersion=", StringComparison.OrdinalIgnoreCase)))
+                msbuildArgs += $" -p:ApplicationVersion={appVersion}";
             exitCode = Run("dotnet", $"build \"{csproj}\" -f {tfm} -c {config}{msbuildArgs}", root);
             if (exitCode != 0) { Fail(t); return; }
             t.Increment(100);
@@ -205,7 +208,10 @@ await AnsiConsole.Progress()
                 : platformRid != null ? new[] { platformRid } : Array.Empty<string>();
 
             var msbuildArgs = extraMsbuild.Count > 0 ? " " + string.Join(" ", extraMsbuild.Select(m => $"-p:{m}")) : "";
-            msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion} -p:ApplicationVersion={appVersion}";
+            if (!extraMsbuild.Any(m => m.StartsWith("ApplicationDisplayVersion=", StringComparison.OrdinalIgnoreCase)))
+                msbuildArgs += $" -p:ApplicationDisplayVersion={displayVersion}";
+            if (!extraMsbuild.Any(m => m.StartsWith("ApplicationVersion=", StringComparison.OrdinalIgnoreCase)))
+                msbuildArgs += $" -p:ApplicationVersion={appVersion}";
 
             if (rids.Length == 0)
             {

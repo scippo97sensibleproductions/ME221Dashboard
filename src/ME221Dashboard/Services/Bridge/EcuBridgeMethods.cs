@@ -104,15 +104,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select .mefw Calibration File",
-                FileTypes = new FilePickerFileType(isCalWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isCalWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".mefw"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — shows all files
             }).ConfigureAwait(false);
 
             if (fileResult == null)

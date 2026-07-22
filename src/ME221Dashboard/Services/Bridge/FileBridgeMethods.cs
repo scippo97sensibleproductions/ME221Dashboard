@@ -98,15 +98,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select Dashboard Package (.mez)",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".mez"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["application/zip", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — shows all files
             }).ConfigureAwait(false);
 
             if (fileResult == null)
@@ -252,15 +249,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select YAML Calibration File",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".yaml", ".yml", ".txt"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["text/plain", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — shows all files
             }).ConfigureAwait(false);
 
             if (fileResult == null)
@@ -288,15 +282,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select CSV Calibration File",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".csv", ".txt"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["text/csv", "text/plain", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — text/csv is invalid, shows no files
             }).ConfigureAwait(false);
 
             if (fileResult == null)

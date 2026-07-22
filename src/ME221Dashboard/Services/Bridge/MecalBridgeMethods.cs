@@ -212,15 +212,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select Calibration File (.mecal)",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".mecal"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["text/xml", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — shows all files
             }).ConfigureAwait(false);
 
             if (fileResult == null)
@@ -397,15 +394,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select Calibration File (.mecal)",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".mecal"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["text/xml", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — shows all files
             }).ConfigureAwait(false);
 
             if (fileResult == null)

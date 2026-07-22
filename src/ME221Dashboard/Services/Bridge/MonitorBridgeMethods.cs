@@ -21,15 +21,12 @@ public partial class HybridBridgeService
             var fileResult = await FilePicker.Default.PickAsync(new PickOptions
             {
                 PickerTitle = "Select Session CSV File",
-                FileTypes = new FilePickerFileType(isWindows
-                    ? new Dictionary<DevicePlatform, IEnumerable<string>>
+                FileTypes = isWindows
+                    ? new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
                     {
                         { DevicePlatform.WinUI, [".csv", ".txt"] }
-                    }
-                    : new Dictionary<DevicePlatform, IEnumerable<string>>
-                    {
-                        { DevicePlatform.Android, ["text/csv", "text/plain", "application/octet-stream"] }
                     })
+                    : null // Android: no MIME filter — text/csv is invalid, shows no files
             }).ConfigureAwait(false);
 
             if (fileResult == null)

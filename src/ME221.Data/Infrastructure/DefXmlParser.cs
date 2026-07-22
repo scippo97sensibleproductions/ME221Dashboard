@@ -52,8 +52,8 @@ public static class DefXmlParser
                 MeasureUnit = ParseMeasureUnit(elem),
                 MeasurementUnitTypes = MeasurementUnitConverter.ParseUnitTypes(elem.Element("MeasurementUnitTypes")),
                 DataTypeSet = ParseDataType(elem),
-                MinValue = (float?)elem.Element("MinValue") ?? 0f,
-                MaxValue = (float?)elem.Element("MaxValue") ?? 0f,
+                MinValue = ParseFloat(elem.Element("MinValue")) ?? 0f,
+                MaxValue = ParseFloat(elem.Element("MaxValue")) ?? 0f,
                 DataKey = (string?)elem.Element("DataKey"),
                 TextValues = [.. ParseTextValues(elem)],
                 Feedbacks = [.. ParseFeedbacks(elem)],
@@ -192,13 +192,21 @@ public static class DefXmlParser
                 Input0Name = (string?)elem.Element("input_0_name") ?? "",
                 Input1Name = (string?)elem.Element("input_1_name") ?? "",
                 OutputName = (string?)elem.Element("output_name") ?? "",
-                IncrementValue = (float?)elem.Element("incVal") ?? 0.1f,
-                DefaultValue = (float?)elem.Element("defaultValue"),
+                IncrementValue = ParseFloat(elem.Element("incVal")) ?? 0.1f,
+                DefaultValue = ParseFloat(elem.Element("defaultValue")),
                 Input0 = ParseFloatArray(elem.Element("input_0")),
                 Input1 = ParseFloatArray(elem.Element("input_1")),
                 Output = ParseFloatArray(elem.Element("output")),
             };
         }
+    }
+
+    private static float? ParseFloat(XElement? element)
+    {
+        if (element is null) return null;
+        var text = element.Value;
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        return float.TryParse(text, NumberStyles.Float, FloatCulture, out var v) ? v : null;
     }
 
     private static List<float>? ParseFloatArray(XElement? element)
@@ -254,6 +262,10 @@ public static class DefXmlParser
 
     private static DriverParamDefinition ParseDriverParam(XElement elem)
     {
+        // MEITE uses lowercase <min>/<max>, older format used <Min>/<Max>
+        var minVal = (float?)elem.Element("min") ?? (float?)elem.Element("Min") ?? 0f;
+        var maxVal = (float?)elem.Element("max") ?? (float?)elem.Element("Max") ?? 0f;
+
         return new DriverParamDefinition
         {
             Name = (string?)elem.Element("name") ?? "",
@@ -263,8 +275,8 @@ public static class DefXmlParser
             ReadOnly = (bool?)elem.Element("readOnly") ?? false,
             RequiresReset = (bool?)elem.Element("RequiresReset") ?? false,
             Value = (float?)elem.Element("value") ?? 0f,
-            Min = (float?)elem.Element("Min") ?? 0f,
-            Max = (float?)elem.Element("Max") ?? 0f,
+            Min = minVal,
+            Max = maxVal,
             CheckRange = (bool?)elem.Element("CheckRange") ?? false,
             ToolTipText = (string?)elem.Element("ToolTipText") ?? "",
             Options = [.. ParseComboOptions(elem)],
@@ -295,10 +307,21 @@ public static class DefXmlParser
         var acceptedValuesElement = element.Element("AcceptedValues");
         if (paramIndex is null || acceptedValuesElement is null) return null;
 
-        var values = acceptedValuesElement.Value
-            .Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0f)
-            .ToArray();
+        // MEITE format uses <float>child elements, older format uses space-separated text
+        float[] values;
+        var floatElements = acceptedValuesElement.Elements("float");
+        if (floatElements.Any())
+        {
+            values = [.. floatElements.Select(e =>
+                float.TryParse(e.Value, NumberStyles.Float, FloatCulture, out var v) ? v : 0f)];
+        }
+        else
+        {
+            values = acceptedValuesElement.Value
+                .Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => float.TryParse(s, NumberStyles.Float, FloatCulture, out var v) ? v : 0f)
+                .ToArray();
+        }
 
         if (values.Length == 0) return null;
 
@@ -312,6 +335,14 @@ public static class DefXmlParser
     private static List<string> ParseStringList(XElement? element)
     {
         if (element is null) return [];
+
+        // MEITE format uses <string>child elements, older format uses space-separated text
+        var stringElements = element.Elements("string");
+        if (stringElements.Any())
+        {
+            return [.. stringElements.Select(e => e.Value)];
+        }
+
         var text = element.Value;
         if (string.IsNullOrWhiteSpace(text)) return [];
 
@@ -321,6 +352,15 @@ public static class DefXmlParser
     private static List<ushort> ParseUshortList(XElement? element)
     {
         if (element is null) return [];
+
+        // MEITE format uses <unsignedShort>child elements, older format uses space-separated text
+        var ushortElements = element.Elements("unsignedShort");
+        if (ushortElements.Any())
+        {
+            return [.. ushortElements.Select(e =>
+                ushort.TryParse(e.Value, out var v) ? v : (ushort)0)];
+        }
+
         var text = element.Value;
         if (string.IsNullOrWhiteSpace(text)) return [];
 
