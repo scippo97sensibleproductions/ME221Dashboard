@@ -13,7 +13,7 @@
   import {
     IconChartLine, IconAdjustments, IconCircleDotted,
     IconTrash, IconBookmark, IconBookmarkFilled, IconX,
-    IconFileExport, IconPlayerPlay, IconPlayerStop, IconStack2,
+    IconFileExport, IconFileImport, IconPlayerPlay, IconPlayerStop, IconStack2,
   } from '@tabler/icons-svelte';
 
   let {
@@ -58,6 +58,9 @@
 
   // Sessions panel
   let showSessionsPanel = $state(false);
+  let sessionsLoading = $state(false);
+  let busyAction = $state<string | null>(null);
+  let sessionError = $state<string | null>(null);
 
   // ── Derived ────────────────────────────────────────────────────────────
   const chartSeries = $derived(
@@ -111,6 +114,23 @@
     HybridBridge.getDataLinks().then((result) => {
       allDataLinks = result.dataLinks;
     }).catch(() => {});
+  });
+
+  // Initialize session store (sync with C# backend)
+  $effect(() => {
+    sessionsLoading = true;
+    SessionStore.init().then(() => {
+      sessions = SessionStore.sessions;
+      sessionsLoading = false;
+    }).catch(() => { sessionsLoading = false; });
+  });
+
+  // Cleanup intervals on unmount
+  $effect(() => {
+    return () => {
+      stopPlayback();
+      stopTimer();
+    };
   });
 
   // Compute live stats
@@ -221,7 +241,17 @@
     }
   }
 
-  function loadSession(session: RecordedSession) {
+  async function loadSession(session: RecordedSession) {
+    // If session has no data (loaded from summary), fetch full data from C#
+    if (Object.keys(session.data).length === 0) {
+      const full = await SessionStore.loadFullSession(session.id);
+      if (full) {
+        session = full;
+      } else {
+        sessionError = 'Failed to load session data';
+        return;
+      }
+    }
     activeSession = session;
     playbackTimeMs = session.durationMs;
     showSessionsPanel = false;
@@ -318,6 +348,62 @@
     }
     HybridBridge.saveFile(`${session.name}.${format}`, lines.join('\n'));
   }
+
+  // ── .mes Export/Import ─────────────────────────────────────────────────
+  async function handleImportMes() {
+    busyAction = 'import';
+    sessionError = null;
+    try {
+      const result = await SessionStore.importFromMes();
+      if (result.success) {
+        sessions = SessionStore.sessions;
+      } else if (result.error) {
+        sessionError = result.error;
+      }
+    } catch (err: any) {
+      sessionError = err?.message ?? 'Import failed';
+    } finally {
+      busyAction = null;
+    }
+  }
+
+  async function handleExportSessionMes(session: RecordedSession) {
+    busyAction = `export-${session.id}`;
+    sessionError = null;
+    try {
+      const result = await SessionStore.exportToMes(session);
+      if (!result.success && result.error) {
+        sessionError = result.error;
+      }
+    } catch (err: any) {
+      sessionError = err?.message ?? 'Export failed';
+    } finally {
+      busyAction = null;
+    }
+  }
+
+  async function handleExportAllSessionsMes() {
+    busyAction = 'export-all';
+    sessionError = null;
+    try {
+      const result = await SessionStore.exportAllToMes();
+      if (!result.success && result.error) {
+        sessionError = result.error;
+      }
+    } catch (err: any) {
+      sessionError = err?.message ?? 'Export failed';
+    } finally {
+      busyAction = null;
+    }
+  }
+
+  // Auto-dismiss error after 5 seconds
+  $effect(() => {
+    if (sessionError) {
+      const t = setTimeout(() => { sessionError = null; }, 5000);
+      return () => clearTimeout(t);
+    }
+  });
 
   // ── Helpers ────────────────────────────────────────────────────────────
   function formatMs(ms: number): string {
@@ -587,7 +673,34 @@
         <div class="flex-1 min-h-0 overflow-y-auto">
           <!-- Mobile sessions list -->
           <div class="p-2 space-y-1">
-            {#if sessions.length === 0}
+            {#if sessionError}
+              <div class="px-2 py-1.5 bg-red-900/30 border border-red-500/30 rounded text-[10px] text-red-400">
+                {sessionError}
+              </div>
+            {/if}
+            <div class="flex items-center gap-1 mb-2">
+              <button
+                class="flex items-center gap-1 px-2 py-1 text-[10px] text-purple-400 bg-purple-400/10 rounded hover:bg-purple-400/20 transition-colors disabled:opacity-50"
+                onclick={handleImportMes}
+                disabled={busyAction === 'import'}
+              >
+                <IconFileImport size={11} />
+                {busyAction === 'import' ? 'Importing...' : 'Import .mes'}
+              </button>
+              {#if sessions.length > 0}
+                <button
+                  class="flex items-center gap-1 px-2 py-1 text-[10px] text-sky-400 bg-sky-400/10 rounded hover:bg-sky-400/20 transition-colors disabled:opacity-50"
+                  onclick={handleExportAllSessionsMes}
+                  disabled={busyAction === 'export-all'}
+                >
+                  <IconFileExport size={11} />
+                  {busyAction === 'export-all' ? 'Exporting...' : 'Export All'}
+                </button>
+              {/if}
+            </div>
+            {#if sessionsLoading}
+              <div class="text-center text-gray-500 text-xs py-8">Loading...</div>
+            {:else if sessions.length === 0}
               <div class="text-center text-gray-500 text-xs py-8">No saved sessions</div>
             {/if}
             {#each sessions as session}
@@ -601,8 +714,16 @@
               >
                 <div class="flex-1 min-w-0">
                   <div class="text-xs text-white truncate">{session.name}</div>
-                  <div class="text-[10px] text-gray-500">{formatMs(session.durationMs)} · {session.sensorIds.length} sensors</div>
+                  <div class="text-[10px] text-gray-500">{formatMs(session.durationMs)} · {session.sensorIds.length || session.sensorCount || 0} sensors</div>
                 </div>
+                <button
+                  class="p-1 text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-50"
+                  title="Export .mes"
+                  disabled={busyAction === `export-${session.id}`}
+                  onclick={(e) => { e.stopPropagation(); handleExportSessionMes(session); }}
+                >
+                  <IconFileExport size={12} />
+                </button>
                 <button
                   class="p-1 text-gray-500 hover:text-red-400 transition-colors"
                   onclick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
@@ -659,12 +780,39 @@
         <div class="absolute top-0 left-64 z-30 w-72 max-h-[60vh] bg-[#1a1a1a] border border-[#333] rounded-b-lg shadow-2xl overflow-hidden flex flex-col">
           <div class="flex items-center justify-between px-2 py-1.5 border-b border-[#333]">
             <span class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Sessions</span>
-            <button class="text-gray-500 hover:text-gray-300" onclick={() => showSessionsPanel = false}>
-              <IconX size={12} />
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                class="p-1 text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-50"
+                title="Import .mes"
+                disabled={busyAction === 'import'}
+                onclick={handleImportMes}
+              >
+                <IconFileImport size={11} />
+              </button>
+              {#if sessions.length > 0}
+                <button
+                  class="p-1 text-gray-500 hover:text-sky-400 transition-colors disabled:opacity-50"
+                  title="Export all as .mes"
+                  disabled={busyAction === 'export-all'}
+                  onclick={handleExportAllSessionsMes}
+                >
+                  <IconFileExport size={11} />
+                </button>
+              {/if}
+              <button class="text-gray-500 hover:text-gray-300" onclick={() => showSessionsPanel = false}>
+                <IconX size={12} />
+              </button>
+            </div>
           </div>
           <div class="flex-1 overflow-y-auto">
-            {#if sessions.length === 0}
+            {#if sessionError}
+              <div class="mx-2 mt-1.5 px-2 py-1.5 bg-red-900/30 border border-red-500/30 rounded text-[9px] text-red-400">
+                {sessionError}
+              </div>
+            {/if}
+            {#if sessionsLoading}
+              <div class="text-center text-gray-500 text-[10px] py-4">Loading...</div>
+            {:else if sessions.length === 0}
               <div class="text-center text-gray-500 text-[10px] py-4">No saved sessions</div>
             {/if}
             {#each sessions as session}
@@ -689,6 +837,14 @@
                   class="p-1 text-gray-500 hover:text-sky-400 transition-colors"
                   title="Export CSV"
                   onclick={(e) => { e.stopPropagation(); handleSessionExport(session, 'csv'); }}
+                >
+                  <IconFileExport size={11} />
+                </button>
+                <button
+                  class="p-1 text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-50"
+                  title="Export .mes"
+                  disabled={busyAction === `export-${session.id}`}
+                  onclick={(e) => { e.stopPropagation(); handleExportSessionMes(session); }}
                 >
                   <IconFileExport size={11} />
                 </button>

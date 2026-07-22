@@ -14,6 +14,7 @@
   import DriverEditorPage from './pages/DriverEditorPage.svelte';
   import LogsPage from './pages/LogsPage.svelte';
   import EcuMonitorPage from './pages/EcuMonitorPage.svelte';
+  import SessionsPage from './pages/SessionsPage.svelte';
   import WarningSettingsPage from './pages/WarningSettingsPage.svelte';
   import AppSettingsPage from './pages/AppSettingsPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
@@ -47,7 +48,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'warnings' | 'settings';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'sessions' | 'warnings' | 'settings';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -592,6 +593,8 @@
         <LogsPage onNavigate={navigateTo} />
       {:else if currentPage === 'ecuMonitor'}
         <EcuMonitorPage onNavigate={navigateTo} {connectionState} />
+      {:else if currentPage === 'sessions'}
+        <SessionsPage onNavigate={navigateTo} />
       {:else if currentPage === 'warnings'}
         <WarningSettingsPage onNavigate={navigateTo} />
       {:else if currentPage === 'settings'}

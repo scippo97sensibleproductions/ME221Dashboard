@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity, IconAlertTriangle } from '@tabler/icons-svelte';
+  import { IconPower, IconSettings, IconPlus, IconTrash, IconTable, IconMessage, IconLayoutDashboard, IconMenu2, IconChevronUp, IconChevronDown, IconAdjustments, IconPlugConnected, IconActivity, IconAlertTriangle, IconStack2 } from '@tabler/icons-svelte';
   import { Dropdown, DropdownItem } from 'flowbite-svelte';
   import { warningStore } from './stores/warningStore.svelte';
 
@@ -30,6 +30,7 @@
     currentPage === 'dashboard' ? 'dashboard' :
     currentPage === 'driverList' || currentPage === 'driverEditor' ? 'drivers' :
     currentPage === 'ecuMonitor' ? 'monitor' :
+    currentPage === 'sessions' ? 'sessions' :
     currentPage === 'warnings' ? 'warnings' :
     currentPage === 'settings' ? 'settings' :
     ''
@@ -42,6 +43,7 @@
     drivers:   '#107C10',
     logs:      '#E81123',
     monitor:   '#0ea5e9',
+    sessions:  '#a855f7',
     warnings:  '#F59E0B',
   };
 
@@ -87,6 +89,18 @@
       >
         <IconMessage size={20} />
         <span class="text-[10px] leading-tight">Logs</span>
+      </button>
+      <button
+        class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
+        style="color: {activePage === 'sessions' ? pageAccents.sessions : 'var(--metro-text-secondary, #A0A0A0)'};"
+        onclick={() => onNavigate('sessions')}
+        aria-label="Sessions"
+      >
+        <IconStack2 size={20} />
+        <span class="text-[10px] leading-tight">Sessions</span>
+        {#if activePage === 'sessions'}
+          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.sessions};"></span>
+        {/if}
       </button>
 
     {:else}
@@ -191,6 +205,20 @@
         <span class="text-[10px] leading-tight">Monitor</span>
         {#if activePage === 'monitor'}
           <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.monitor};"></span>
+        {/if}
+      </button>
+
+      <!-- Sessions -->
+      <button
+        class="relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors duration-150"
+        style="color: {activePage === 'sessions' ? pageAccents.sessions : 'var(--metro-text-secondary, #A0A0A0)'};"
+        onclick={() => onNavigate('sessions')}
+        aria-label="Sessions"
+      >
+        <IconStack2 size={20} />
+        <span class="text-[10px] leading-tight">Sessions</span>
+        {#if activePage === 'sessions'}
+          <span class="absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2" style="background-color: {pageAccents.sessions};"></span>
         {/if}
       </button>
 

@@ -29,6 +29,7 @@ import type {
   ConnectionPreference,
   LambdaSettings,
 } from './HybridBridgeTypes';
+import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
 
 // Re-export all types for backward compatibility
 export type {
@@ -66,6 +67,7 @@ export type {
   DataLinkWarningSetting,
   LambdaSettings,
 } from './HybridBridgeTypes';
+export type { RecordedSession, SessionSummary, FreezeFrame } from './monitor/SessionStore';
 
 // ─── Bridge Implementation ──────────────────────────────────────────────────
 
@@ -827,6 +829,68 @@ export const HybridBridge = {
   saveLambdaSettings: async (settings: LambdaSettings): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const result = await invokeDotNetLogged('SaveLambdaSettings', [JSON.stringify(settings)]);
+    return JSON.parse(result);
+  },
+
+  // ─── Session Recording ────────────────────────────────────────────────
+
+  loadSessionList: async (): Promise<SessionSummary[]> => {
+    if (!isWebViewAvailable()) return [];
+    const result = await invokeDotNetLogged('LoadSessionList');
+    return JSON.parse(result);
+  },
+
+  loadSession: async (id: string): Promise<RecordedSession | null> => {
+    if (!isWebViewAvailable()) return null;
+    const result = await invokeDotNetLogged('LoadSession', [id]);
+    return JSON.parse(result);
+  },
+
+  saveSessionMetadata: async (session: RecordedSession): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveSessionMetadata', [JSON.stringify(session)]);
+    return JSON.parse(result);
+  },
+
+  deleteSession: async (id: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('DeleteSession', [id]);
+    return JSON.parse(result);
+  },
+
+  renameSession: async (id: string, name: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('RenameSession', [JSON.stringify({ id, name })]);
+    return JSON.parse(result);
+  },
+
+  migrateSessions: async (sessions: RecordedSession[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('MigrateSessions', [JSON.stringify(sessions)]);
+    return JSON.parse(result);
+  },
+
+  clearAllSessions: async (): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('ClearAllSessions');
+    return JSON.parse(result);
+  },
+
+  exportSession: async (sessionId: string): Promise<{ success: boolean; path?: string; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('ExportSession', [sessionId]);
+    return JSON.parse(result);
+  },
+
+  exportAllSessions: async (): Promise<{ success: boolean; path?: string; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('ExportAllSessions');
+    return JSON.parse(result);
+  },
+
+  importSession: async (): Promise<{ picked: boolean; success?: boolean; error?: string; sessions?: RecordedSession[] }> => {
+    if (!isWebViewAvailable()) return { picked: false };
+    const result = await invokeDotNetLogged('ImportSession');
     return JSON.parse(result);
   },
 };
