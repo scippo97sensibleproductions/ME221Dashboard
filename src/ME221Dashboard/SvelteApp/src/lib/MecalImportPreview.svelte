@@ -423,7 +423,13 @@
 
               <div class="rounded-lg mb-2 transition-all" style="border: 1px solid {isSelected ? 'rgba(0,120,215,0.3)' : 'var(--metro-border, #333)'}; background-color: {isSelected ? 'rgba(0,120,215,0.05)' : 'var(--metro-card, #16213e)'};">
                 <!-- Card header -->
-                <div class="flex items-center gap-2 px-3 py-2 cursor-pointer" onclick={() => expandTable(table.id)}>
+                <div
+                  role="button"
+                  tabindex="0"
+                  class="flex items-center gap-2 px-3 py-2 cursor-pointer"
+                  onclick={() => expandTable(table.id)}
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') expandTable(table.id); }}
+                >
                   <button
                     class="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-colors"
                     style="background-color: {isSelected ? 'var(--metro-blue, #0078D7)' : 'var(--metro-bg-hover, #2a2a4a)'};"

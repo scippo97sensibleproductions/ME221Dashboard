@@ -163,6 +163,7 @@
                   style="background-color: {showLabels ? 'var(--metro-green)' : 'rgb(55,65,81)'}"
                   role="switch"
                   aria-checked={showLabels}
+                  aria-label="Toggle value labels"
                   onclick={() => updateShowLabels(!showLabels)}
                 >
                   <span
@@ -181,6 +182,7 @@
                   style="background-color: {showDimensionBadge ? 'var(--metro-green)' : 'rgb(55,65,81)'}"
                   role="switch"
                   aria-checked={showDimensionBadge}
+                  aria-label="Toggle dimension badge"
                   onclick={() => updateShowDimensionBadge(!showDimensionBadge)}
                 >
                   <span

@@ -1398,13 +1398,16 @@
   aria-label="3D table surface"
 >
   <!-- ─── Top Bar ────────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute top-0 left-0 right-0 z-10 flex items-center gap-3 border-b px-3 py-2"
     style="background-color: var(--metro-surface); border-color: var(--metro-border); touch-action: none;"
+    role="toolbar"
+    aria-label="Table controls"
+    tabindex="-1"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <!-- Selected cell readout — expressed in axis domain terms -->
     <div class="min-w-0 flex-1 overflow-hidden">
@@ -1485,13 +1488,16 @@
   </div>
 
   <!-- ─── Mobile Touch Toolbar (right side, hidden on desktop) ──────── -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute right-2 top-1/2 z-20 -translate-y-1/2 flex flex-col gap-1 lg:hidden"
     style="touch-action: none;"
+    role="toolbar"
+    aria-label="Touch controls"
+    tabindex="-1"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <!-- Raise (smooth +delta) -->
     <button
@@ -1556,13 +1562,16 @@
   </div>
 
   <!-- ─── Bottom Bar ──────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="absolute bottom-0 left-0 right-0 z-10 flex items-center gap-3 border-t px-3 py-1.5"
     style="background-color: var(--metro-surface); border-color: var(--metro-border); touch-action: none;"
+    role="toolbar"
+    aria-label="Bottom controls"
+    tabindex="-1"
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
   >
     <!-- Keyboard help toggle -->
     <button

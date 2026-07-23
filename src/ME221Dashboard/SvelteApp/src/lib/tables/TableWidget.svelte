@@ -283,9 +283,12 @@
   bind:this={widgetEl}
   class="flex h-full w-full cursor-grab select-none flex-col overflow-hidden border"
   style="border-color: var(--metro-border); background-color: var(--metro-card);"
+  role="button"
+  tabindex="0"
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onclick={handleClick}
+  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
 >
   <!-- Header -->
   <div class="flex shrink-0 items-center justify-between border-b px-2 py-1" style="border-color: var(--metro-border); height: {layout.headerH}px;">

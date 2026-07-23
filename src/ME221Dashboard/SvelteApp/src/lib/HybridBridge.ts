@@ -28,6 +28,7 @@ import type {
   WarningHistoryEntry,
   ConnectionPreference,
   LambdaSettings,
+  MonitoringPreset,
 } from './HybridBridgeTypes';
 import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
 
@@ -66,6 +67,7 @@ export type {
   UpdateCheckResult,
   DataLinkWarningSetting,
   LambdaSettings,
+  MonitoringPreset,
 } from './HybridBridgeTypes';
 export type { RecordedSession, SessionSummary, FreezeFrame } from './monitor/SessionStore';
 
@@ -891,6 +893,32 @@ export const HybridBridge = {
   importSession: async (): Promise<{ picked: boolean; success?: boolean; error?: string; sessions?: RecordedSession[] }> => {
     if (!isWebViewAvailable()) return { picked: false };
     const result = await invokeDotNetLogged('ImportSession');
+    return JSON.parse(result);
+  },
+
+  // ─── Monitoring Presets ─────────────────────────────────────────────────
+
+  getMonitoringPresets: async (): Promise<{ success: boolean; presets: MonitoringPreset[]; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, presets: [], error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('GetMonitoringPresets');
+    return JSON.parse(result);
+  },
+
+  createMonitoringPreset: async (name: string, datalinkIds: number[]): Promise<{ success: boolean; preset?: MonitoringPreset; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('CreateMonitoringPreset', [JSON.stringify({ name, datalinkIds })]);
+    return JSON.parse(result);
+  },
+
+  updateMonitoringPreset: async (id: string, name: string, datalinkIds: number[]): Promise<{ success: boolean; preset?: MonitoringPreset; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('UpdateMonitoringPreset', [JSON.stringify({ id, name, datalinkIds })]);
+    return JSON.parse(result);
+  },
+
+  deleteMonitoringPreset: async (id: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('DeleteMonitoringPreset', [id]);
     return JSON.parse(result);
   },
 };

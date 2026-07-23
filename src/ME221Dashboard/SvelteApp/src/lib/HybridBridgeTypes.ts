@@ -463,6 +463,14 @@ export interface LambdaSettings {
   stoichAfr: number;
 }
 
+// ─── Monitoring Preset Types ────────────────────────────────────────────────
+
+export interface MonitoringPreset {
+  id: string;
+  name: string;
+  datalinkIds: number[];
+}
+
 // ─── HybridWebView Global ───────────────────────────────────────────────────
 
 declare global {

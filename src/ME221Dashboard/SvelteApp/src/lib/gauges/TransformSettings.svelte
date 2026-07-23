@@ -10,6 +10,8 @@
     onchange: (def: any) => void;
   } = $props();
 
+  // Intentional: copy initial value for local editing state
+  // svelte-ignore state_referenced_locally
   let steps = $state<ValueTransformStep[]>(
     gaugeDef.transformSteps?.map(s => ({ ...s })) ?? []
   );

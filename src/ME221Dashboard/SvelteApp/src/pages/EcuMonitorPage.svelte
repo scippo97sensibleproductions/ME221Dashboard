@@ -1,6 +1,6 @@
 <script lang="ts">
   import StreamingLineChart from '../lib/echarts/StreamingLineChart.svelte';
-  import SensorPicker from '../lib/monitor/SensorPicker.svelte';
+  import SensorPicker from '../lib/monitor/PresetSensorPicker.svelte';
   import EcuInfoPanel from '../lib/monitor/EcuInfoPanel.svelte';
   import { SessionRecorder, type RecordingState } from '../lib/monitor/SessionRecorder';
   import { SessionStore, type RecordedSession, type FreezeFrame } from '../lib/monitor/SessionStore';
@@ -817,9 +817,12 @@
             {/if}
             {#each sessions as session}
               <div
+                role="button"
+                tabindex="0"
                 class="flex items-center gap-2 px-2 py-1.5 text-left cursor-pointer transition-colors border-b border-[#222]
                   {activeSession?.id === session.id ? 'bg-purple-600/10' : 'hover:bg-[#222]'}"
                 onclick={() => loadSession(session)}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') loadSession(session); }}
               >
                 <div class="flex-1 min-w-0">
                   <input

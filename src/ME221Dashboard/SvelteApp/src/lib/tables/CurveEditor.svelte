@@ -619,6 +619,8 @@
           <circle
             cx={x2px(point.x)} cy={y2px(point.y)} r={14}
             fill="transparent"
+            role="img"
+            aria-label="Data point {point.x}"
             onmouseenter={() => hoverIndex = i}
             onmouseleave={() => hoverIndex = -1}
           />

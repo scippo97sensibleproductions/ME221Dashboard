@@ -416,6 +416,7 @@
                       style="background-color: {gaugeDef.showHistogram ? 'var(--metro-purple)' : 'rgb(55,65,81)'}"
                       role="switch"
                       aria-checked={gaugeDef.showHistogram ?? false}
+                      aria-label="Toggle value history"
                       onclick={() => onchange({ ...gaugeDef, showHistogram: !(gaugeDef.showHistogram ?? false) })}
                     >
                       <span

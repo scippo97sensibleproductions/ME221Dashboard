@@ -42,6 +42,8 @@ namespace ME221Dashboard.Services;
 [JsonSerializable(typeof(DataLinkFeedback))]
 [JsonSerializable(typeof(DataLinkFeedbackSeverity))]
 [JsonSerializable(typeof(List<DataLinkFeedback>))]
+[JsonSerializable(typeof(MonitoringPreset))]
+[JsonSerializable(typeof(List<MonitoringPreset>))]
 public partial class V2JsonContext : JsonSerializerContext
 {
 }

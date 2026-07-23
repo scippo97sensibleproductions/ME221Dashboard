@@ -25,7 +25,8 @@ public sealed class UsbPowerManager : IDisposable
         if (pm is null)
             throw new InvalidOperationException("PowerManager not available");
 
-        _wakeLock = pm.NewWakeLock(WakeLockFlags.Partial, "ME221Dashboard::EcuUsbLink");
+        _wakeLock = pm.NewWakeLock(WakeLockFlags.Partial, "ME221Dashboard::EcuUsbLink")
+            ?? throw new InvalidOperationException("Failed to create WakeLock");
         _wakeLock.SetReferenceCounted(false);
     }
 

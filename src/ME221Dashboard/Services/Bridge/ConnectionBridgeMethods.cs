@@ -11,8 +11,10 @@ namespace ME221Dashboard.Services;
 public partial class HybridBridgeService
 {
     private ConnectionTarget? _lastTarget;
+#pragma warning disable CS0169 // Used in Android-specific code paths
     private int _lastVendorId;
     private int _lastProductId;
+#pragma warning restore CS0169
     /// <summary>
     /// Connect to an ECU via TCP. Called from JS: window.HybridWebView.InvokeDotNet('ConnectTcp', [host, port])
     /// </summary>

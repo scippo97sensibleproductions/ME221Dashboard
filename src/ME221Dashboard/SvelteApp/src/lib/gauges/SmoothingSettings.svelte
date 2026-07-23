@@ -49,6 +49,7 @@
       style="background-color: {enabled ? '#107C10' : '#333'};"
       role="switch"
       aria-checked={enabled}
+      aria-label="Toggle smoothing"
       onclick={toggleEnabled}
     >
       <span

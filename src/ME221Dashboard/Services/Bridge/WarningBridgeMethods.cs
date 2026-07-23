@@ -25,6 +25,7 @@ public partial class HybridBridgeService
             {
                 foreach (var dashboard in config.Dashboards.Values)
                 {
+#pragma warning disable CS0618 // Intentional: migrating from obsolete per-dashboard warnings
                     if (dashboard.LegacyWarningSettings is { Count: > 0 })
                     {
                         config.WarningSettings = dashboard.LegacyWarningSettings;
@@ -32,6 +33,7 @@ public partial class HybridBridgeService
                         await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
                         break;
                     }
+#pragma warning restore CS0618
                 }
             }
 

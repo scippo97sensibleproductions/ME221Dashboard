@@ -16,6 +16,7 @@ public sealed class DashboardConfig
     public UserPreferences? Preferences { get; set; }
     public List<DataLinkWarningSetting> WarningSettings { get; set; } = [];
     public int WarningDelayMs { get; set; } = 500;
+    public List<MonitoringPreset> MonitoringPresets { get; set; } = [];
 }
 
 public sealed class UserPreferences
@@ -109,4 +110,11 @@ public sealed class VehicleConfig
     public int? MapEntityId { get; set; }
     public int? BaroEntityId { get; set; }
     public int? GearEntityId { get; set; }
+}
+
+public sealed class MonitoringPreset
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+    public List<int> DatalinkIds { get; set; } = [];
 }

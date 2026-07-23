@@ -1579,8 +1579,8 @@
 />
 
 {#if quickJumpOpen}
-  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-  <div class="fixed inset-0 z-[80]" style="background-color: rgba(0,0,0,0.8);" role="button" tabindex="-1" onclick={() => { quickJumpOpen = false; }}></div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-[80]" style="background-color: rgba(0,0,0,0.8);" role="button" tabindex="-1" onclick={() => { quickJumpOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') quickJumpOpen = false; }}></div>
   <div class="fixed inset-x-0 bottom-0 z-[81] border-t max-h-[60vh] overflow-auto" style="background-color: var(--metro-card); border-color: var(--metro-border);">
     <div class="mx-auto max-w-lg p-4">
       <div class="mb-3 flex items-center justify-between">
