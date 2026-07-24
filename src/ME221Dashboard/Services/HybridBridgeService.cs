@@ -79,7 +79,6 @@ public partial class HybridBridgeService : IDisposable
     internal long _lastGpsTimestamp;
     internal long _lastVssTimestamp;
     internal readonly Dictionary<string, OdometerConfig> _odometerByDashboard = new();
-    private int? _cachedVssEntityId;
 
     public HybridBridgeService(
         IEcuConnectionService connection,
@@ -152,15 +151,6 @@ public partial class HybridBridgeService : IDisposable
             FlushOdometer();
         }
 
-        // Refresh VSS entity ID cache on reconnect if VSS source is active
-        if (e.NewState == ConnectionState.Connected && _activeDashboardName != null &&
-            _odometerByDashboard.TryGetValue(_activeDashboardName, out var odoState) &&
-            odoState.SpeedSource == OdometerSpeedSource.Vss)
-        {
-            _ = LoadVssEntityIdAsync();
-            _ = ReadVssSpeedUnitAsync();
-        }
-
         SendToReact(new
         {
             @event = "connectionStateChanged",
@@ -202,21 +192,22 @@ public partial class HybridBridgeService : IDisposable
         if (_cachedSendLiveUpdate is { } send)
             MainThread.BeginInvokeOnMainThread(send);
 
-        // ── VSS odometer accumulation ──────────────────────────────────────
+        // ── Custom entity odometer accumulation ──────────────────────────────
         if (_activeDashboardName != null &&
             _odometerByDashboard.TryGetValue(_activeDashboardName, out var odoState) &&
             odoState.SpeedSource == OdometerSpeedSource.Vss &&
-            _cachedVssEntityId.HasValue)
+            odoState.SpeedEntityId.HasValue)
         {
             for (var i = 0; i < e.Count; i++)
             {
-                if (ids[i] == _cachedVssEntityId.Value)
+                if (ids[i] == odoState.SpeedEntityId.Value)
                 {
-                    var speedRaw = _liveData[_cachedVssEntityId.Value];
+                    var speedRaw = _liveData[odoState.SpeedEntityId.Value];
                     if (speedRaw.HasValue)
                     {
-                        var isInMph = _cachedVssSpeedInMph ?? odoState.VssSpeedInMph;
-                        var speedKmh = isInMph ? speedRaw.Value * 1.60934f : speedRaw.Value;
+                        var unit = odoState.SpeedUnit ?? "km/h";
+                        var toKmh = SpeedUnitToKmh.TryGetValue(unit, out var factor) ? factor : 1.0;
+                        var speedKmh = speedRaw.Value * (float)toKmh;
                         var now = Stopwatch.GetTimestamp();
                         if (_lastVssTimestamp != 0)
                         {
@@ -249,14 +240,6 @@ public partial class HybridBridgeService : IDisposable
         {
             _logger.LogError(ex, "Failed to send message to React");
         }
-    }
-
-    /// <summary>
-    /// Loads and caches the VSS speed entity ID from vehicle config.
-    /// </summary>
-    internal async Task LoadVssEntityIdAsync()
-    {
-        _cachedVssEntityId = await GetVssSpeedEntityIdAsync().ConfigureAwait(false);
     }
 
     /// <summary>

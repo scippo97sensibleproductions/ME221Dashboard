@@ -598,8 +598,8 @@ export const HybridBridge = {
 
   // ─── Odometer ─────────────────────────────────────────────────────
 
-  getOdometer: async (): Promise<{ value: number; unit: string; useKilometers: boolean; speedSource: string; vssSpeedInMph: boolean }> => {
-    if (!isWebViewAvailable()) return { value: 0, unit: 'km', useKilometers: true, speedSource: 'gps', vssSpeedInMph: false };
+  getOdometer: async (): Promise<{ value: number; unit: string; useKilometers: boolean; speedSource: string; speedEntityId: number | null; speedUnit: string }> => {
+    if (!isWebViewAvailable()) return { value: 0, unit: 'km', useKilometers: true, speedSource: 'gps', speedEntityId: null, speedUnit: 'km/h' };
     const result = await invokeDotNetLogged('GetOdometer');
     return JSON.parse(result);
   },
@@ -622,6 +622,11 @@ export const HybridBridge = {
   setOdometerSpeedSource: async (source: 'gps' | 'vss'): Promise<void> => {
     if (!isWebViewAvailable()) return;
     await invokeDotNetLogged('SetOdometerSpeedSource', [source === 'vss' ? 1 : 0]);
+  },
+
+  setOdometerSpeedConfig: async (entityId: number | null, unit: string): Promise<void> => {
+    if (!isWebViewAvailable()) return;
+    await invokeDotNetLogged('SetOdometerSpeedConfig', [JSON.stringify({ entityId, unit })]);
   },
 
   // ─── Vehicle Config (global — not per-dashboard) ─────────────────────

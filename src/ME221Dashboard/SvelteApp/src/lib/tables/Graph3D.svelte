@@ -1404,6 +1404,9 @@
     role="toolbar"
     aria-label="Table controls"
     tabindex="-1"
+    ontouchstart={(e) => e.stopPropagation()}
+    ontouchmove={(e) => e.stopPropagation()}
+    ontouchend={(e) => e.stopPropagation()}
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
@@ -1494,6 +1497,9 @@
     role="toolbar"
     aria-label="Touch controls"
     tabindex="-1"
+    ontouchstart={(e) => e.stopPropagation()}
+    ontouchmove={(e) => e.stopPropagation()}
+    ontouchend={(e) => e.stopPropagation()}
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
@@ -1568,6 +1574,9 @@
     role="toolbar"
     aria-label="Bottom controls"
     tabindex="-1"
+    ontouchstart={(e) => e.stopPropagation()}
+    ontouchmove={(e) => e.stopPropagation()}
+    ontouchend={(e) => e.stopPropagation()}
     onpointerdown={(e) => e.stopPropagation()}
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}

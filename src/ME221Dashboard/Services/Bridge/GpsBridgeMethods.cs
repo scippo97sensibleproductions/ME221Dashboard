@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using ME221.Comms.Messages;
-using ME221.Data.Infrastructure;
 using ME221Dashboard.Services;
 using Microsoft.Extensions.Logging;
 
@@ -9,14 +7,18 @@ namespace ME221Dashboard.Services;
 
 public partial class HybridBridgeService
 {
-    // ─── VSS Driver Discovery Fields ────────────────────────────────────────
-    private int? _vssDriverId;
-    private int? _vssModeConfigIndex;
-    private bool? _cachedVssSpeedInMph;
-
     // ─── Odometer Throttle ──────────────────────────────────────────────────
     private bool _odometerDirty;
     private Timer? _odometerFlushTimer;
+
+    // ─── Speed unit conversion factors (source unit → km/h) ─────────────────
+    private static readonly Dictionary<string, double> SpeedUnitToKmh = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["km/h"] = 1.0,
+        ["mph"] = 1.60934,
+        ["m/s"] = 3.6,
+        ["knots"] = 1.852,
+    };
 
     // ─── GPS Methods ────────────────────────────────────────────────────────
 
@@ -88,41 +90,52 @@ public partial class HybridBridgeService
         return JsonSerializer.Serialize(new { success = false, error = "Debug speed only available with simulated GPS" });
     }
 
+    /// <summary>
+    /// Load odometer state from persisted config (or create default).
+    /// </summary>
+    private OdometerConfig LoadOdometerState(string dashboardName)
+    {
+        if (_odometerByDashboard.TryGetValue(dashboardName, out var existing))
+            return existing;
+
+        OdometerConfig state;
+        try
+        {
+            var configTask = _calibration.GetPersistedDashboardConfigAsync();
+            configTask.Wait(TimeSpan.FromSeconds(1));
+            var config = configTask.Result;
+            if (config?.Dashboards.TryGetValue(dashboardName, out var def) == true && def.Odometer != null)
+            {
+                state = new OdometerConfig
+                {
+                    CurrentValue = def.Odometer.CurrentValue,
+                    UseKilometers = def.Odometer.UseKilometers,
+                    SpeedSource = def.Odometer.SpeedSource,
+                    VssSpeedInMph = def.Odometer.VssSpeedInMph,
+                    SpeedEntityId = def.Odometer.SpeedEntityId,
+                    SpeedUnit = def.Odometer.SpeedUnit,
+                };
+            }
+            else
+            {
+                state = new OdometerConfig();
+            }
+        }
+        catch
+        {
+            state = new OdometerConfig();
+        }
+        _odometerByDashboard[dashboardName] = state;
+        return state;
+    }
+
     /// Called from JS: window.HybridWebView.InvokeDotNet('GetOdometer')
     public string GetOdometer()
     {
         if (_activeDashboardName == null)
-            return JsonSerializer.Serialize(new { value = 0.0, unit = "km", useKilometers = true, speedSource = "gps", vssSpeedInMph = false });
+            return JsonSerializer.Serialize(new { value = 0.0, unit = "km", useKilometers = true, speedSource = "gps", speedEntityId = (int?)null, speedUnit = "km/h" });
 
-        if (!_odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
-        {
-            // Load from persisted config
-            try
-            {
-                var configTask = _calibration.GetPersistedDashboardConfigAsync();
-                configTask.Wait(TimeSpan.FromSeconds(1));
-                var config = configTask.Result;
-                if (config?.Dashboards.TryGetValue(_activeDashboardName, out var def) == true && def.Odometer != null)
-                {
-                    state = new OdometerConfig
-                    {
-                        CurrentValue = def.Odometer.CurrentValue,
-                        UseKilometers = def.Odometer.UseKilometers,
-                        SpeedSource = def.Odometer.SpeedSource,
-                        VssSpeedInMph = def.Odometer.VssSpeedInMph,
-                    };
-                }
-                else
-                {
-                    state = new OdometerConfig();
-                }
-            }
-            catch
-            {
-                state = new OdometerConfig();
-            }
-            _odometerByDashboard[_activeDashboardName] = state;
-        }
+        var state = LoadOdometerState(_activeDashboardName);
 
         return JsonSerializer.Serialize(new
         {
@@ -130,7 +143,8 @@ public partial class HybridBridgeService
             unit = state.UseKilometers ? "km" : "mi",
             useKilometers = state.UseKilometers,
             speedSource = state.SpeedSource == OdometerSpeedSource.Vss ? "vss" : "gps",
-            vssSpeedInMph = state.VssSpeedInMph,
+            speedEntityId = state.SpeedEntityId,
+            speedUnit = state.SpeedUnit,
         });
     }
 
@@ -138,7 +152,14 @@ public partial class HybridBridgeService
     public async Task ResetOdometer()
     {
         if (_activeDashboardName == null) return;
-        _odometerByDashboard[_activeDashboardName] = new OdometerConfig { CurrentValue = 0 };
+        var old = LoadOdometerState(_activeDashboardName);
+        _odometerByDashboard[_activeDashboardName] = new OdometerConfig
+        {
+            UseKilometers = old.UseKilometers,
+            SpeedSource = old.SpeedSource,
+            SpeedEntityId = old.SpeedEntityId,
+            SpeedUnit = old.SpeedUnit,
+        };
         await PersistOdometerAsync(_activeDashboardName, _odometerByDashboard[_activeDashboardName]).ConfigureAwait(false);
         SendOdometerUpdate();
     }
@@ -147,8 +168,7 @@ public partial class HybridBridgeService
     public async Task SetOdometerValue(double value)
     {
         if (_activeDashboardName == null) return;
-        if (!_odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
-            state = new OdometerConfig();
+        var state = LoadOdometerState(_activeDashboardName);
         state.CurrentValue = Math.Max(0, value);
         _odometerByDashboard[_activeDashboardName] = state;
         await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
@@ -159,9 +179,59 @@ public partial class HybridBridgeService
     public async Task SetOdometerUnit(bool useKilometers)
     {
         if (_activeDashboardName == null) return;
-        if (!_odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
-            state = new OdometerConfig();
+        var state = LoadOdometerState(_activeDashboardName);
         state.UseKilometers = useKilometers;
+        _odometerByDashboard[_activeDashboardName] = state;
+        await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
+    }
+
+    /// <summary>
+    /// Bridge method: Sets the odometer speed source (GPS or custom entity).
+    /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerSpeedSource', [source])
+    /// source: 0 = GPS, 1 = custom entity (use SetOdometerSpeedConfig to set entity/unit)
+    /// </summary>
+    public async Task SetOdometerSpeedSource(int source)
+    {
+        if (_activeDashboardName == null) return;
+        var state = LoadOdometerState(_activeDashboardName);
+
+        state.SpeedSource = source == 1 ? OdometerSpeedSource.Vss : OdometerSpeedSource.Gps;
+        _odometerByDashboard[_activeDashboardName] = state;
+
+        await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
+        SendOdometerUpdate();
+    }
+
+    /// <summary>
+    /// Bridge method: Sets the odometer speed entity and unit for custom entity mode.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerSpeedConfig', [json])
+    /// json: { "entityId": 940, "unit": "km/h" } or { "entityId": null } to clear
+    /// </summary>
+    public async Task SetOdometerSpeedConfig(string json)
+    {
+        if (_activeDashboardName == null) return;
+        var state = LoadOdometerState(_activeDashboardName);
+
+        try
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json);
+            if (node != null)
+            {
+                state.SpeedEntityId = node["entityId"]?.GetValue<int?>();
+                var unit = node["unit"]?.GetValue<string>();
+                if (!string.IsNullOrEmpty(unit) && SpeedUnitToKmh.ContainsKey(unit))
+                    state.SpeedUnit = unit;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse SetOdometerSpeedConfig JSON");
+        }
+
+        if (state.SpeedEntityId.HasValue)
+            state.SpeedSource = OdometerSpeedSource.Vss;
+
         _odometerByDashboard[_activeDashboardName] = state;
         await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
         SendOdometerUpdate();
@@ -171,26 +241,31 @@ public partial class HybridBridgeService
     {
         if (_webView is null) return;
 
-        // ── Odometer accumulation ────────────────────────────────────────
+        // ── Odometer accumulation (GPS source only) ────────────────────────
         try
         {
-            var now = Stopwatch.GetTimestamp();
-            if (_lastGpsTimestamp != 0)
+            if (_activeDashboardName != null)
             {
-                var dtSec = (now - _lastGpsTimestamp) / (double)Stopwatch.Frequency;
-                if (dtSec is > 0 and < 60)
+                var state = LoadOdometerState(_activeDashboardName);
+                if (state.SpeedSource == OdometerSpeedSource.Gps && e.Speed.HasValue)
                 {
-                    if (e.Speed.HasValue) SpeedKmToOdometer(e.Speed.Value * 3.6, dtSec); // m/s → km/h
+                    var now = Stopwatch.GetTimestamp();
+                    if (_lastGpsTimestamp != 0)
+                    {
+                        var dtSec = (now - _lastGpsTimestamp) / (double)Stopwatch.Frequency;
+                        if (dtSec is > 0 and < 60)
+                            SpeedKmToOdometer(e.Speed.Value * 3.6, dtSec); // m/s → km/h
+                    }
+                    _lastGpsTimestamp = now;
                 }
             }
-            _lastGpsTimestamp = now;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Odometer accumulation failed");
         }
 
-        // Send GPS update (no longer includes odometer)
+        // Send GPS update
         var json = JsonSerializer.Serialize(new
         {
             @event = "gpsUpdate",
@@ -206,16 +281,7 @@ public partial class HybridBridgeService
         MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(json));
 
         // Send separate odometer update
-        if (_activeDashboardName != null && _odometerByDashboard.TryGetValue(_activeDashboardName, out var odoSt))
-        {
-            var odoJson = JsonSerializer.Serialize(new
-            {
-                @event = "odometerUpdate",
-                odometer = odoSt.CurrentValue,
-                odometerUnit = odoSt.UseKilometers ? "km" : "mi",
-            });
-            MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(odoJson));
-        }
+        SendOdometerUpdate();
     }
 
     private void SpeedKmToOdometer(double speedKmh, double dtSec)
@@ -226,33 +292,7 @@ public partial class HybridBridgeService
         var activeName = _activeDashboardName;
         if (activeName == null) return;
 
-        if (!_odometerByDashboard.TryGetValue(activeName, out var state))
-        {
-            // Load from persisted config
-            try
-            {
-                var configTask = _calibration.GetPersistedDashboardConfigAsync();
-                configTask.Wait(TimeSpan.FromSeconds(1));
-                var config = configTask.Result;
-                if (config?.Dashboards.TryGetValue(activeName, out var def) == true && def.Odometer != null)
-                {
-                    state = new OdometerConfig
-                    {
-                        CurrentValue = def.Odometer.CurrentValue,
-                        UseKilometers = def.Odometer.UseKilometers,
-                    };
-                }
-                else
-                {
-                    state = new OdometerConfig();
-                }
-            }
-            catch
-            {
-                state = new OdometerConfig();
-            }
-            _odometerByDashboard[activeName] = state;
-        }
+        var state = LoadOdometerState(activeName);
 
         if (state.UseKilometers)
             state.CurrentValue += distanceKm;
@@ -293,105 +333,6 @@ public partial class HybridBridgeService
         if (activeName == null) return;
         if (!_odometerByDashboard.TryGetValue(activeName, out var state)) return;
         _ = PersistOdometerAsync(activeName, state);
-    }
-
-    // ─── VSS Driver Discovery ──────────────────────────────────────────────
-
-    /// <summary>
-    /// Scans calibration driver definitions for a driver with a Mode parameter
-    /// whose options match "Pulses per mile" / "Pulses per km".
-    /// Returns (driverId, configIndex) or null. Caches the result.
-    /// </summary>
-    internal async Task<(int DriverId, int ConfigIndex)?> DiscoverVssDriverAsync()
-    {
-        if (_vssDriverId.HasValue && _vssModeConfigIndex.HasValue)
-            return (_vssDriverId.Value, _vssModeConfigIndex.Value);
-
-        var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
-        var drivers = calResult.Data?.Drivers;
-        if (drivers == null) return null;
-
-        foreach (var driver in drivers)
-        {
-            for (var i = 0; i < driver.Configs.Count; i++)
-            {
-                var config = driver.Configs[i];
-                if (config.Options?.Any(o =>
-                    o.Name.Contains("Pulses per mile", StringComparison.OrdinalIgnoreCase) ||
-                    o.Name.Contains("Pulses per km", StringComparison.OrdinalIgnoreCase)) == true)
-                {
-                    _vssDriverId = driver.Id;
-                    _vssModeConfigIndex = i;
-                    return (driver.Id, i);
-                }
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Reads the VSS driver's Mode parameter from the ECU to determine speed unit.
-    /// 0 = pulses per mile (mph), 1 = pulses per km (km/h).
-    /// Caches the result.
-    /// </summary>
-    internal async Task ReadVssSpeedUnitAsync()
-    {
-        var discovery = await DiscoverVssDriverAsync().ConfigureAwait(false);
-        if (discovery == null) { _logger.LogWarning("VSS driver not found in calibration"); return; }
-
-        var protocol = _connection.GetProtocolService();
-        if (protocol == null) { _logger.LogWarning("ECU not connected, cannot read VSS driver"); return; }
-
-        var request = new GetDriverRequest((ushort)discovery.Value.DriverId);
-        var response = await protocol.SendAsync<GetDriverResponse>(request).ConfigureAwait(false);
-        if (response.Status != MessageStatus.Success) return;
-
-        var wireData = DriverSerializer.Deserialize(response.SerializedDriver.Span);
-        if (wireData.Configs.Length > discovery.Value.ConfigIndex)
-        {
-            var mode = (int)wireData.Configs[discovery.Value.ConfigIndex];
-            var isInMph = mode == 0;
-            _cachedVssSpeedInMph = isInMph;
-
-            if (_activeDashboardName != null && _odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
-            {
-                state.VssSpeedInMph = isInMph;
-        await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
-        SendOdometerUpdate();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Reads the VSS speed entity ID from the vehicle config.
-    /// </summary>
-    internal async Task<int?> GetVssSpeedEntityIdAsync()
-    {
-        var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
-        return config?.Vehicle?.VssSpeedEntityId;
-    }
-
-    /// <summary>
-    /// Bridge method: Sets the odometer speed source (GPS or VSS).
-    /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerSpeedSource', [source])
-    /// </summary>
-    public async Task SetOdometerSpeedSource(int source)
-    {
-        if (_activeDashboardName == null) return;
-        if (!_odometerByDashboard.TryGetValue(_activeDashboardName, out var state))
-            state = new OdometerConfig();
-
-        state.SpeedSource = source == 1 ? OdometerSpeedSource.Vss : OdometerSpeedSource.Gps;
-        _odometerByDashboard[_activeDashboardName] = state;
-
-        if (state.SpeedSource == OdometerSpeedSource.Vss)
-        {
-            await ReadVssSpeedUnitAsync().ConfigureAwait(false);
-            await LoadVssEntityIdAsync().ConfigureAwait(false);
-        }
-
-        await PersistOdometerAsync(_activeDashboardName, state).ConfigureAwait(false);
-        SendOdometerUpdate();
     }
 
     private void SendOdometerUpdate()

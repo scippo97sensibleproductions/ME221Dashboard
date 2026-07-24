@@ -989,6 +989,7 @@
     gaugeDef={settingsDef}
     gaugeName={entityLookup[String(settingsDef.entityId)]?.name ?? `Entity ${settingsDef.entityId}`}
     entityInfo={entityLookup[String(settingsDef.entityId)] ?? null}
+    entityLookup={entityLookup}
     onclose={handleSettingsClose}
     onchange={handleSettingsChange}
   />

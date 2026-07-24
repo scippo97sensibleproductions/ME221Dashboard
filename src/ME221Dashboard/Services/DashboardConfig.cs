@@ -96,6 +96,8 @@ public sealed class OdometerConfig
     public bool UseKilometers { get; set; } = true;
     public OdometerSpeedSource SpeedSource { get; set; } = OdometerSpeedSource.Gps;
     public bool VssSpeedInMph { get; set; } = false;
+    public int? SpeedEntityId { get; set; }
+    public string SpeedUnit { get; set; } = "km/h";
 }
 
 public sealed class VehicleConfig

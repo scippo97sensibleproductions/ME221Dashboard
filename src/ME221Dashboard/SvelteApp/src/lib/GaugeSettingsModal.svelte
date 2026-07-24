@@ -14,11 +14,12 @@
   import { Modal, Button, Tabs, TabItem } from 'flowbite-svelte';
   import { IconX } from '@tabler/icons-svelte';
 
-  let { open, gaugeDef, gaugeName, entityInfo, onclose, onchange }: {
+  let { open, gaugeDef, gaugeName, entityInfo, entityLookup, onclose, onchange }: {
     open: boolean;
     gaugeDef: GaugeConfigEntry;
     gaugeName: string;
     entityInfo: EntityInfo | null;
+    entityLookup?: Record<string, EntityInfo>;
     onclose: () => void;
     onchange: (def: GaugeConfigEntry) => void;
   } = $props();
@@ -84,11 +85,19 @@
   let odometerUnit = $state('km');
   let odometerSetDraft = $state('');
   let odometerSource = $state<'gps' | 'vss'>('gps');
-  let vssSpeedInMph = $state(false);
+  let odometerSpeedEntityId = $state<number | null>(null);
+  let odometerSpeedUnit = $state('km/h');
   let odometerSourceLoading = $state(false);
   $effect(() => {
     if (open && isOdometer) {
-      HybridBridge.getOdometer().then(r => { odometerValue = r.value; odometerUnit = r.unit; odometerSetDraft = String(Math.round(r.value)); odometerSource = r.speedSource as 'gps' | 'vss'; vssSpeedInMph = r.vssSpeedInMph; });
+      HybridBridge.getOdometer().then(r => {
+        odometerValue = r.value;
+        odometerUnit = r.unit;
+        odometerSetDraft = String(Math.round(r.value));
+        odometerSource = r.speedSource as 'gps' | 'vss';
+        odometerSpeedEntityId = r.speedEntityId;
+        odometerSpeedUnit = r.speedUnit;
+      });
     }
   });
 
@@ -489,7 +498,9 @@
                             onclick={async () => {
                               odometerSourceLoading = true;
                               await HybridBridge.setOdometerSpeedSource('gps');
+                              await HybridBridge.setOdometerSpeedConfig(null, odometerSpeedUnit);
                               odometerSource = 'gps';
+                              odometerSpeedEntityId = null;
                               odometerSourceLoading = false;
                             }}
                             disabled={odometerSourceLoading}
@@ -504,14 +515,62 @@
                               odometerSourceLoading = false;
                             }}
                             disabled={odometerSourceLoading}
-                          >VSS Speed</button>
+                          >Custom Entity</button>
                         </div>
-                        {#if odometerSourceLoading}
-                          <p class="text-[10px] text-gray-500 mt-1">Reading ECU configuration...</p>
-                        {:else if odometerSource === 'vss'}
-                          <p class="text-[10px] text-gray-500 mt-1">
-                            Unit auto-detected from ECU: {vssSpeedInMph ? 'mph' : 'km/h'}
-                          </p>
+                        {#if odometerSource === 'vss'}
+                          <div class="mt-2 space-y-2">
+                            <div>
+                              <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Entity</p>
+                              <select
+                                class="w-full rounded border border-gray-600 bg-gray-800 px-2 py-2 text-sm text-gray-200 focus:border-cyan-500 focus:outline-none"
+                                value={odometerSpeedEntityId ?? ''}
+                                onchange={async (e) => {
+                                  const val = (e.target as HTMLSelectElement).value;
+                                  const id = val === '' ? null : parseInt(val, 10);
+                                  odometerSpeedEntityId = id;
+                                  if (id != null) {
+                                    await HybridBridge.setOdometerSpeedSource('vss');
+                                    await HybridBridge.setOdometerSpeedConfig(id, odometerSpeedUnit);
+                                  }
+                                }}
+                              >
+                                <option value="">Select entity...</option>
+                                {#if entityLookup}
+                                  {#each Object.entries(entityLookup).filter(([id]) => parseInt(id) > 0).sort(([, a], [, b]) => a.name.localeCompare(b.name)) as [id, info]}
+                                    <option value={id} selected={odometerSpeedEntityId === parseInt(id)}>
+                                      {info.name} ({id}) {info.unit ? `— ${info.unit}` : ''}
+                                    </option>
+                                  {/each}
+                                {/if}
+                              </select>
+                            </div>
+                            <div>
+                              <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Speed Unit</p>
+                              <div class="flex gap-1">
+                                {#each ['km/h', 'mph', 'm/s', 'knots'] as unit}
+                                  <button
+                                    class="flex-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
+                                      {odometerSpeedUnit === unit ? 'bg-cyan-600 text-white' : 'bg-gray-700/80 text-gray-400 hover:bg-gray-600'}"
+                                    onclick={async () => {
+                                      odometerSpeedUnit = unit;
+                                      if (odometerSpeedEntityId != null) {
+                                        await HybridBridge.setOdometerSpeedConfig(odometerSpeedEntityId, unit);
+                                      }
+                                    }}
+                                  >{unit}</button>
+                                {/each}
+                              </div>
+                            </div>
+                            {#if odometerSpeedEntityId != null}
+                              <p class="text-[10px] text-cyan-400">
+                                Using entity {odometerSpeedEntityId} at {odometerSpeedUnit}
+                              </p>
+                            {:else}
+                              <p class="text-[10px] text-amber-400">
+                                Select a datalink entity above
+                              </p>
+                            {/if}
+                          </div>
                         {/if}
                       </div>
                     </div>
