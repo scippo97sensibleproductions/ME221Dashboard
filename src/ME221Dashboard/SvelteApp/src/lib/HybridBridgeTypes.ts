@@ -109,6 +109,7 @@ export interface GaugeConfigEntry {
   sweepAngle: number;
   arcPosition: number;
   digitalStyle: number;
+  wedgeStyle: number;
   texturePath: string | null;
   needleStartAngle: number;
   needleEndAngle: number;
@@ -157,6 +158,8 @@ export interface GaugeConfigEntry {
   customUnitLabel?: string | null;
   // Histogram
   showHistogram?: boolean;
+  // Multi-entity support (Wedge, LED Ring, Multi-Ring)
+  linkedEntities?: { entityId: number; color: string }[];
 }
 
 export interface DashboardTableEntry {
@@ -189,6 +192,7 @@ export interface SaveLayoutPayload {
   sweepAngle?: number;
   arcPosition?: number;
   digitalStyle?: number;
+  wedgeStyle?: number;
   needleStartAngle?: number;
   needleEndAngle?: number;
   needleOffsetX?: number;
@@ -232,6 +236,7 @@ export interface SaveLayoutPayload {
   customUnitLabel?: string | null;
   traceXLink?: number | null;
   traceYLink?: number | null;
+  linkedEntities?: { entityId: number; color: string }[];
 }
 
 // ─── Vehicle Config ──────────────────────────────────────────────────────────

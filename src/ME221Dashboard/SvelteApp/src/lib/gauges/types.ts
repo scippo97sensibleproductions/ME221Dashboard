@@ -2,6 +2,7 @@ export {
   GaugeShapeCategory,
   ArcPosition,
   DigitalStyle,
+  WedgeStyle,
 } from './gaugeTypes';
 
 export type {

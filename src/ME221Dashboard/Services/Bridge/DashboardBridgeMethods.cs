@@ -259,6 +259,79 @@ public partial class HybridBridgeService
                 }
             }
 
+            // Second pass: ensure linked entities (Multi-Ring channels) are in entityLookup
+            // even if they don't have their own gauge entry in the dashboard.
+            foreach (var g in dashboard.Gauges)
+            {
+                if (g.LinkedEntities == null) continue;
+                foreach (var le in g.LinkedEntities)
+                {
+                    var key = le.EntityId.ToString();
+                    if (entityLookup.ContainsKey(key)) continue;
+
+                    dashboard.Customizations.TryGetValue(le.EntityId, out var cust);
+
+                    if (linksById.TryGetValue(le.EntityId, out var link))
+                    {
+                        var unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : link.MeasureUnit;
+                        var (defMin, defMax) = GetUnitDefaults(unit);
+
+                        var minVal = cust?.MinRangeBypass == true
+                            ? (double?)null
+                            : cust?.MinRange.HasValue == true
+                                ? (double)cust.MinRange.Value
+                                : link.MinValue != 0 || link.MaxValue != 0
+                                    ? (double)link.MinValue
+                                    : defMin;
+                        var maxVal = cust?.MaxRangeBypass == true
+                            ? (double?)null
+                            : cust?.MaxRange.HasValue == true
+                                ? (double)cust.MaxRange.Value
+                                : link.MinValue != 0 || link.MaxValue != 0
+                                    ? (double)link.MaxValue
+                                    : defMax;
+
+                        entityLookup[key] = new
+                        {
+                            name = cust?.CustomName is { Length: > 0 } cn ? cn : link.Name,
+                            unit,
+                            minValue = minVal,
+                            maxValue = maxVal,
+                        };
+                    }
+                    else if (S_gpsDefaults.TryGetValue(le.EntityId, out var gps))
+                    {
+                        entityLookup[key] = new
+                        {
+                            name = cust?.CustomName is { Length: > 0 } cn ? cn : gps.Name,
+                            unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : gps.Unit,
+                            minValue = cust?.MinRange.HasValue == true ? (double)cust.MinRange.Value : gps.Min,
+                            maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : gps.Max,
+                        };
+                    }
+                    else if (S_odometerDefaults.TryGetValue(le.EntityId, out var odo))
+                    {
+                        entityLookup[key] = new
+                        {
+                            name = cust?.CustomName is { Length: > 0 } cn ? cn : odo.Name,
+                            unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : odo.Unit,
+                            minValue = cust?.MinRange.HasValue == true ? (double)cust.MinRange.Value : odo.Min,
+                            maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : odo.Max,
+                        };
+                    }
+                    else if (S_derivedDefaults.TryGetValue(le.EntityId, out var derived))
+                    {
+                        entityLookup[key] = new
+                        {
+                            name = cust?.CustomName is { Length: > 0 } cn ? cn : derived.Name,
+                            unit = cust?.CustomUnit is { Length: > 0 } cu ? cu : derived.Unit,
+                            minValue = cust?.MinRange.HasValue == true ? (double)cust.MinRange.Value : derived.Min,
+                            maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : derived.Max,
+                        };
+                    }
+                }
+            }
+
             return JsonSerializer.Serialize(new
             {
                 found = true,
@@ -278,6 +351,7 @@ public partial class HybridBridgeService
                     iconOffsetY = g.IconOffsetY,
                     iconSize = g.IconSize,
                     digitalStyle = g.DigitalStyle,
+                    wedgeStyle = g.WedgeStyle,
                     texturePath = g.TexturePath,
                     needleStartAngle = g.NeedleStartAngle,
                     needleEndAngle = g.NeedleEndAngle,
@@ -322,6 +396,8 @@ public partial class HybridBridgeService
                     zIndex = g.ZIndex,
                     transformSteps = g.TransformSteps?.Select(t => new { operation = (int)t.Operation, operand = t.Operand }).ToList(),
                     customUnitLabel = g.CustomUnitLabel,
+                    showHistogram = g.ShowHistogram,
+                    linkedEntities = g.LinkedEntities?.Select(le => new { entityId = le.EntityId, color = le.Color }).ToList(),
                 }).ToList(),
                 tables = (dashboard.Tables ?? []).Select(t => new
                 {
@@ -395,6 +471,7 @@ public partial class HybridBridgeService
                     if (g["sweepAngle"] is JsonValue) existing.SweepAngle = g["sweepAngle"]!.GetValue<double>();
                     if (g["arcPosition"] is JsonValue) existing.ArcPosition = g["arcPosition"]!.GetValue<int>();
                     if (g["digitalStyle"] is JsonValue) existing.DigitalStyle = g["digitalStyle"]!.GetValue<int>();
+                    if (g["wedgeStyle"] is JsonValue) existing.WedgeStyle = g["wedgeStyle"]!.GetValue<int>();
                     if (g["needleStartAngle"] is JsonValue) existing.NeedleStartAngle = g["needleStartAngle"]!.GetValue<double>();
                     if (g["needleEndAngle"] is JsonValue) existing.NeedleEndAngle = g["needleEndAngle"]!.GetValue<double>();
                     if (g["needleOffsetX"] is JsonValue) existing.NeedleOffsetX = g["needleOffsetX"]!.GetValue<double>();
@@ -501,6 +578,25 @@ public partial class HybridBridgeService
                         var cul = g["customUnitLabel"] is JsonValue cv ? cv.GetValue<string>() : null;
                         if (!string.IsNullOrEmpty(cul) && cul.Length > 50) cul = cul[..50];
                         existing.CustomUnitLabel = string.IsNullOrEmpty(cul) ? null : cul;
+                    }
+                    if (g["showHistogram"] is JsonValue sh) existing.ShowHistogram = sh.GetValue<bool>();
+                    // Linked entities (multi-entity gauges: Wedge, LED Ring, Multi-Ring)
+                    if (gObj.ContainsKey("linkedEntities"))
+                    {
+                        existing.LinkedEntities = null;
+                        if (g["linkedEntities"] is JsonArray leArr && leArr.Count > 0)
+                        {
+                            existing.LinkedEntities = leArr
+                                .Where(le => le is JsonObject)
+                                .Select(le => le!.AsObject())
+                                .Select(le => new LinkedEntityEntry
+                                {
+                                    EntityId = le["entityId"]?.GetValue<int>() ?? 0,
+                                    Color = le["color"]?.GetValue<string>(),
+                                })
+                                .ToList();
+                            if (existing.LinkedEntities.Count == 0) existing.LinkedEntities = null;
+                        }
                     }
                 }
             }
@@ -776,6 +872,39 @@ public partial class HybridBridgeService
         catch (Exception ex)
         {
             _logger.LogError(ex, "SaveDashboardTables failed");
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete gauges from a dashboard by entity IDs.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('DeleteDashboardGauges', [dashboardName, entityIdsJson])
+    /// </summary>
+    public async Task<string> DeleteDashboardGauges(string dashboardName, string entityIdsJson)
+    {
+        try
+        {
+            var ids = JsonSerializer.Deserialize<List<int>>(entityIdsJson);
+            if (ids == null || ids.Count == 0)
+                return JsonSerializer.Serialize(new { success = true });
+
+            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            if (config?.Dashboards.TryGetValue(dashboardName, out var dashboard) != true)
+                return JsonSerializer.Serialize(new { success = true });
+
+            var idSet = ids.ToHashSet();
+            if (dashboard.Gauges.Count > 0)
+            {
+                var toRemove = dashboard.Gauges.Where(g => idSet.Contains(g.Id)).ToList();
+                foreach (var g in toRemove) dashboard.Gauges.Remove(g);
+            }
+
+            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            return JsonSerializer.Serialize(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DeleteDashboardGauges failed");
             return JsonSerializer.Serialize(new { success = false, error = ex.Message });
         }
     }

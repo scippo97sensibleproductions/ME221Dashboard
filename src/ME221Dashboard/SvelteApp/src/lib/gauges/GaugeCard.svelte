@@ -7,6 +7,9 @@
   import TextGauge from './TextGauge.svelte';
   import DigitalGauge from './DigitalGauge.svelte';
   import ChartGauge from './ChartGauge.svelte';
+  import WedgeBarGauge from './WedgeBarGauge.svelte';
+  import LedRingGauge from './LedRingGauge.svelte';
+  import MultiRingGauge from './MultiRingGauge.svelte';
 
   let { gauge, pixelWidth, pixelHeight, valueHistory = [] }: {
     gauge: GaugeDefinition;
@@ -67,6 +70,12 @@
     <DigitalGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} valueHistory={gauge.showHistogram ? valueHistory : []} />
   {:else if gauge.category === GaugeShapeCategory.Chart}
     <ChartGauge {gauge} {pixelWidth} {pixelHeight} />
+  {:else if gauge.category === GaugeShapeCategory.WedgeBar}
+    <WedgeBarGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} />
+  {:else if gauge.category === GaugeShapeCategory.LedRing}
+    <LedRingGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} />
+  {:else if gauge.category === GaugeShapeCategory.MultiRing}
+    <MultiRingGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} />
   {:else}
     <ArcGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} />
   {/if}

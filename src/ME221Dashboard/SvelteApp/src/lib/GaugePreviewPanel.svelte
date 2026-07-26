@@ -53,6 +53,7 @@
       sweepAngle: gaugeDef.sweepAngle,
       arcPosition: gaugeDef.arcPosition,
       digitalStyle: gaugeDef.digitalStyle,
+      wedgeStyle: gaugeDef.wedgeStyle ?? 0,
       texturePath: gaugeDef.texturePath,
       needleStartAngle: gaugeDef.needleStartAngle,
       needleEndAngle: gaugeDef.needleEndAngle,

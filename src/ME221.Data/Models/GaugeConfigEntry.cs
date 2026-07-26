@@ -16,6 +16,7 @@ public sealed class GaugeConfigEntry
     public double IconOffsetY { get; set; }
     public double IconSize { get; set; } = 0.5;
     public int DigitalStyle { get; set; }
+    public int WedgeStyle { get; set; }
     public string? TexturePath { get; set; }
     public double NeedleStartAngle { get; set; } = 135.0;
     public double NeedleEndAngle { get; set; } = 405.0;
@@ -66,4 +67,7 @@ public sealed class GaugeConfigEntry
     public List<ValueTransformStep>? TransformSteps { get; set; }
     public string? CustomUnitLabel { get; set; }
     public bool ShowHistogram { get; set; }
+
+    // Multi-entity support (Wedge, LED Ring, Multi-Ring gauges)
+    public List<LinkedEntityEntry>? LinkedEntities { get; set; }
 }

@@ -17,6 +17,7 @@
   import SessionsPage from './pages/SessionsPage.svelte';
   import WarningSettingsPage from './pages/WarningSettingsPage.svelte';
   import AppSettingsPage from './pages/AppSettingsPage.svelte';
+  import GaugeBuilderPage from './pages/GaugeBuilderPage.svelte';
   import NotificationModal from './lib/NotificationModal.svelte';
   import type { NotificationType } from './lib/NotificationModal.svelte';
   import ToastContainer from './lib/ToastContainer.svelte';
@@ -48,7 +49,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'sessions' | 'warnings' | 'settings';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'sessions' | 'warnings' | 'settings' | 'gaugeBuilder';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -276,7 +277,7 @@
     navigateTo(page, params);
   }
 
-  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor', 'warnings'];
+  const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor', 'warnings', 'gaugeBuilder'];
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_BASE_DELAY_MS = 1500;
 
@@ -599,6 +600,10 @@
         <WarningSettingsPage onNavigate={navigateTo} />
       {:else if currentPage === 'settings'}
         <AppSettingsPage />
+      {:else if currentPage === 'gaugeBuilder'}
+        {#key activeDashboard}
+          <GaugeBuilderPage onNavigate={navigateTo} dashboardName={activeDashboard} />
+        {/key}
       {/if}
     </main>
   </div>

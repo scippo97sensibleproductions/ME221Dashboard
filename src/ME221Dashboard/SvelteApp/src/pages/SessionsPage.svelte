@@ -2,9 +2,12 @@
   import StreamingLineChart from '../lib/echarts/StreamingLineChart.svelte';
   import { SessionStore, type RecordedSession } from '../lib/monitor/SessionStore';
   import { getSensorColor } from '../lib/monitor/sensorColors';
+  import { HybridBridge } from '../lib/HybridBridge';
   import {
     IconPlayerPlay, IconPlayerStop, IconTrash, IconX,
     IconFileExport, IconFileImport, IconStack2, IconSearch,
+    IconDotsVertical, IconDownload, IconFileSpreadsheet, IconClock,
+    IconChartLine,
   } from '@tabler/icons-svelte';
 
   let { onNavigate }: { onNavigate: (page: string) => void } = $props();
@@ -14,6 +17,17 @@
     const m = Math.floor(s / 60);
     const h = Math.floor(m / 60);
     return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function formatDate(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -27,6 +41,7 @@
   let busyAction = $state<string | null>(null);
   let sessionError = $state<string | null>(null);
   let sessionsLoading = $state(false);
+  let openMenuId = $state<string | null>(null);
 
   // ── Derived ────────────────────────────────────────────────────────────
   const filteredSessions = $derived(
@@ -60,6 +75,17 @@
     }).catch(() => { sessionsLoading = false; });
   });
 
+  // Close menu on outside click
+  $effect(() => {
+    const handler = (e: MouseEvent) => {
+      if (openMenuId && !(e.target as HTMLElement).closest('[data-menu]')) {
+        openMenuId = null;
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  });
+
   // Cleanup on unmount
   $effect(() => {
     return () => { stopPlayback(); };
@@ -89,6 +115,7 @@
       activeSession = null;
       playbackTimeMs = 0;
     }
+    openMenuId = null;
   }
 
   function renameSession(id: string, name: string) {
@@ -127,6 +154,68 @@
   }
 
   // ── Export/Import ──────────────────────────────────────────────────────
+  const VD_NAME_MAP: Record<string, string> = {
+    'rpm': 'RPM', 'engine speed': 'RPM',
+    'throttle position': 'Throttle Position', 'tps': 'Throttle Position',
+    'afr': 'AFR', 'wideband': 'AFR', 'lambda': 'AFR',
+    'boost': 'Boost', 'map': 'Boost',
+    'baro': 'Barometric Pressure',
+    'clt': 'Coolant Temp', 'coolant temp': 'Coolant Temp',
+    'iat': 'Intake Air Temp', 'intake air temp': 'Intake Air Temp',
+    'batt': 'Battery Voltage', 'battery voltage': 'Battery Voltage',
+    'vss': 'Vehicle Speed', 'speed': 'Vehicle Speed',
+    'ignition': 'Ignition Timing', 'ignition advance': 'Ignition Timing',
+    'duty': 'Injector Duty', 'injector duty': 'Injector Duty',
+    'fuel rail': 'Fuel Pressure', 'fuel pressure': 'Fuel Pressure',
+  };
+  function mapVdName(raw: string): string {
+    const lower = raw.toLowerCase().trim();
+    if (VD_NAME_MAP[lower]) return VD_NAME_MAP[lower];
+    for (const [key, val] of Object.entries(VD_NAME_MAP)) {
+      if (lower.includes(key)) return val;
+    }
+    return raw;
+  }
+
+  function buildSessionCsv(session: RecordedSession): string {
+    const ids = session.sensorIds;
+    if (ids.length === 0) return '';
+    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    const headers = ['time_ms', ...ids.map(id => escapeCsv(session.sensorNames[id] ?? String(id)))];
+    const lines: string[] = [headers.join(',')];
+    const maxLen = Math.max(...ids.map(id => session.data[id]?.length ?? 0));
+    for (let i = 0; i < maxLen; i++) {
+      const row: string[] = [];
+      for (const id of ids) {
+        const pts = session.data[id] ?? [];
+        const s = pts[i];
+        row.push(s ? `${s.t.toFixed(1)},${s.v}` : ',');
+      }
+      lines.push(row.join(','));
+    }
+    return lines.join('\n');
+  }
+
+  function buildSessionVdCsv(session: RecordedSession): string {
+    const ids = session.sensorIds;
+    if (ids.length === 0) return '';
+    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    const mappedNames = ids.map(id => mapVdName(session.sensorNames[id] ?? String(id)));
+    const headers = ['Time', ...mappedNames.map(escapeCsv)];
+    const lines: string[] = ['ME221', headers.join(',')];
+    const maxLen = Math.max(...ids.map(id => session.data[id]?.length ?? 0));
+    for (let i = 0; i < maxLen; i++) {
+      const row: string[] = [];
+      for (const id of ids) {
+        const pts = session.data[id] ?? [];
+        const s = pts[i];
+        row.push(s ? `${(s.t / 1000).toFixed(3)},${s.v}` : ',');
+      }
+      lines.push(row.join(','));
+    }
+    return lines.join('\n');
+  }
+
   async function handleImportMes() {
     busyAction = 'import';
     sessionError = null;
@@ -147,6 +236,7 @@
   async function handleExportSessionMes(session: RecordedSession) {
     busyAction = `export-${session.id}`;
     sessionError = null;
+    openMenuId = null;
     try {
       const result = await SessionStore.exportToMes(session);
       if (!result.success && result.error) sessionError = result.error;
@@ -179,47 +269,58 @@
   });
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex flex-col h-full select-none">
   <!-- ── Top Bar ──────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border-b border-[#333] text-[11px]">
-    <IconStack2 size={14} class="text-purple-400" />
-    <span class="font-bold uppercase tracking-wider text-gray-400">Sessions</span>
-    <span class="text-gray-600">|</span>
-    <span class="text-gray-500">{sessions.length} saved</span>
+  <div class="flex items-center gap-3 px-4 py-2 bg-metro-surface border-b border-metro-border">
+    <div class="border-l-4 border-l-metro-purple pl-3 flex items-center gap-2">
+      <IconStack2 size={16} class="text-metro-purple" />
+      <span class="text-[13px] font-extrabold uppercase tracking-wider text-white">Sessions</span>
+    </div>
+    <span class="bg-metro-purple/20 text-metro-purple text-[10px] font-bold uppercase px-2 py-0.5 rounded">{sessions.length} saved</span>
+
+    <button
+      class="metro-btn-secondary flex items-center gap-1.5 px-2.5 py-1 text-[10px]"
+      onclick={() => onNavigate('ecuMonitor')}
+    >
+      <IconChartLine size={14} />
+      Monitor
+    </button>
 
     <div class="flex-1"></div>
 
     {#if activeSession}
       <!-- Playback controls -->
       <button
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider bg-[#2a2a2a] text-gray-400 hover:bg-[#333] transition-colors"
+        class="metro-btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[11px]"
         onclick={() => { activeSession = null; playbackTimeMs = 0; stopPlayback(); }}
       >
-        <IconX size={12} />
+        <IconX size={14} />
         Close
       </button>
       <button
-        class="flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors
-          {isPlaying ? 'bg-sky-600/20 text-sky-400' : 'bg-[#2a2a2a] text-gray-400 hover:bg-[#333]'}"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-wider transition-colors duration-150
+          {isPlaying ? 'bg-metro-blue text-white' : 'metro-btn-secondary'}"
         onclick={togglePlayback}
       >
         {#if isPlaying}
-          <IconPlayerStop size={12} />
+          <IconPlayerStop size={14} />
+          Stop
         {:else}
-          <IconPlayerPlay size={12} />
+          <IconPlayerPlay size={14} />
+          Play
         {/if}
       </button>
-      <span class="text-gray-400 font-mono tabular-nums text-[10px]">
+      <span class="text-metro-text-secondary font-mono tabular-nums text-[11px]">
         {formatMs(playbackTimeMs)} / {formatMs(activeSession.durationMs)}
       </span>
       <input
         type="range" min="0" max={activeSession.durationMs} step="100"
         value={playbackTimeMs}
         oninput={(e) => seekTo(Number((e.target as HTMLInputElement).value))}
-        class="w-32 h-1 accent-sky-500"
+        class="w-32 h-1 accent-metro-blue"
       />
       <select
-        class="bg-[#222] border border-[#444] rounded px-1 py-0.5 text-[10px] text-gray-300"
+        class="metro-input py-1 px-1.5 text-[10px]"
         bind:value={playbackSpeed}
       >
         <option value={0.5}>0.5x</option>
@@ -233,34 +334,34 @@
   <!-- ── Main Content ─────────────────────────────────────────────────── -->
   <div class="flex flex-1 min-h-0">
     <!-- Left: Session List -->
-    <div class="w-80 shrink-0 border-r border-[#333] flex flex-col">
+    <div class="w-80 shrink-0 border-r border-metro-border flex flex-col bg-metro-surface">
       <!-- Search + Actions -->
-      <div class="px-2 py-1.5 border-b border-[#222] space-y-1.5">
-        <div class="flex items-center gap-1 bg-[#222] rounded px-2 py-1">
-          <IconSearch size={12} class="text-gray-500 shrink-0" />
+      <div class="px-3 py-2 border-b border-metro-border space-y-2">
+        <div class="flex items-center gap-2 bg-metro-input-bg border border-metro-input-border rounded px-2 py-1.5">
+          <IconSearch size={14} class="text-metro-text-muted shrink-0" />
           <input
             type="text"
             placeholder="Search sessions..."
             bind:value={searchQuery}
-            class="flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-gray-600"
+            class="flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-metro-text-muted font-mono"
           />
         </div>
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-2">
           <button
-            class="flex items-center gap-1 px-2 py-1 text-[10px] text-purple-400 bg-purple-400/10 rounded hover:bg-purple-400/20 transition-colors disabled:opacity-50"
+            class="metro-btn-secondary flex items-center gap-1.5 px-2.5 py-1 text-[10px] disabled:opacity-50"
             onclick={handleImportMes}
             disabled={busyAction === 'import'}
           >
-            <IconFileImport size={11} />
+            <IconFileImport size={12} />
             {busyAction === 'import' ? 'Importing...' : 'Import .mes'}
           </button>
           {#if sessions.length > 0}
             <button
-              class="flex items-center gap-1 px-2 py-1 text-[10px] text-sky-400 bg-sky-400/10 rounded hover:bg-sky-400/20 transition-colors disabled:opacity-50"
+              class="metro-btn-primary flex items-center gap-1.5 px-2.5 py-1 text-[10px] disabled:opacity-50"
               onclick={handleExportAllSessionsMes}
               disabled={busyAction === 'export-all'}
             >
-              <IconFileExport size={11} />
+              <IconFileExport size={12} />
               {busyAction === 'export-all' ? 'Exporting...' : 'Export All'}
             </button>
           {/if}
@@ -269,7 +370,7 @@
 
       <!-- Error -->
       {#if sessionError}
-        <div class="mx-2 mt-1.5 px-2 py-1.5 bg-red-900/30 border border-red-500/30 rounded text-[9px] text-red-400">
+        <div class="mx-3 mt-2 px-2 py-1.5 bg-metro-red/20 border border-metro-red/40 rounded text-[10px] text-metro-red font-bold uppercase tracking-wider">
           {sessionError}
         </div>
       {/if}
@@ -277,65 +378,118 @@
       <!-- Session List -->
       <div class="flex-1 overflow-y-auto">
         {#if sessionsLoading}
-          <div class="text-center text-gray-500 text-[10px] py-8">Loading...</div>
+          <div class="flex flex-col items-center justify-center py-12 gap-2">
+            <div class="w-6 h-6 border-2 border-metro-purple/30 border-t-metro-purple rounded-full animate-spin"></div>
+            <span class="text-metro-text-muted text-[11px]">Loading sessions...</span>
+          </div>
         {:else if filteredSessions.length === 0}
-          <div class="text-center text-gray-500 text-[10px] py-8">
-            {sessions.length === 0 ? 'No saved sessions' : 'No matching sessions'}
+          <div class="flex flex-col items-center justify-center py-12 gap-3">
+            <div class="w-12 h-12 rounded bg-metro-purple/10 flex items-center justify-center">
+              <IconStack2 size={24} class="text-metro-purple/50" />
+            </div>
+            <div class="text-center">
+              <div class="text-[12px] text-metro-text-secondary font-bold">{sessions.length === 0 ? 'No sessions yet' : 'No matching sessions'}</div>
+              <div class="text-[10px] text-metro-text-muted mt-1">{sessions.length === 0 ? 'Record a session to get started' : 'Try a different search term'}</div>
+            </div>
           </div>
         {/if}
         {#each filteredSessions as session (session.id)}
-          <div
-            class="flex items-center gap-2 px-2 py-1.5 text-left cursor-pointer transition-colors border-b border-[#222]
-              {activeSession?.id === session.id ? 'bg-purple-600/10' : 'hover:bg-[#222]'}"
-            onclick={() => loadSession(session)}
-            role="button"
-            tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') loadSession(session); }}
-          >
-            <div class="flex-1 min-w-0">
-              <input
-                type="text"
-                value={session.name}
-                onchange={(e) => renameSession(session.id, (e.target as HTMLInputElement).value)}
-                class="w-full bg-transparent text-[11px] text-white truncate outline-none hover:bg-[#2a2a2a] px-1 rounded"
-                onclick={(e) => e.stopPropagation()}
-              />
-              <div class="text-[9px] text-gray-500 px-1">
-                {new Date(session.startTime).toLocaleDateString()} · {formatMs(session.durationMs)} · {session.sensorIds.length || session.sensorCount || 0} sensors
+          {@const sensorCount = session.sensorIds.length || session.sensorCount || 0}
+          {@const isActive = activeSession?.id === session.id}
+          <div class="relative" data-menu>
+            <div
+              class="flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer transition-colors duration-150 border-b border-metro-border-subtle
+                {isActive
+                  ? 'bg-gradient-to-r from-metro-purple/15 to-transparent border-l-2 border-l-metro-purple'
+                  : 'hover:bg-metro-hover border-l-2 border-l-transparent'}"
+              onclick={() => loadSession(session)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') loadSession(session); }}
+            >
+              <!-- Sensor color dots -->
+              <div class="flex flex-col gap-0.5 shrink-0">
+                {#each session.sensorIds.slice(0, 3) as sid}
+                  <div class="w-1.5 h-1.5 rounded-full" style="background: {getSensorColor(sid)}"></div>
+                {/each}
+                {#if sensorCount > 3}
+                  <div class="text-[8px] text-metro-text-muted text-center">+{sensorCount - 3}</div>
+                {/if}
               </div>
+
+              <div class="flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={session.name}
+                  onchange={(e) => renameSession(session.id, (e.target as HTMLInputElement).value)}
+                  class="w-full bg-transparent text-[12px] text-white truncate outline-none hover:bg-metro-card px-1 rounded font-bold"
+                  onclick={(e) => e.stopPropagation()}
+                />
+                <div class="flex items-center gap-2 mt-0.5 px-1">
+                  <span class="text-[10px] text-metro-text-muted flex items-center gap-1">
+                    <IconClock size={10} />
+                    {formatDate(session.startTime)}
+                  </span>
+                  <span class="text-metro-border">·</span>
+                  <span class="text-[10px] text-metro-text-secondary font-mono">{formatMs(session.durationMs)}</span>
+                  <span class="text-metro-border">·</span>
+                  <span class="text-[9px] bg-metro-purple/20 text-metro-purple px-1.5 py-0.5 rounded font-bold uppercase">{sensorCount} sensors</span>
+                </div>
+              </div>
+              <button
+                class="w-7 h-7 flex items-center justify-center text-metro-text-secondary hover:bg-metro-hover rounded transition-colors duration-150"
+                title="Actions"
+                onclick={(e) => { e.stopPropagation(); openMenuId = openMenuId === session.id ? null : session.id; }}
+              >
+                <IconDotsVertical size={14} />
+              </button>
             </div>
-            <button
-              class="p-1 text-gray-500 hover:text-sky-400 transition-colors disabled:opacity-50"
-              title="Export CSV"
-              onclick={(e) => { e.stopPropagation(); /* CSV export placeholder */ }}
-            >
-              <IconFileExport size={11} />
-            </button>
-            <button
-              class="p-1 text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-50"
-              title="Export .mes"
-              disabled={busyAction === `export-${session.id}`}
-              onclick={(e) => { e.stopPropagation(); handleExportSessionMes(session); }}
-            >
-              <IconFileExport size={11} />
-            </button>
-            <button
-              class="p-1 text-gray-500 hover:text-red-400 transition-colors"
-              title="Delete"
-              onclick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
-            >
-              <IconTrash size={11} />
-            </button>
+
+            <!-- Context Menu -->
+            {#if openMenuId === session.id}
+              <div class="absolute right-2 top-full z-50 w-48 bg-metro-card border border-metro-border rounded shadow-lg overflow-hidden">
+                <button
+                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-text-secondary hover:bg-metro-hover hover:text-white transition-colors duration-150 text-left"
+                  onclick={(e) => { e.stopPropagation(); HybridBridge.saveFile(`${session.name}.csv`, buildSessionCsv(session)); openMenuId = null; }}
+                >
+                  <IconFileSpreadsheet size={14} />
+                  Export CSV
+                </button>
+                <button
+                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-text-secondary hover:bg-metro-hover hover:text-white transition-colors duration-150 text-left"
+                  onclick={(e) => { e.stopPropagation(); HybridBridge.saveFile(`${session.name}.csv`, buildSessionVdCsv(session)); openMenuId = null; }}
+                >
+                  <IconDownload size={14} />
+                  Export for VirtualDyno
+                </button>
+                <button
+                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-text-secondary hover:bg-metro-hover hover:text-white transition-colors duration-150 text-left disabled:opacity-50"
+                  disabled={busyAction === `export-${session.id}`}
+                  onclick={(e) => { e.stopPropagation(); handleExportSessionMes(session); }}
+                >
+                  <IconFileExport size={14} />
+                  {busyAction === `export-${session.id}` ? 'Exporting...' : 'Export .mes'}
+                </button>
+                <div class="border-t border-metro-border"></div>
+                <button
+                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-red hover:bg-metro-red/20 transition-colors duration-150 text-left"
+                  onclick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
+                >
+                  <IconTrash size={14} />
+                  Delete
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
     </div>
 
     <!-- Right: Chart / Empty State -->
-    <div class="flex-1 min-w-0 p-2 flex flex-col">
+    <div class="flex-1 min-w-0 p-3 flex flex-col bg-metro-bg">
       {#if activeSession}
         {#if chartSeries.length === 0}
-          <div class="flex items-center justify-center h-full text-gray-500 text-sm">
+          <div class="flex items-center justify-center h-full text-metro-text-muted text-[13px]">
             No sensor data in this session
           </div>
         {:else}
@@ -353,11 +507,11 @@
 
         <!-- Freeze frames -->
         {#if activeSession.freezeFrames.length > 0}
-          <div class="flex items-center gap-1.5 mt-1 px-2 py-1 bg-[#1a1a1a] rounded border border-[#222]">
-            <span class="text-[9px] text-gray-500 uppercase tracking-wider shrink-0">Bookmarks</span>
+          <div class="flex items-center gap-2 mt-2 px-3 py-1.5 bg-metro-card border border-metro-border">
+            <span class="text-[10px] text-metro-text-muted uppercase tracking-wider font-bold shrink-0">Bookmarks</span>
             {#each activeSession.freezeFrames as ff}
               <button
-                class="px-1.5 py-0.5 text-[9px] bg-[#222] rounded text-gray-300 hover:bg-[#333] transition-colors"
+                class="metro-btn-secondary px-2 py-0.5 text-[10px]"
                 onclick={() => seekTo(ff.timeMs)}
               >
                 {formatMs(ff.timeMs)}
@@ -366,18 +520,20 @@
           </div>
         {/if}
       {:else}
-        <div class="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-          <IconStack2 size={48} class="text-gray-700" />
+        <div class="flex flex-col items-center justify-center h-full gap-4">
+          <div class="w-20 h-20 rounded bg-gradient-to-br from-metro-purple/20 to-metro-blue/10 flex items-center justify-center">
+            <IconStack2 size={40} class="text-metro-purple/60" />
+          </div>
           <div class="text-center">
-            <div class="text-sm font-medium">No session selected</div>
-            <div class="text-[11px] text-gray-600 mt-1">Select a session from the list to view playback</div>
+            <div class="text-[14px] font-bold text-metro-text-secondary">No session selected</div>
+            <div class="text-[11px] text-metro-text-muted mt-1">Select a session from the list to view playback</div>
           </div>
           {#if sessions.length === 0}
             <button
-              class="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-purple-400 bg-purple-400/10 rounded hover:bg-purple-400/20 transition-colors"
+              class="metro-btn-primary flex items-center gap-2 px-4 py-2 text-[12px]"
               onclick={handleImportMes}
             >
-              <IconFileImport size={13} />
+              <IconFileImport size={14} />
               Import .mes file
             </button>
           {/if}

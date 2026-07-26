@@ -1,4 +1,4 @@
-import { GaugeShapeCategory, DigitalStyle } from './gaugeTypes';
+import { GaugeShapeCategory, DigitalStyle, WedgeStyle } from './gaugeTypes';
 import type { ArcPosition, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
 import type { DataLinkWarningSetting } from '../HybridBridgeTypes';
 import type { ValueTransformStep } from './transformUtils';
@@ -196,6 +196,7 @@ export function toGaugeDefinition(
     sweepAngle: number;
     arcPosition: ArcPosition;
     digitalStyle: DigitalStyle;
+    wedgeStyle?: number;
     texturePath: string | null;
     needleStartAngle: number;
     needleEndAngle: number;
@@ -239,6 +240,7 @@ export function toGaugeDefinition(
     smoothingResponseMs?: number;
     spikeGatePercent?: number;
     zIndex?: number;
+    linkedEntities?: { entityId: number; color: string; minValue?: number; maxValue?: number }[];
   },
   overrides: {
     name: string;
@@ -261,6 +263,7 @@ export function toGaugeDefinition(
     sweepAngle: config.sweepAngle,
     arcPosition: config.arcPosition,
     digitalStyle: config.digitalStyle,
+    wedgeStyle: config.wedgeStyle ?? WedgeStyle.Classic,
     texturePath: config.texturePath,
     needleStartAngle: config.needleStartAngle,
     needleEndAngle: config.needleEndAngle,
@@ -305,6 +308,7 @@ export function toGaugeDefinition(
     warningState: 'none',
     showHistogram: config.showHistogram ?? false,
     zIndex: config.zIndex ?? 0,
+    linkedEntities: config.linkedEntities ?? [],
   };
 }
 
@@ -319,6 +323,7 @@ export function toSavePayload(def: {
   sweepAngle: number;
   arcPosition: ArcPosition;
   digitalStyle: DigitalStyle;
+  wedgeStyle?: number;
   needleStartAngle: number;
   needleEndAngle: number;
   needleOffsetX: number;
@@ -352,6 +357,7 @@ export function toSavePayload(def: {
   transformSteps?: ValueTransformStep[];
   customUnitLabel?: string | null;
   showHistogram?: boolean;
+  linkedEntities?: { entityId: number; color: string; minValue?: number; maxValue?: number }[];
 }) {
   return {
     entityId: def.entityId,
@@ -362,6 +368,7 @@ export function toSavePayload(def: {
     sweepAngle: def.sweepAngle,
     arcPosition: def.arcPosition,
     digitalStyle: def.digitalStyle,
+    wedgeStyle: def.wedgeStyle,
     needleStartAngle: def.needleStartAngle,
     needleEndAngle: def.needleEndAngle,
     needleOffsetX: def.needleOffsetX,
@@ -404,6 +411,7 @@ export function toSavePayload(def: {
     transformSteps: def.transformSteps,
     customUnitLabel: def.customUnitLabel,
     showHistogram: def.showHistogram,
+    linkedEntities: def.linkedEntities,
   };
 }
 
@@ -443,6 +451,20 @@ export function estimateVisualSize(
 
   if (category === GaugeShapeCategory.Chart) {
     return { w: designPxW, h: designPxH };
+  }
+
+  if (category === GaugeShapeCategory.WedgeBar) {
+    return { w: designPxW, h: designPxH };
+  }
+
+  if (category === GaugeShapeCategory.LedRing) {
+    const ringD = Math.min(designPxW, designPxH);
+    return { w: ringD, h: ringD };
+  }
+
+  if (category === GaugeShapeCategory.MultiRing) {
+    const ringD = Math.min(designPxW, designPxH);
+    return { w: ringD, h: ringD };
   }
 
   if (category === GaugeShapeCategory.Digital) {

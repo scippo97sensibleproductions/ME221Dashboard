@@ -281,6 +281,13 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
+  deleteDashboardGauges: async (dashboardName: string, entityIds: number[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const idsJson = JSON.stringify(entityIds);
+    const result = await invokeDotNetLogged('DeleteDashboardGauges', [dashboardName, idsJson]);
+    return JSON.parse(result);
+  },
+
   // ─── Dashboard Name CRUD ───────────────────────────────────────────────
 
   getDashboardNames: async (): Promise<{ names: string[]; activeDashboard: string }> => {

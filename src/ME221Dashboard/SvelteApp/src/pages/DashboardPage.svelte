@@ -216,8 +216,14 @@
       }
     }
 
+    // Enrich linked entities with names, units, and ranges from entityLookup
+    const linkedEntities = def.linkedEntities?.map(le => {
+      const info = entityLookup[String(le.entityId)];
+      return { ...le, name: info?.name, unit: info?.unit, minValue: info?.minValue, maxValue: info?.maxValue };
+    });
+
     return {
-      config: { ...def, needleCurve },
+      config: { ...def, needleCurve, linkedEntities },
       entityIdStr: String(def.entityId),
       name,
       unit,
@@ -330,7 +336,7 @@
     _prevRawValues.set(entityId, v);
 
     // Smoothing: response-time-based EMA (frame-rate independent)
-    if (g.smoothingEnabled) {
+    if (g.smoothingResponseMs > 0 || g.spikeGatePercent > 0) {
       let alpha: number;
       if (g.smoothingResponseMs > 0) {
         // Derive alpha from response time: alpha = 1 - exp(-dt / tau)
@@ -421,6 +427,19 @@
         return;
       }
       gaugeDefs = result.gauges;
+
+      // Filter out individual gauges absorbed into Multi-Ring gauges
+      // (keep the entries in config for isSelected tracking, just don't render them)
+      const absorbedIds = new Set<number>();
+      for (const g of gaugeDefs) {
+        if (g.shapeCategory === GaugeShapeCategory.MultiRing && g.linkedEntities) {
+          for (const le of g.linkedEntities) absorbedIds.add(le.entityId);
+        }
+      }
+      if (absorbedIds.size > 0) {
+        gaugeDefs = gaugeDefs.filter(g => g.shapeCategory === GaugeShapeCategory.MultiRing || !absorbedIds.has(g.entityId));
+      }
+
       tableDefs = result.tables ?? [];
       if (tableDefs.length > 0) {
         HybridBridge.getTableDefinitions().then(defs => {
@@ -728,6 +747,7 @@
       sweepAngle: 220,
       arcPosition: 0,
       digitalStyle: 0,
+      wedgeStyle: 0,
       texturePath: null,
       needleStartAngle: 135,
       needleEndAngle: 405,
@@ -850,7 +870,7 @@
   });
 </script>
 
-<div class="relative flex h-full w-full items-center justify-center" role="application" aria-label="Dashboard">
+<div class="relative flex h-full w-full items-center justify-center select-none" role="application" aria-label="Dashboard">
   {#if loadError}
     <div class="flex h-full w-full flex-col items-center justify-center gap-2">
       <p class="text-sm text-red-400">Failed to load dashboard</p>
@@ -884,7 +904,7 @@
     </button>
     <div
       bind:this={containerEl}
-      class="dashboard-canvas relative overflow-hidden"
+      class="dashboard-canvas relative overflow-hidden select-none"
       style:width="{canvasWidth}px"
       style:height="{canvasHeight}px"
       role="application"

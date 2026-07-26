@@ -140,6 +140,71 @@ class SessionRecorderClass {
     return rows.join('\n');
   }
 
+  toVirtualDynoCsv(): string {
+    const ids = this.#recordedSensorIds;
+    if (ids.length === 0) return '';
+
+    const VD_NAME_MAP: Record<string, string> = {
+      'rpm': 'RPM',
+      'engine speed': 'RPM',
+      'throttle position': 'Throttle Position',
+      'tps': 'Throttle Position',
+      'afr': 'AFR',
+      'wideband': 'AFR',
+      'lambda': 'AFR',
+      'boost': 'Boost',
+      'map': 'Boost',
+      'baro': 'Barometric Pressure',
+      'clt': 'Coolant Temp',
+      'coolant temp': 'Coolant Temp',
+      'coolant temperature': 'Coolant Temp',
+      'iat': 'Intake Air Temp',
+      'intake air temp': 'Intake Air Temp',
+      'intake air temperature': 'Intake Air Temp',
+      'batt': 'Battery Voltage',
+      'battery': 'Battery Voltage',
+      'battery voltage': 'Battery Voltage',
+      'vss': 'Vehicle Speed',
+      'vehicle speed': 'Vehicle Speed',
+      'speed': 'Vehicle Speed',
+      'ignition': 'Ignition Timing',
+      'ignition timing': 'Ignition Timing',
+      'ignition advance': 'Ignition Timing',
+      'duty': 'Injector Duty',
+      'injector duty': 'Injector Duty',
+      'fuel rail': 'Fuel Pressure',
+      'fuel pressure': 'Fuel Pressure',
+    };
+
+    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+
+    const mapName = (raw: string): string => {
+      const lower = raw.toLowerCase().trim();
+      if (VD_NAME_MAP[lower]) return VD_NAME_MAP[lower];
+      for (const [key, val] of Object.entries(VD_NAME_MAP)) {
+        if (lower.includes(key)) return val;
+      }
+      return raw;
+    };
+
+    const mappedNames = ids.map(id => mapName(this.#sensorNames.get(id) ?? String(id)));
+    const headers = ['Time', ...mappedNames.map(escapeCsv)];
+
+    const lines: string[] = ['ME221', headers.join(',')];
+
+    const maxLen = Math.max(...ids.map(id => this.#buffer.get(id)?.length ?? 0));
+    for (let i = 0; i < maxLen; i++) {
+      const row: string[] = [];
+      for (const id of ids) {
+        const buf = this.#buffer.get(id);
+        const sample = buf?.[i];
+        row.push(sample ? `${(sample.t / 1000).toFixed(3)},${sample.v}` : ',');
+      }
+      lines.push(row.join(','));
+    }
+    return lines.join('\n');
+  }
+
   toYaml(): string {
     const lines: string[] = ['session:'];
     lines.push(`  duration_ms: ${Math.round(this.durationMs)}`);

@@ -6,6 +6,9 @@ export enum GaugeShapeCategory {
   Text = 2,
   Digital = 3,
   Chart = 4,
+  WedgeBar = 5,
+  LedRing = 6,
+  MultiRing = 7,
 }
 
 export enum ArcPosition {
@@ -29,6 +32,15 @@ export enum DigitalStyle {
   InsetDisplay = 6,
 }
 
+export enum WedgeStyle {
+  Classic = 0,
+  Stacked = 1,
+  Needle = 2,
+  Thermal = 3,
+  Wire = 4,
+  Chevron = 5,
+}
+
 export interface GaugeDefinition {
   entityId: number;
   name: string;
@@ -41,6 +53,7 @@ export interface GaugeDefinition {
   sweepAngle: number;
   arcPosition: ArcPosition;
   digitalStyle: DigitalStyle;
+  wedgeStyle: WedgeStyle;
   texturePath: string | null;
   needleStartAngle: number;
   needleEndAngle: number;
@@ -94,6 +107,8 @@ export interface GaugeDefinition {
   showHistogram: boolean;
   // Layering
   zIndex: number;
+  // Multi-entity support (Wedge, LED Ring, Multi-Ring)
+  linkedEntities?: { entityId: number; color: string; name?: string; unit?: string; minValue?: number; maxValue?: number }[];
 }
 
 export interface LiveDataValues {

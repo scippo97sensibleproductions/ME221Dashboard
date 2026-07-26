@@ -6,4 +6,8 @@ public enum GaugeShapeCategory
     Bar = 1,
     Text = 2,
     Digital = 3,
+    Chart = 4,
+    WedgeBar = 5,
+    LedRing = 6,
+    MultiRing = 7,
 }

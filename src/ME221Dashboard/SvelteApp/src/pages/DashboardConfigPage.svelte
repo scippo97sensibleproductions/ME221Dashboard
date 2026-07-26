@@ -320,8 +320,9 @@
       }
       // Save table selections — preserve existing positions, only default new ones.
       const existingTableMap = new Map<number, DashboardTableEntry>();
-      if (dashConfig.tables) {
-        for (const t of dashConfig.tables) existingTableMap.set(t.tableId, t);
+      const existingConfig = await HybridBridge.getDashboardConfig(dashboardName);
+      if (existingConfig.tables) {
+        for (const t of existingConfig.tables) existingTableMap.set(t.tableId, t);
       }
       const tables: DashboardTableEntry[] = [];
       let newIdx = 0;
@@ -338,7 +339,7 @@
         }
       }
       await HybridBridge.saveDashboardTables(dashboardName, tables);
-      onNavigate('dashboard');
+      onNavigate('gaugeBuilder');
     } catch (err) {
       error = String(err);
     } finally {
@@ -602,22 +603,30 @@
     <span class="text-[13px] font-semibold text-center sm:text-left" style="color: var(--metro-text-secondary);">
       Selected: {activeTab === 'sensors' ? selectedCount : tableSelectedCount} / {activeTab === 'sensors' ? totalCount : tableTotalCount}
     </span>
-    <button
-            class="metro-btn-primary w-full sm:w-auto px-4 py-2 text-[13px] font-bold uppercase tracking-wider transition-all duration-150 disabled:opacity-50"
-            onclick={handleSave}
-            disabled={saving}
-    >
-      {#if saving}
-        <span class="flex items-center justify-center gap-2">
-          <span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
-          Saving…
-        </span>
-      {:else}
-        <span class="flex items-center justify-center gap-2">
-          Save & Go to Dashboard
-          <IconArrowRight size={14} />
-        </span>
-      {/if}
-    </button>
+    <div class="flex items-center gap-2 w-full sm:w-auto">
+      <button
+              class="metro-btn-secondary flex-1 sm:flex-none px-4 py-2 text-[13px] font-bold uppercase tracking-wider transition-all duration-150"
+              onclick={() => onNavigate('dashboard')}
+      >
+        Back to Dashboard
+      </button>
+      <button
+              class="metro-btn-primary flex-1 sm:flex-none px-4 py-2 text-[13px] font-bold uppercase tracking-wider transition-all duration-150 disabled:opacity-50"
+              onclick={handleSave}
+              disabled={saving}
+      >
+        {#if saving}
+          <span class="flex items-center justify-center gap-2">
+            <span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
+            Saving…
+          </span>
+        {:else}
+          <span class="flex items-center justify-center gap-2">
+            Save & Build Gauges
+            <IconArrowRight size={14} />
+          </span>
+        {/if}
+      </button>
+    </div>
   </div>
 </div>

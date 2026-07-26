@@ -2,10 +2,10 @@
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo } from './HybridBridge';
   import { GaugeShapeCategory, toGaugeDefinition, formatValue } from './gauges/types';
   import ArcLayoutSettings from './gauges/ArcLayoutSettings.svelte';
-  import ArcNeedleSettings from './gauges/ArcNeedleSettings.svelte';
   import BarGaugeSettings from './gauges/BarGaugeSettings.svelte';
   import DigitalGaugeSettings from './gauges/DigitalGaugeSettings.svelte';
   import ChartGaugeSettings from './gauges/ChartGaugeSettings.svelte';
+  import WedgeBarSettings from './gauges/WedgeBarSettings.svelte';
   import ColorConfigSettings from './gauges/ColorConfigSettings.svelte';
   import SmoothingSettings from './gauges/SmoothingSettings.svelte';
   import GpsSpeedDebugSettings from './gauges/GpsSpeedDebugSettings.svelte';
@@ -30,6 +30,9 @@
     { value: GaugeShapeCategory.Text, label: 'Text' },
     { value: GaugeShapeCategory.Digital, label: 'Digital' },
     { value: GaugeShapeCategory.Chart, label: 'Chart' },
+    { value: GaugeShapeCategory.WedgeBar, label: 'Wedge' },
+    { value: GaugeShapeCategory.LedRing, label: 'LED Ring' },
+    { value: GaugeShapeCategory.MultiRing, label: 'Multi-Ring' },
   ];
 
   let activeTab = $state('shape');
@@ -70,6 +73,9 @@
       case GaugeShapeCategory.Bar: wf = 0.30; hf = 0.08; break;
       case GaugeShapeCategory.Digital: wf = 0.22; hf = 0.16; break;
       case GaugeShapeCategory.Chart: wf = 0.35; hf = 0.20; break;
+      case GaugeShapeCategory.WedgeBar: wf = 0.30; hf = 0.12; break;
+      case GaugeShapeCategory.LedRing: wf = 0.25; hf = 0.25; break;
+      case GaugeShapeCategory.MultiRing: wf = 0.30; hf = 0.30; break;
     }
     onchange({ ...gaugeDef, shapeCategory: cat, widthFraction: wf, heightFraction: hf });
   }
@@ -108,6 +114,9 @@
   const isDigital = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Digital);
   const isText = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Text);
   const isChart = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Chart);
+  const isWedge = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.WedgeBar);
+  const isLedRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.LedRing);
+  const isMultiRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.MultiRing);
   const hasNeedle = $derived(isArc);
 
   let customUnitDraft = $state('');
@@ -195,6 +204,38 @@
                   </div>
                 </div>
 
+                <!-- Width -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Width</p>
+                    <span class="text-xs font-mono text-cyan-400">{Math.round((gaugeDef.widthFraction ?? 0.25) * 100)}%</span>
+                  </div>
+                  <input
+                    type="range" step="0.01" min="0.05" max="0.80"
+                    value={gaugeDef.widthFraction ?? 0.25}
+                    oninput={(e) => onchange({ ...gaugeDef, widthFraction: parseFloat((e.target as HTMLInputElement).value) })}
+                    class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg"
+                  />
+                </div>
+
+                <!-- Height -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Height</p>
+                    <span class="text-xs font-mono text-cyan-400">{Math.round((gaugeDef.heightFraction ?? 0.20) * 100)}%</span>
+                  </div>
+                  <input
+                    type="range" step="0.01" min="0.05" max="0.80"
+                    value={gaugeDef.heightFraction ?? 0.20}
+                    oninput={(e) => onchange({ ...gaugeDef, heightFraction: parseFloat((e.target as HTMLInputElement).value) })}
+                    class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg"
+                  />
+                </div>
+
                 <!-- Layer -->
                 <div>
                   <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Layer</p>
@@ -223,6 +264,12 @@
                   <DigitalGaugeSettings {gaugeDef} {onchange} />
                 {:else if isChart}
                   <ChartGaugeSettings {gaugeDef} {onchange} />
+                {:else if isWedge}
+                  <WedgeBarSettings {gaugeDef} {onchange} />
+                {:else if isLedRing}
+                  <p class="text-xs text-gray-500">LED ring gauge — uses default circular layout. Adjust Size Scale on the Shape tab.</p>
+                {:else if isMultiRing}
+                  <p class="text-xs text-gray-500">Multi-ring gauge — uses default circular layout. Configure linked entities via the Gauge Builder.</p>
                 {:else}
                   <p class="text-xs text-gray-500">No layout settings for this shape.</p>
                 {/if}
