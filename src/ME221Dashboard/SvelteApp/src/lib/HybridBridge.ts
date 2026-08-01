@@ -29,6 +29,7 @@ import type {
   ConnectionPreference,
   LambdaSettings,
   MonitoringPreset,
+  DashboardViewState,
 } from './HybridBridgeTypes';
 import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
 
@@ -68,6 +69,7 @@ export type {
   DataLinkWarningSetting,
   LambdaSettings,
   MonitoringPreset,
+  DashboardViewState,
 } from './HybridBridgeTypes';
 export type { RecordedSession, SessionSummary, FreezeFrame } from './monitor/SessionStore';
 
@@ -278,6 +280,13 @@ export const HybridBridge = {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const payload = JSON.stringify({ dashboardName, tables });
     const result = await invokeDotNetLogged('SaveDashboardTables', [payload]);
+    return JSON.parse(result);
+  },
+
+  saveDashboardViewState: async (dashboardName: string, viewState: DashboardViewState): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const payload = JSON.stringify({ dashboardName, ...viewState });
+    const result = await invokeDotNetLogged('SaveDashboardViewState', [payload]);
     return JSON.parse(result);
   },
 

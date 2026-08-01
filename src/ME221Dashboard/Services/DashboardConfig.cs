@@ -47,6 +47,8 @@ public sealed class DashboardDefinition
     public string? BackgroundImagePath { get; set; }
     public Dictionary<string, double>? ExtraData { get; init; }
     public bool HeaderVisible { get; set; } = true;
+    public bool SidebarVisible { get; set; } = true;
+    public bool LayoutLocked { get; set; }
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("WarningSettings")]

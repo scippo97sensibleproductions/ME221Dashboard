@@ -455,6 +455,9 @@ public partial class HybridBridgeService
                 gridColumns = config.GridColumns,
                 entities = entityLookup,
                 backgroundImagePath = dashboard.BackgroundImagePath,
+                headerVisible = dashboard.HeaderVisible,
+                sidebarVisible = dashboard.SidebarVisible,
+                layoutLocked = dashboard.LayoutLocked,
                 customizations = dashboard.Customizations?.ToDictionary(
                     kvp => kvp.Key.ToString(),
                     kvp => new
@@ -761,6 +764,41 @@ public partial class HybridBridgeService
         catch (Exception ex)
         {
             _logger.LogError(ex, "SaveDashboardLayout failed");
+            return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Persist per-dashboard view state: top-bar / sidebar visibility and layout lock.
+    /// Called from JS: window.HybridWebView.InvokeDotNet('SaveDashboardViewState', [json])
+    /// payload: { dashboardName, headerVisible?, sidebarVisible?, layoutLocked? }
+    /// </summary>
+    public async Task<string> SaveDashboardViewState(string jsonPayload)
+    {
+        try
+        {
+            var data = JsonNode.Parse(jsonPayload)!;
+            var dashboardName = data["dashboardName"]?.GetValue<string>() ?? "default";
+
+            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            config ??= new DashboardConfig();
+
+            if (!config.Dashboards.TryGetValue(dashboardName, out var dashboard))
+            {
+                dashboard = new DashboardDefinition();
+                config.Dashboards[dashboardName] = dashboard;
+            }
+
+            if (data["headerVisible"] is JsonValue hv) dashboard.HeaderVisible = hv.GetValue<bool>();
+            if (data["sidebarVisible"] is JsonValue sv) dashboard.SidebarVisible = sv.GetValue<bool>();
+            if (data["layoutLocked"] is JsonValue ll) dashboard.LayoutLocked = ll.GetValue<bool>();
+
+            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            return JsonSerializer.Serialize(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SaveDashboardViewState failed");
             return JsonSerializer.Serialize(new { success = false, error = ex.Message });
         }
     }

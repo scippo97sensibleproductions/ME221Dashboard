@@ -100,7 +100,16 @@ export interface DashboardConfigResult {
   gridColumns: number;
   entities?: Record<string, EntityInfo>;
   backgroundImagePath?: string | null;
+  headerVisible?: boolean;
+  sidebarVisible?: boolean;
+  layoutLocked?: boolean;
   error?: string;
+}
+
+export interface DashboardViewState {
+  headerVisible?: boolean;
+  sidebarVisible?: boolean;
+  layoutLocked?: boolean;
 }
 
 export interface ChartOverlayLine {

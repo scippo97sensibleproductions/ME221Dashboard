@@ -115,6 +115,24 @@
 
   let showBottomBar = $derived(sidebarVisible && isConnected && currentPage !== 'welcome' && currentPage !== 'connection' && currentPage !== 'calibration');
 
+  // Load per-dashboard view state (top/side bar visibility) when the dashboard page is shown.
+  $effect(() => {
+    if (!isConnected || currentPage !== 'dashboard') return;
+    HybridBridge.getDashboardConfig(activeDashboard)
+      .then(result => {
+        if (result.error) return;
+        // Only apply when the persisted config actually carries the fields,
+        // so old dashboards keep the current session defaults.
+        if (result.headerVisible !== undefined) headerVisible = result.headerVisible;
+        if (result.sidebarVisible !== undefined) sidebarVisible = result.sidebarVisible;
+      })
+      .catch(() => {});
+  });
+
+  function persistViewState() {
+    HybridBridge.saveDashboardViewState(activeDashboard, { headerVisible, sidebarVisible }).catch(() => {});
+  }
+
   async function openVehicleConfig() {
     if (allSensors.length === 0 && isConnected) {
       try {
@@ -513,8 +531,8 @@
     {currentPage}
     {activeDashboard}
     {headerVisible}
-    onHideHeader={() => { headerVisible = false; }}
-    onShowHeader={() => { headerVisible = true; }}
+    onHideHeader={() => { headerVisible = false; persistViewState(); }}
+    onShowHeader={() => { headerVisible = true; persistViewState(); }}
   />
 
   <div class="flex flex-1 min-h-0">
@@ -529,8 +547,8 @@
       onNewDashboard={() => { newDashboardDialog = true; newDashboardName = ''; newDashboardError = null; }}
       onNavigate={navigateTo}
       onDisconnect={disconnectEcu}
-      onHideSidebar={() => { sidebarVisible = false; }}
-      onShowSidebar={() => { sidebarVisible = true; }}
+      onHideSidebar={() => { sidebarVisible = false; persistViewState(); }}
+      onShowSidebar={() => { sidebarVisible = true; persistViewState(); }}
     />
 
     <main class="flex-1 h-full {currentPage === 'dashboard' && isConnected ? 'overflow-hidden' : 'overflow-auto'} {showBottomBar ? 'pb-14' : ''} {currentPage === 'dashboard' && isConnected ? 'dashboard-grid' : ''}">
