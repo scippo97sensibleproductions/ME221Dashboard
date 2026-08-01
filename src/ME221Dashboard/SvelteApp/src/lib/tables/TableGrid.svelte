@@ -2,6 +2,7 @@
   import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
   import type { OperatingPointSample } from '../stores/LiveDataStore.svelte';
   import { cellKey, getOutputValue, heatColor, formatValueAdaptive, DataType, rangeOpacity, fromRaw, findInterpolationRange } from './types';
+  import { deviceMode } from '../stores/deviceMode.svelte';
 
   let { tableDef, tableData, selectedRow, selectedCol, editMode, opRowRange, opColRange, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, opHistory = [], onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
@@ -68,19 +69,7 @@
     }
   }
 
-  let isMobile = $state(false);
-  let mql: MediaQueryList | null = null;
-
-  function checkMobile() {
-    isMobile = mql?.matches ?? false;
-  }
-
-  $effect(() => {
-    mql = window.matchMedia('(max-width: 768px)');
-    checkMobile();
-    mql.addEventListener('change', checkMobile);
-    return () => mql?.removeEventListener('change', checkMobile);
-  });
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
 
   let longPressTimer = 0;
   let longPressTriggered = false;

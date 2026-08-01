@@ -6,6 +6,7 @@
   import { SessionStore } from '../lib/monitor/SessionStore';
   import { HybridBridge } from '../lib/HybridBridge';
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
+  import { deviceMode } from '../lib/stores/deviceMode.svelte';
   import type { DataLinkDefinition } from '../lib/HybridBridgeTypes';
   import { getSensorColor } from '../lib/monitor/sensorColors';
   import {
@@ -26,7 +27,7 @@
   let selectedIds = $state<Set<number>>(new Set());
   let timeWindowSec = $state(10);
   let mobileTab: 'chart' | 'sensors' | 'info' = $state('chart');
-  let isMobile = $state(false);
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
 
   // Recording state
   let recorderState = $state<RecordingState>(SessionRecorder.state);
@@ -51,14 +52,6 @@
   );
 
   // ── Effects ────────────────────────────────────────────────────────────
-  $effect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    isMobile = mq.matches;
-    const handler = (e: MediaQueryListEvent) => { isMobile = e.matches; };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  });
-
   // Persist settings
   $effect(() => {
     try {

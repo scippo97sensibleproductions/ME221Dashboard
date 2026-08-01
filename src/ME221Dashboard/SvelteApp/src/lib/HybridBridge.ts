@@ -30,6 +30,8 @@ import type {
   LambdaSettings,
   MonitoringPreset,
   DashboardViewState,
+  DeviceProfile,
+  UiMode,
 } from './HybridBridgeTypes';
 import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
 
@@ -70,6 +72,8 @@ export type {
   LambdaSettings,
   MonitoringPreset,
   DashboardViewState,
+  DeviceProfile,
+  UiMode,
 } from './HybridBridgeTypes';
 export type { RecordedSession, SessionSummary, FreezeFrame } from './monitor/SessionStore';
 
@@ -213,6 +217,12 @@ export const HybridBridge = {
     if (!isWebViewAvailable()) return 'Browser';
     const result = await invokeDotNetLogged('GetPlatform');
     return JSON.parse(result).platform;
+  },
+
+  getDeviceProfile: async (): Promise<DeviceProfile> => {
+    if (!isWebViewAvailable()) return { platform: '', idiom: '', uiMode: 'desktop' };
+    const result = await invokeDotNetLogged('GetDeviceProfile');
+    return JSON.parse(result);
   },
 
   getPermissionStatus: async (): Promise<{

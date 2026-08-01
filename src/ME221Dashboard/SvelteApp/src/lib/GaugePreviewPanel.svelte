@@ -6,6 +6,7 @@
   import DigitalGauge from './gauges/DigitalGauge.svelte';
   import ChartGauge from './gauges/ChartGauge.svelte';
   import NumberInput from './NumberInput.svelte';
+  import { deviceMode } from './stores/deviceMode.svelte';
   import { IconZoomIn, IconZoomOut, IconRotate, IconChevronDown } from '@tabler/icons-svelte';
 
   let { gaugeDef, gaugeName, entityInfo, testValue, onTestValueChange }: {
@@ -24,18 +25,10 @@
 
   const PREVIEW_PX = 180;
   const MOBILE_PREVIEW_PX = 80;
-  let isMobile = $state(false);
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
   let zoomLevel = $state(1.0);
   let mobileTestExpanded = $state(false);
   const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.5, 2.0];
-
-  $effect(() => {
-    const mq = window.matchMedia('(max-width: 640px)');
-    isMobile = mq.matches;
-    const handler = (e: MediaQueryListEvent) => { isMobile = e.matches; };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  });
 
   const previewArcPx = $derived(isMobile ? MOBILE_PREVIEW_PX : PREVIEW_PX);
   const previewBarH = $derived(isMobile ? 40 : 60);

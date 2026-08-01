@@ -17,6 +17,27 @@ public partial class HybridBridgeService
     }
 
     /// <summary>
+    /// Report the host device so the UI can pick an EXPLICIT mode — no CSS/width guessing.
+    /// uiMode is 'desktop' where a keyboard and mouse are fully expected (Windows, Mac),
+    /// 'mobile' on touch-first platforms (Android, iOS) regardless of screen size
+    /// (a tablet is still a touch device).
+    /// Called from JS: window.HybridWebView.InvokeDotNet('GetDeviceProfile')
+    /// </summary>
+    public string GetDeviceProfile()
+    {
+        var platform = DeviceInfo.Platform;
+        var uiMode = platform == DevicePlatform.WinUI || platform == DevicePlatform.MacCatalyst
+            ? "desktop"
+            : "mobile";
+        return JsonSerializer.Serialize(new
+        {
+            platform = platform.ToString(),
+            idiom = DeviceInfo.Idiom.ToString(),
+            uiMode,
+        });
+    }
+
+    /// <summary>
     /// Get current permission status (USB, location, storage).
     /// Called from JS: window.HybridWebView.InvokeDotNet('GetPermissionStatus')
     /// </summary>

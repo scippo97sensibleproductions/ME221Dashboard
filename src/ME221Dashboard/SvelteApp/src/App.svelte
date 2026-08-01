@@ -28,6 +28,7 @@
   import UpdateAvailableModal from './lib/UpdateAvailableModal.svelte';
   import WarningPanel from './lib/WarningPanel.svelte';
   import { warningStore } from './lib/stores/warningStore.svelte';
+  import { initDeviceMode } from './lib/stores/deviceMode.svelte';
 
   let _updateChecked = false;
 
@@ -456,6 +457,10 @@
   async function startup() {
     document.documentElement.classList.add('dark');
     initializing = true;
+
+    // Determine UI mode (mobile/desktop) from the native platform BEFORE
+    // any page is shown — never guessed from CSS/viewport width.
+    await initDeviceMode();
 
     // Start GPS early so sensors are available in config
     HybridBridge.startGps().catch(() => {});

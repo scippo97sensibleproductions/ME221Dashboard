@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { deviceMode } from '../stores/deviceMode.svelte';
 
   let { open, tableName = '', label, value, originalValue, increment, editMode = 'output', axisName = '', onApply, onRevert, onClose }: {
     open: boolean;
@@ -15,22 +15,8 @@
     onClose: () => void;
   } = $props();
 
-  let isMobile = $state(false);
-  let mediaQuery: MediaQueryList | null = null;
-
-  function checkMobile() {
-    isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
-  }
-
-  onMount(() => {
-    checkMobile();
-    mediaQuery = window.matchMedia('(max-width: 767px)');
-    mediaQuery.addEventListener('change', checkMobile);
-  });
-
-  onDestroy(() => {
-    mediaQuery?.removeEventListener('change', checkMobile);
-  });
+  // Mobile mode → touch number pad instead of keyboard input.
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
 
   let inputEl = $state<HTMLInputElement>();
   let inputValue = $state('');

@@ -3,6 +3,7 @@
   import { cellKey, heatColor, formatValueAdaptive, DataType, rangeOpacity } from './types';
   import { IconDownload } from '@tabler/icons-svelte';
   import { HybridBridge } from '../HybridBridge';
+  import { deviceMode } from '../stores/deviceMode.svelte';
 
   let { tableDef, tableData, selectedCol, opColRange, minVal, maxVal, anchor, selection, selectionType = 'output', dirtyCells, dirtyInput0, diffMode = false, originalData = null, colorScheme = 'thermal', liveOutputValue = null, onCellClick, onAxis0Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
     tableDef: TableDefinition;
@@ -28,19 +29,7 @@
     onContextMenu?: (e: MouseEvent, row: number, col: number, type: 'output' | 'input0') => void;
   } = $props();
 
-  let isMobile = $state(false);
-  let mql: MediaQueryList | null = null;
-
-  function checkMobile() {
-    isMobile = mql?.matches ?? false;
-  }
-
-  $effect(() => {
-    mql = window.matchMedia('(max-width: 768px)');
-    checkMobile();
-    mql.addEventListener('change', checkMobile);
-    return () => mql?.removeEventListener('change', checkMobile);
-  });
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
 
   // Max absolute delta for diff mode gradient normalization
   let maxDelta = $derived.by(() => {

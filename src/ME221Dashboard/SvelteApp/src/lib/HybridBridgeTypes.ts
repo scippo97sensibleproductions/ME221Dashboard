@@ -90,6 +90,17 @@ export interface PickCalibrationResult {
   error?: string;
 }
 
+// ─── Device Types ────────────────────────────────────────────────────────────
+
+export type UiMode = 'desktop' | 'mobile';
+
+export interface DeviceProfile {
+  platform: string;
+  idiom: string;
+  /** Explicit UI mode decided natively: desktop = keyboard/mouse expected, mobile = touch-first. */
+  uiMode: UiMode;
+}
+
 // ─── Dashboard Types ─────────────────────────────────────────────────────────
 
 export interface DashboardConfigResult {
