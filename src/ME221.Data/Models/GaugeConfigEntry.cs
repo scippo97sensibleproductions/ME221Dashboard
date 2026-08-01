@@ -70,4 +70,59 @@ public sealed class GaugeConfigEntry
 
     // Multi-entity support (Wedge, LED Ring, Multi-Ring gauges)
     public List<LinkedEntityEntry>? LinkedEntities { get; set; }
+
+    // ── Gauge customization v2 ──
+    // Arc scale marks
+    public int TickCount { get; set; } = 3;
+    public bool TickLabels { get; set; }
+    public int TickLabelEvery { get; set; } = 1;
+    public int TickSide { get; set; } // 0=inside 1=outside
+    // Arc redline band
+    public double RedlineStart { get; set; } // 0 = off
+    public double RedlineWidth { get; set; } = 2;
+    public string RedlineColor { get; set; } = "#E03131";
+    // Arc needle shape
+    public int NeedleShape { get; set; } // 0=line 1=tapered 2=paddle 3=counterweighted
+    // Bar
+    public int BarOrientation { get; set; } // 0=auto 1=horizontal 2=vertical
+    public double BarThickness { get; set; } // 0 = auto
+    public bool BarTicks { get; set; }
+    public bool BarMinMaxLabels { get; set; }
+    public double BarRedlineStart { get; set; } // 0 = off
+    public string BarRedlineColor { get; set; } = "#E03131";
+    // Text
+    public bool ColorStopColoring { get; set; }
+    public int PanelStyle { get; set; } // 0=none 1=pill 2=glass 3=card
+    public double FlashThreshold { get; set; } // 0 = off
+    // Digital theming
+    public string LedColor { get; set; } = "#ff3333";
+    public string DigitBgColor { get; set; } = "#1a1a1a";
+    public double GlowStrength { get; set; } // 0 = current baseline
+    public int DigitDecimals { get; set; } = -1; // -1 = auto
+    public bool ZeroPadding { get; set; }
+    public int MinDigitCount { get; set; }
+    public bool RollAnimation { get; set; }
+    public double RollSpeedMs { get; set; } = 300;
+    // LedRing geometry
+    public int SegmentCount { get; set; } = 36;
+    public double SegmentGap { get; set; }
+    public double RingStartAngle { get; set; }
+    public double RingSweepAngle { get; set; } = 360;
+    public double AmberThreshold { get; set; } = 0.7;
+    public double RedThreshold { get; set; } = 0.85;
+    // MultiRing geometry
+    public int RingCount { get; set; } = 5;
+    public double RingWidth { get; set; } // 0 = auto
+    public double RingGap { get; set; } // 0 = auto
+    public bool PeakHoldEnabled { get; set; } = true;
+    public double PeakHoldAutoResetSec { get; set; }
+    // WedgeBar
+    public int WedgeSegmentCount { get; set; } = 32;
+    public double WedgeRedlineStart { get; set; } = 0.8;
+    // Chart overlays / style
+    public List<ChartOverlayEntry>? ChartOverlays { get; set; }
+    public int OverlayPillPosition { get; set; } // 0=topRight 1=topLeft 2=bottomRight 3=bottomLeft
+    public double OverlayFontScale { get; set; } = 1;
+    public int ChartLineStyle { get; set; } // 0=solid 1=dashed 2=dotted
+    public string ChartBackgroundColor { get; set; } = "";
 }

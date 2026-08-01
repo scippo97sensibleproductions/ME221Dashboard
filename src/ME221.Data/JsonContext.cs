@@ -20,6 +20,8 @@ namespace ME221.Data;
 [JsonSerializable(typeof(DeviceInfoMetadata))]
 [JsonSerializable(typeof(GaugeConfigEntry))]
 [JsonSerializable(typeof(ValueTransformStep))]
+[JsonSerializable(typeof(ChartOverlayEntry))]
+[JsonSerializable(typeof(List<ChartOverlayEntry>))]
 [JsonSerializable(typeof(SensorCustomization))]
 [JsonSerializable(typeof(List<DataLinkDefinition>))]
 [JsonSerializable(typeof(List<TableDefinition>))]

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GaugeDefinition } from './types';
   import { DEFAULT_COLOR_STOPS, computeValueFraction, gaugeValueColor, positionToCenterAngle, describeArc, buildColorLuts, interpolateNeedleAngle } from './types';
+  import { buildScaleTicks } from './scaleUtils';
   import { HybridBridge } from '../HybridBridge';
 
   let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
@@ -79,10 +80,50 @@
   const needleEndX = $derived(needleCenterX + needleRadius * Math.cos(needleRad));
   const needleEndY = $derived(needleCenterY + needleRadius * Math.sin(needleRad));
 
-  const tickPcts = [0, 0.5, 1.0];
+  const ticks = $derived(buildScaleTicks(
+    gauge.minValue, gauge.maxValue, gauge.tickCount, gauge.tickLabels, gauge.tickLabelEvery
+  ));
   const r = $derived(arcBox / 2);
   const innerR = $derived(r - arcThickness - 6);
   const outerR = $derived(r - 4);
+  // tickSide 0=inside (default, matches legacy 3-tick geometry), 1=outside (mirrored outward)
+  const tickOuterR = $derived(gauge.tickSide === 1 ? r + 4 : outerR);
+  const tickInnerR = $derived(gauge.tickSide === 1 ? r + 4 - (outerR - innerR) : innerR);
+  const tickLabelR = $derived(gauge.tickSide === 1 ? tickOuterR + 8 : tickInnerR - 8);
+  const tickLabelSize = $derived(Math.max(8, arcBox * 0.05));
+  const redlineStrokeWidth = $derived(Math.max(0.5, Math.min(20, gauge.redlineWidth)));
+
+  // ── Needle geometry (shape 0 = legacy line + dot; 1-3 are polygons) ──
+  const halfW = $derived(needleThickness / 2);
+  const unitX = $derived(Math.cos(needleRad));
+  const unitY = $derived(Math.sin(needleRad));
+  const perpX = $derived(-unitY);
+  const perpY = $derived(unitX);
+  const taperedPoints = $derived([
+    needleEndX, needleEndY,
+    needleCenterX + perpX * halfW, needleCenterY + perpY * halfW,
+    needleCenterX - perpX * halfW, needleCenterY - perpY * halfW,
+  ].join(' '));
+  const paddleTipX = $derived(needleCenterX + unitX * needleRadius * 1.08);
+  const paddleTipY = $derived(needleCenterY + unitY * needleRadius * 1.08);
+  const paddleW = $derived(Math.max(halfW * 2, halfW + 1.5));
+  const paddlePoints = $derived([
+    paddleTipX + perpX * paddleW, paddleTipY + perpY * paddleW,
+    paddleTipX - perpX * paddleW, paddleTipY - perpY * paddleW,
+    needleCenterX - perpX * halfW, needleCenterY - perpY * halfW,
+    needleCenterX + perpX * halfW, needleCenterY + perpY * halfW,
+  ].join(' '));
+  const cwTailLen = $derived(needleRadius * 0.35);
+  const cwTailW = $derived(halfW * 0.7);
+  const cwTailX = $derived(needleCenterX - unitX * cwTailLen);
+  const cwTailY = $derived(needleCenterY - unitY * cwTailLen);
+  const cwPoints = $derived([
+    needleEndX, needleEndY,
+    needleCenterX + perpX * halfW, needleCenterY + perpY * halfW,
+    cwTailX + perpX * cwTailW, cwTailY + perpY * cwTailW,
+    cwTailX - perpX * cwTailW, cwTailY - perpY * cwTailW,
+    needleCenterX - perpX * halfW, needleCenterY - perpY * halfW,
+  ].join(' '));
 
   const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.fontSizeScale ?? 1.0)));
   const valueSize = $derived(Math.max(14, arcBox * 0.22 * fontSizeScale));
@@ -107,24 +148,48 @@
           fill="none" stroke="#ced4da" stroke-width={arcThickness} stroke-linecap="round" />
     <path d={describeArc(cx, cy, r - arcThickness / 2, arcStartAngle, valueArcEndAngle)}
           fill="none" stroke={arcColor} stroke-width={arcThickness} stroke-linecap="round" />
-    {#each tickPcts as pct}
-      {@const tickAngleRad = (arcStartAngle + pct * gauge.sweepAngle) * Math.PI / 180}
-      <line x1={cx + outerR * Math.cos(tickAngleRad)}
-            y1={cy + outerR * Math.sin(tickAngleRad)}
-            x2={cx + innerR * Math.cos(tickAngleRad)}
-            y2={cy + innerR * Math.sin(tickAngleRad)}
+    {#if gauge.redlineStart > 0}
+      <path d={describeArc(cx, cy, r - arcThickness / 2, arcStartAngle + gauge.redlineStart * gauge.sweepAngle, arcEndAngle)}
+            fill="none" stroke={gauge.redlineColor} stroke-width={redlineStrokeWidth} stroke-linecap="round" />
+    {/if}
+    {#each ticks as tick}
+      {@const tickAngleRad = (arcStartAngle + tick.fraction * gauge.sweepAngle) * Math.PI / 180}
+      {@const tickX1 = cx + tickOuterR * Math.cos(tickAngleRad)}
+      {@const tickY1 = cy + tickOuterR * Math.sin(tickAngleRad)}
+      {@const tickX2 = cx + tickInnerR * Math.cos(tickAngleRad)}
+      {@const tickY2 = cy + tickInnerR * Math.sin(tickAngleRad)}
+      <line x1={tickX1} y1={tickY1} x2={tickX2} y2={tickY2}
             stroke="#868e96" stroke-width="1.5" stroke-linecap="round" />
+      {#if tick.label !== null}
+        {@const tickLx = cx + tickLabelR * Math.cos(tickAngleRad)}
+        {@const tickLy = cy + tickLabelR * Math.sin(tickAngleRad)}
+        {@const tickRot = arcStartAngle + tick.fraction * gauge.sweepAngle + 90}
+        <text x={tickLx} y={tickLy} text-anchor="middle" dominant-baseline="middle"
+              font-size={tickLabelSize} fill="#868e96"
+              transform="rotate({tickRot} {tickLx} {tickLy})"
+              font-family="var(--font-display)">
+          {tick.label}
+        </text>
+      {/if}
     {/each}
   {/if}
 
-  <line x1={needleCenterX} y1={needleCenterY}
-        x2={needleEndX} y2={needleEndY}
-        stroke={arcColor} stroke-width={needleThickness} stroke-linecap="round" />
+  {#if gauge.needleShape === 0}
+    <line x1={needleCenterX} y1={needleCenterY}
+          x2={needleEndX} y2={needleEndY}
+          stroke={arcColor} stroke-width={needleThickness} stroke-linecap="round" />
 
-  <circle cx={needleCenterX} cy={needleCenterY} r="4"
-          fill="none" stroke={arcColor} stroke-width="2" />
-  <circle cx={needleCenterX} cy={needleCenterY} r="2"
-          fill={arcColor} />
+    <circle cx={needleCenterX} cy={needleCenterY} r="4"
+            fill="none" stroke={arcColor} stroke-width="2" />
+    <circle cx={needleCenterX} cy={needleCenterY} r="2"
+            fill={arcColor} />
+  {:else if gauge.needleShape === 1}
+    <polygon points={taperedPoints} fill={arcColor} />
+  {:else if gauge.needleShape === 2}
+    <polygon points={paddlePoints} fill={arcColor} />
+  {:else}
+    <polygon points={cwPoints} fill={arcColor} />
+  {/if}
 
   {#if iconDataUrl}
     <image href={iconDataUrl} x={iconX - iconSz / 2} y={iconY - iconSz / 2} width={iconSz} height={iconSz} />

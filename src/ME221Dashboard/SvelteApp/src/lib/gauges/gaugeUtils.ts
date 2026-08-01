@@ -1,5 +1,5 @@
 import { GaugeShapeCategory, DigitalStyle, WedgeStyle } from './gaugeTypes';
-import type { ArcPosition, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
+import type { ArcPosition, ChartOverlayLine, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
 import type { DataLinkWarningSetting } from '../HybridBridgeTypes';
 import type { ValueTransformStep } from './transformUtils';
 
@@ -241,6 +241,51 @@ export function toGaugeDefinition(
     spikeGatePercent?: number;
     zIndex?: number;
     linkedEntities?: { entityId: number; color: string; minValue?: number; maxValue?: number }[];
+    showHistogram?: boolean;
+    // Gauge customization v2 (all optional; defaults below reproduce current rendering)
+    tickCount?: number;
+    tickLabels?: boolean;
+    tickLabelEvery?: number;
+    tickSide?: number;
+    redlineStart?: number;
+    redlineWidth?: number;
+    redlineColor?: string;
+    needleShape?: number;
+    barOrientation?: number;
+    barThickness?: number;
+    barTicks?: boolean;
+    barMinMaxLabels?: boolean;
+    barRedlineStart?: number;
+    barRedlineColor?: string;
+    colorStopColoring?: boolean;
+    panelStyle?: number;
+    flashThreshold?: number;
+    ledColor?: string;
+    digitBgColor?: string;
+    glowStrength?: number;
+    digitDecimals?: number;
+    zeroPadding?: boolean;
+    minDigitCount?: number;
+    rollAnimation?: boolean;
+    rollSpeedMs?: number;
+    segmentCount?: number;
+    segmentGap?: number;
+    ringStartAngle?: number;
+    ringSweepAngle?: number;
+    amberThreshold?: number;
+    redThreshold?: number;
+    ringCount?: number;
+    ringWidth?: number;
+    ringGap?: number;
+    peakHoldEnabled?: boolean;
+    peakHoldAutoResetSec?: number;
+    wedgeSegmentCount?: number;
+    wedgeRedlineStart?: number;
+    chartOverlays?: ChartOverlayLine[];
+    overlayPillPosition?: number;
+    overlayFontScale?: number;
+    chartLineStyle?: number;
+    chartBackgroundColor?: string;
   },
   overrides: {
     name: string;
@@ -309,7 +354,71 @@ export function toGaugeDefinition(
     showHistogram: config.showHistogram ?? false,
     zIndex: config.zIndex ?? 0,
     linkedEntities: config.linkedEntities ?? [],
+    // Gauge customization v2 defaults — each reproduces today's rendering (AE1)
+    tickCount: clampInt(config.tickCount ?? 3, 0, 20),
+    tickLabels: config.tickLabels ?? false,
+    tickLabelEvery: clampInt(config.tickLabelEvery ?? 1, 1, 20),
+    tickSide: config.tickSide === 1 ? 1 : 0,
+    redlineStart: clamp01(config.redlineStart ?? 0),
+    redlineWidth: clamp(config.redlineWidth ?? 2, 0.5, 20),
+    redlineColor: config.redlineColor ?? '#E03131',
+    needleShape: enumOr(config.needleShape, 0, 3),
+    barOrientation: enumOr(config.barOrientation, 0, 2),
+    barThickness: clamp(config.barThickness ?? 0, 0, 100),
+    barTicks: config.barTicks ?? false,
+    barMinMaxLabels: config.barMinMaxLabels ?? false,
+    barRedlineStart: clamp01(config.barRedlineStart ?? 0),
+    barRedlineColor: config.barRedlineColor ?? '#E03131',
+    colorStopColoring: config.colorStopColoring ?? false,
+    panelStyle: enumOr(config.panelStyle, 0, 3),
+    flashThreshold: clamp01(config.flashThreshold ?? 0),
+    ledColor: config.ledColor ?? '#ff3333',
+    digitBgColor: config.digitBgColor ?? '#1a1a1a',
+    glowStrength: clamp01(config.glowStrength ?? 0),
+    digitDecimals: config.digitDecimals === undefined ? -1 : clampInt(config.digitDecimals, -1, 3),
+    zeroPadding: config.zeroPadding ?? false,
+    minDigitCount: clampInt(config.minDigitCount ?? 0, 0, 12),
+    rollAnimation: config.rollAnimation ?? false,
+    rollSpeedMs: clamp(config.rollSpeedMs ?? 300, 50, 2000),
+    segmentCount: clampInt(config.segmentCount ?? 36, 4, 120),
+    segmentGap: clamp01(config.segmentGap ?? 0),
+    ringStartAngle: clamp(config.ringStartAngle ?? 0, -360, 360),
+    // LedRing defaults to 360°, MultiRing to 270° — a shared field, so the
+    // default is category-aware to keep legacy dashboards identical (AE1).
+    ringSweepAngle: clamp(config.ringSweepAngle ?? (config.shapeCategory === GaugeShapeCategory.MultiRing ? 270 : 360), 45, 360),
+    amberThreshold: Math.min(clamp01(config.amberThreshold ?? 0.7), clamp01(config.redThreshold ?? 0.85)),
+    redThreshold: clamp01(config.redThreshold ?? 0.85),
+    ringCount: clampInt(config.ringCount ?? 5, 1, 5),
+    ringWidth: clamp(config.ringWidth ?? 0, 0, 200),
+    ringGap: clamp(config.ringGap ?? 0, 0, 200),
+    peakHoldEnabled: config.peakHoldEnabled ?? true,
+    peakHoldAutoResetSec: clamp(config.peakHoldAutoResetSec ?? 0, 0, 3600),
+    wedgeSegmentCount: clampInt(config.wedgeSegmentCount ?? 32, 4, 96),
+    wedgeRedlineStart: clamp01(config.wedgeRedlineStart ?? 0.8),
+    chartOverlays: (config.chartOverlays ?? []).slice(0, 5),
+    overlayPillPosition: enumOr(config.overlayPillPosition, 0, 3),
+    overlayFontScale: clamp(config.overlayFontScale ?? 1, 0.5, 2),
+    chartLineStyle: enumOr(config.chartLineStyle, 0, 2),
+    chartBackgroundColor: config.chartBackgroundColor ?? '',
   };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function clamp01(value: number): number {
+  return clamp(value, 0, 1);
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.round(clamp(value, min, max));
+}
+
+// Enum-style field: any value outside [0, max] degrades to the default (KTD-2).
+function enumOr(value: number | undefined, def: number, max: number): number {
+  if (value === undefined) return def;
+  return value >= 0 && value <= max ? Math.round(value) : def;
 }
 
 // ── SaveLayoutPayload builder ──────────────────────────────────────
@@ -358,6 +467,51 @@ export function toSavePayload(def: {
   customUnitLabel?: string | null;
   showHistogram?: boolean;
   linkedEntities?: { entityId: number; color: string; minValue?: number; maxValue?: number }[];
+  // Gauge customization v2 — copied unconditionally so explicit resets to
+  // defaults survive the C# whitelist (absent key = "don't touch")
+  tickCount?: number;
+  tickLabels?: boolean;
+  tickLabelEvery?: number;
+  tickSide?: number;
+  redlineStart?: number;
+  redlineWidth?: number;
+  redlineColor?: string;
+  needleShape?: number;
+  barOrientation?: number;
+  barThickness?: number;
+  barTicks?: boolean;
+  barMinMaxLabels?: boolean;
+  barRedlineStart?: number;
+  barRedlineColor?: string;
+  colorStopColoring?: boolean;
+  panelStyle?: number;
+  flashThreshold?: number;
+  ledColor?: string;
+  digitBgColor?: string;
+  glowStrength?: number;
+  digitDecimals?: number;
+  zeroPadding?: boolean;
+  minDigitCount?: number;
+  rollAnimation?: boolean;
+  rollSpeedMs?: number;
+  segmentCount?: number;
+  segmentGap?: number;
+  ringStartAngle?: number;
+  ringSweepAngle?: number;
+  amberThreshold?: number;
+  redThreshold?: number;
+  ringCount?: number;
+  ringWidth?: number;
+  ringGap?: number;
+  peakHoldEnabled?: boolean;
+  peakHoldAutoResetSec?: number;
+  wedgeSegmentCount?: number;
+  wedgeRedlineStart?: number;
+  chartOverlays?: ChartOverlayLine[];
+  overlayPillPosition?: number;
+  overlayFontScale?: number;
+  chartLineStyle?: number;
+  chartBackgroundColor?: string;
 }) {
   return {
     entityId: def.entityId,
@@ -412,6 +566,49 @@ export function toSavePayload(def: {
     customUnitLabel: def.customUnitLabel,
     showHistogram: def.showHistogram,
     linkedEntities: def.linkedEntities,
+    tickCount: def.tickCount,
+    tickLabels: def.tickLabels,
+    tickLabelEvery: def.tickLabelEvery,
+    tickSide: def.tickSide,
+    redlineStart: def.redlineStart,
+    redlineWidth: def.redlineWidth,
+    redlineColor: def.redlineColor,
+    needleShape: def.needleShape,
+    barOrientation: def.barOrientation,
+    barThickness: def.barThickness,
+    barTicks: def.barTicks,
+    barMinMaxLabels: def.barMinMaxLabels,
+    barRedlineStart: def.barRedlineStart,
+    barRedlineColor: def.barRedlineColor,
+    colorStopColoring: def.colorStopColoring,
+    panelStyle: def.panelStyle,
+    flashThreshold: def.flashThreshold,
+    ledColor: def.ledColor,
+    digitBgColor: def.digitBgColor,
+    glowStrength: def.glowStrength,
+    digitDecimals: def.digitDecimals,
+    zeroPadding: def.zeroPadding,
+    minDigitCount: def.minDigitCount,
+    rollAnimation: def.rollAnimation,
+    rollSpeedMs: def.rollSpeedMs,
+    segmentCount: def.segmentCount,
+    segmentGap: def.segmentGap,
+    ringStartAngle: def.ringStartAngle,
+    ringSweepAngle: def.ringSweepAngle,
+    amberThreshold: def.amberThreshold,
+    redThreshold: def.redThreshold,
+    ringCount: def.ringCount,
+    ringWidth: def.ringWidth,
+    ringGap: def.ringGap,
+    peakHoldEnabled: def.peakHoldEnabled,
+    peakHoldAutoResetSec: def.peakHoldAutoResetSec,
+    wedgeSegmentCount: def.wedgeSegmentCount,
+    wedgeRedlineStart: def.wedgeRedlineStart,
+    chartOverlays: def.chartOverlays,
+    overlayPillPosition: def.overlayPillPosition,
+    overlayFontScale: def.overlayFontScale,
+    chartLineStyle: def.chartLineStyle,
+    chartBackgroundColor: def.chartBackgroundColor,
   };
 }
 

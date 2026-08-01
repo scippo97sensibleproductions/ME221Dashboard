@@ -11,11 +11,12 @@
   import LedRingGauge from './LedRingGauge.svelte';
   import MultiRingGauge from './MultiRingGauge.svelte';
 
-  let { gauge, pixelWidth, pixelHeight, valueHistory = [] }: {
+  let { gauge, pixelWidth, pixelHeight, valueHistory = [], overlayHistories = {} }: {
     gauge: GaugeDefinition;
     pixelWidth: number;
     pixelHeight: number;
     valueHistory?: number[];
+    overlayHistories?: Record<string, { t: number; v: number }[]>;
   } = $props();
 
   const warningStyle = $derived.by(() => {
@@ -69,7 +70,7 @@
   {:else if gauge.category === GaugeShapeCategory.Digital}
     <DigitalGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} valueHistory={gauge.showHistogram ? valueHistory : []} />
   {:else if gauge.category === GaugeShapeCategory.Chart}
-    <ChartGauge {gauge} {pixelWidth} {pixelHeight} />
+    <ChartGauge {gauge} {pixelWidth} {pixelHeight} {overlayHistories} />
   {:else if gauge.category === GaugeShapeCategory.WedgeBar}
     <WedgeBarGauge {gauge} {pixelWidth} {pixelHeight} valueTextColor={warningStyle.valueTextColor} />
   {:else if gauge.category === GaugeShapeCategory.LedRing}

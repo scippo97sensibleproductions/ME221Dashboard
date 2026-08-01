@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { GaugeConfigEntry, NeedleCurvePoint } from '../HybridBridge';
+  import ScaleMarksSettings from './ScaleMarksSettings.svelte';
+  import RedlineBandSettings from './RedlineBandSettings.svelte';
 
   let { gaugeDef, onchange, minValue = 0, maxValue = 10000 }: {
     gaugeDef: GaugeConfigEntry;
@@ -130,6 +132,27 @@
       class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
         [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-cyan-500/30"
+    />
+  </div>
+
+  <!-- Scale Marks -->
+  <div class="border-t border-gray-700/30 pt-4">
+    <ScaleMarksSettings
+      tickCount={gaugeDef.tickCount ?? 3}
+      tickLabels={gaugeDef.tickLabels ?? false}
+      tickLabelEvery={gaugeDef.tickLabelEvery ?? 1}
+      tickSide={gaugeDef.tickSide ?? 0}
+      onchange={(patch) => onchange({ ...gaugeDef, ...patch })}
+    />
+  </div>
+
+  <!-- Redline Band -->
+  <div class="border-t border-gray-700/30 pt-4">
+    <RedlineBandSettings
+      start={gaugeDef.redlineStart ?? 0}
+      width={gaugeDef.redlineWidth ?? 2}
+      color={gaugeDef.redlineColor ?? '#E03131'}
+      onchange={(patch) => onchange({ ...gaugeDef, ...patch })}
     />
   </div>
 </div>

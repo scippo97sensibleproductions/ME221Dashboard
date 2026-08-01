@@ -6,6 +6,8 @@
   import DigitalGaugeSettings from './gauges/DigitalGaugeSettings.svelte';
   import ChartGaugeSettings from './gauges/ChartGaugeSettings.svelte';
   import WedgeBarSettings from './gauges/WedgeBarSettings.svelte';
+  import LedRingSettings from './gauges/LedRingSettings.svelte';
+  import MultiRingSettings from './gauges/MultiRingSettings.svelte';
   import ColorConfigSettings from './gauges/ColorConfigSettings.svelte';
   import SmoothingSettings from './gauges/SmoothingSettings.svelte';
   import GpsSpeedDebugSettings from './gauges/GpsSpeedDebugSettings.svelte';
@@ -267,9 +269,9 @@
                 {:else if isWedge}
                   <WedgeBarSettings {gaugeDef} {onchange} />
                 {:else if isLedRing}
-                  <p class="text-xs text-gray-500">LED ring gauge — uses default circular layout. Adjust Size Scale on the Shape tab.</p>
+                  <LedRingSettings {gaugeDef} {onchange} />
                 {:else if isMultiRing}
-                  <p class="text-xs text-gray-500">Multi-ring gauge — uses default circular layout. Configure linked entities via the Gauge Builder.</p>
+                  <MultiRingSettings {gaugeDef} {onchange} />
                 {:else}
                   <p class="text-xs text-gray-500">No layout settings for this shape.</p>
                 {/if}
@@ -439,6 +441,70 @@
                     </div>
                   {/if}
                 </div>
+
+                <!-- Text Gauge extras (R7-R9) -->
+                {#if isText}
+                  <div class="space-y-4 border-t border-gray-700/30 pt-4">
+                    <!-- Value Color -->
+                    <div class="flex items-center justify-between rounded bg-gray-800/60 px-3 py-2">
+                      <div>
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Value Color</p>
+                        <p class="text-[10px] text-gray-500">Follow the color-stop gradient</p>
+                      </div>
+                      <button
+                        class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                        style="background-color: {gaugeDef.colorStopColoring ? 'var(--metro-purple)' : 'rgb(55,65,81)'}"
+                        role="switch"
+                        aria-checked={gaugeDef.colorStopColoring ?? false}
+                        aria-label="Value follows color stops"
+                        onclick={() => onchange({ ...gaugeDef, colorStopColoring: !(gaugeDef.colorStopColoring ?? false) })}
+                      >
+                        <span
+                          class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out"
+                          style="transform: translateX({gaugeDef.colorStopColoring ? '18px' : '0'})"
+                        ></span>
+                      </button>
+                    </div>
+
+                    <!-- Panel Style -->
+                    <div>
+                      <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Panel Style</p>
+                      <div class="flex gap-1">
+                        {#each [
+                          { value: 0, label: 'None' },
+                          { value: 1, label: 'Pill' },
+                          { value: 2, label: 'Glass' },
+                          { value: 3, label: 'Card' },
+                        ] as p}
+                          <button
+                            class="flex-1 rounded px-2 py-2 text-xs font-medium transition-colors min-h-[32px]
+                              {(gaugeDef.panelStyle ?? 0) === p.value
+                                ? 'bg-cyan-600 text-white'
+                                : 'border border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-200'}"
+                            onclick={() => onchange({ ...gaugeDef, panelStyle: p.value })}
+                          >{p.label}</button>
+                        {/each}
+                      </div>
+                    </div>
+
+                    <!-- Flash Threshold -->
+                    <div>
+                      <div class="flex items-center justify-between mb-1.5">
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Flash Threshold</p>
+                        <span class="text-xs font-mono text-cyan-400">{(gaugeDef.flashThreshold ?? 0) > 0 ? `${Math.round((gaugeDef.flashThreshold ?? 0) * 100)}%` : 'Off'}</span>
+                      </div>
+                      <input
+                        type="range" step="1" min="0" max="50"
+                        value={Math.round((gaugeDef.flashThreshold ?? 0) * 100)}
+                        oninput={(e) => onchange({ ...gaugeDef, flashThreshold: parseInt((e.target as HTMLInputElement).value) / 100 })}
+                        class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg"
+                      />
+                      <p class="mt-0.5 text-[10px] text-gray-500">Flash the value when it jumps by more than this fraction of the range</p>
+                    </div>
+                  </div>
+                {/if}
 
                 <!-- Arc Needle -->
                 {#if hasNeedle}

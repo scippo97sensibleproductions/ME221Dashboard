@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { GaugeDefinition } from './types';
 	import { WedgeStyle, computeValueFraction, gaugeValueColor, buildColorLuts, DEFAULT_COLOR_STOPS } from './types';
+	import { clampZoneThresholds, zoneColorAt } from './zoneUtils';
+	import { HybridBridge } from '../HybridBridge';
 
 	let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
 		gauge: GaugeDefinition;
@@ -33,34 +35,33 @@
 	const barAreaH = $derived(H - pad.t - pad.b);
 	const baselineY = $derived(pad.t + barAreaH);
 
-	const TOTAL = 32;
-	const redlineStart = 0.8;
+	const total = $derived(Math.max(4, Math.min(96, gauge.wedgeSegmentCount ?? 32)));
+	const redlineStart = $derived(Math.max(0, Math.min(1, gauge.wedgeRedlineStart ?? 0.8)));
+	const zone = $derived(clampZoneThresholds(redlineStart - 0.04, redlineStart));
 	const minH = $derived(barAreaH * 0.22);
 	const maxH = $derived(barAreaH * 0.92);
 
 	// Classic / Thermal segments
 	const segGap = $derived(Math.max(1, W * 0.008));
-	const segW = $derived((barAreaW - (TOTAL - 1) * segGap) / TOTAL);
+	const segW = $derived((barAreaW - (total - 1) * segGap) / total);
 	// Stacked segments (chunkier gaps)
 	const stGap = $derived(Math.max(2, W * 0.016));
-	const stW = $derived((barAreaW - (TOTAL - 1) * stGap) / TOTAL);
+	const stW = $derived((barAreaW - (total - 1) * stGap) / total);
 	// Chevrons
-	const chevStep = $derived(barAreaW / TOTAL);
+	const chevStep = $derived(barAreaW / total);
 	const chevBody = $derived(chevStep * 0.66);
 	const chevPoint = $derived(chevStep * 0.34);
 
-	const activeCount = $derived(Math.round(valueFraction * TOTAL));
+	const activeCount = $derived(Math.round(valueFraction * total));
 
 	function segX(i: number): number {
 		return pad.l + i * (segW + segGap);
 	}
 	function segHeight(i: number): number {
-		return minH + (maxH - minH) * ((i + 0.5) / TOTAL);
+		return minH + (maxH - minH) * ((i + 0.5) / total);
 	}
 	function zoneColor(f: number): string {
-		if (f >= redlineStart) return '#E03131';
-		if (f >= redlineStart - 0.04) return '#F59F00';
-		return barColor;
+		return zoneColorAt(f, zone.amber, zone.red, barColor);
 	}
 	function lutAt(f: number): string {
 		const c = Math.max(0, Math.min(1, f));
@@ -108,6 +109,17 @@
 	const valueSize = $derived(Math.max(10, W * 0.09 * fontSizeScale));
 	const labelSize = $derived(Math.max(7, W * 0.04 * fontSizeScale));
 	const scaleSize = $derived(Math.max(7, W * 0.04 * fontSizeScale));
+
+	let iconDataUrl = $state<string | null>(null);
+	$effect(() => {
+		const p = gauge.iconName;
+		if (p) {
+			HybridBridge.getImageBase64(p).then(r => { iconDataUrl = r.success && r.dataUrl ? r.dataUrl : null; }).catch(() => { iconDataUrl = null; });
+		} else {
+			iconDataUrl = null;
+		}
+	});
+	const iconSz = $derived(Math.max(4, Math.min(80, W * gauge.iconSize)));
 </script>
 
 <svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" class="size-full">
@@ -129,8 +141,8 @@
 	{#if style === WedgeStyle.Classic}
 		<rect x={pad.l - 1} y={pad.t + barAreaH * 0.06} width={barAreaW + 2} height={maxH + 2} rx="1"
 			fill="#0d0d0d" stroke="#1a1a1a" stroke-width="0.5"/>
-		{#each Array(TOTAL) as _, i}
-			{@const f = i / TOTAL}
+		{#each Array(total) as _, i}
+			{@const f = i / total}
 			{@const h = segHeight(i)}
 			{@const active = i < activeCount}
 			<rect x={segX(i)} y={baselineY - h} width={segW} height={h} rx="1"
@@ -143,8 +155,8 @@
 	{:else if style === WedgeStyle.Stacked}
 		<rect x={pad.l - 2} y={baselineY - maxH - 3} width={barAreaW + 4} height={maxH + 6} rx="2"
 			fill="#0b0b12" stroke="#191924" stroke-width="0.5"/>
-		{#each Array(TOTAL) as _, i}
-			{@const f = (i + 0.5) / TOTAL}
+		{#each Array(total) as _, i}
+			{@const f = (i + 0.5) / total}
 			{@const h = segHeight(i)}
 			{@const x = pad.l + i * (stW + stGap)}
 			{@const y = baselineY - h}
@@ -187,11 +199,11 @@
 	{:else if style === WedgeStyle.Thermal}
 		<rect x={pad.l - 1} y={pad.t + barAreaH * 0.06} width={barAreaW + 2} height={maxH + 2} rx="1"
 			fill="#0d0d0d" stroke="#1a1a1a" stroke-width="0.5"/>
-		{#each Array(TOTAL) as _, i}
+		{#each Array(total) as _, i}
 			{@const h = segHeight(i)}
 			{@const active = i < activeCount}
 			<rect x={segX(i)} y={baselineY - h} width={segW} height={h} rx="1"
-				fill={active ? lutAt((i + 0.5) / TOTAL) : '#12121c'}
+				fill={active ? lutAt((i + 0.5) / total) : '#12121c'}
 				opacity={active ? 1 : 0.35}
 				filter={active ? `url(#wg-${gauge.entityId})` : ''}/>
 		{/each}
@@ -230,8 +242,8 @@
 
 	<!-- ═══ CHEVRON — arrow cascade ═══ -->
 	{:else if style === WedgeStyle.Chevron}
-		{#each Array(TOTAL) as _, i}
-			{@const f = (i + 0.5) / TOTAL}
+		{#each Array(total) as _, i}
+			{@const f = (i + 0.5) / total}
 			{@const active = i < activeCount}
 			<path d={chevronPath(i)}
 				fill={active ? zoneColor(f) : 'none'}
@@ -276,3 +288,8 @@
 		</text>
 	{/if}
 </svg>
+
+{#if iconDataUrl}
+	<img src={iconDataUrl} alt="" class="absolute pointer-events-none"
+		style="width: {iconSz}px; height: {iconSz}px; left: calc(50% + {gauge.iconOffsetX * 100}% - {iconSz / 2}px); top: calc(50% + {gauge.iconOffsetY * 100}% - {iconSz / 2}px);" />
+{/if}

@@ -103,6 +103,13 @@ export interface DashboardConfigResult {
   error?: string;
 }
 
+export interface ChartOverlayLine {
+  entityId: number;
+  color: string;
+  lineWidth: number;
+  lineStyle: number; // 0=solid 1=dashed 2=dotted
+}
+
 export interface GaugeConfigEntry {
   entityId: number;
   shapeCategory: number;
@@ -160,6 +167,60 @@ export interface GaugeConfigEntry {
   showHistogram?: boolean;
   // Multi-entity support (Wedge, LED Ring, Multi-Ring)
   linkedEntities?: { entityId: number; color: string }[];
+  // ── Gauge customization v2 (all optional; defaults in toGaugeDefinition) ──
+  // Arc scale marks
+  tickCount?: number;
+  tickLabels?: boolean;
+  tickLabelEvery?: number;
+  tickSide?: number; // 0=inside 1=outside
+  // Arc redline band
+  redlineStart?: number; // 0 = off
+  redlineWidth?: number;
+  redlineColor?: string;
+  // Arc needle shape
+  needleShape?: number; // 0=line 1=tapered 2=paddle 3=counterweighted
+  // Bar
+  barOrientation?: number; // 0=auto 1=horizontal 2=vertical
+  barThickness?: number; // 0=auto
+  barTicks?: boolean;
+  barMinMaxLabels?: boolean;
+  barRedlineStart?: number; // 0 = off
+  barRedlineColor?: string;
+  // Text
+  colorStopColoring?: boolean;
+  panelStyle?: number; // 0=none 1=pill 2=glass 3=card
+  flashThreshold?: number; // 0 = off
+  // Digital theming
+  ledColor?: string;
+  digitBgColor?: string;
+  glowStrength?: number; // 0 = current baseline
+  digitDecimals?: number; // -1 = auto
+  zeroPadding?: boolean;
+  minDigitCount?: number;
+  rollAnimation?: boolean;
+  rollSpeedMs?: number;
+  // LedRing geometry
+  segmentCount?: number;
+  segmentGap?: number;
+  ringStartAngle?: number;
+  ringSweepAngle?: number;
+  amberThreshold?: number;
+  redThreshold?: number;
+  // MultiRing geometry
+  ringCount?: number;
+  ringWidth?: number; // 0 = auto
+  ringGap?: number; // 0 = auto
+  peakHoldEnabled?: boolean;
+  peakHoldAutoResetSec?: number;
+  // WedgeBar
+  wedgeSegmentCount?: number;
+  wedgeRedlineStart?: number;
+  // Chart overlays / style
+  chartOverlays?: ChartOverlayLine[];
+  overlayPillPosition?: number; // 0=topRight 1=topLeft 2=bottomRight 3=bottomLeft
+  overlayFontScale?: number;
+  chartLineStyle?: number; // 0=solid 1=dashed 2=dotted
+  chartBackgroundColor?: string; // '' = transparent
 }
 
 export interface DashboardTableEntry {
@@ -237,6 +298,50 @@ export interface SaveLayoutPayload {
   traceXLink?: number | null;
   traceYLink?: number | null;
   linkedEntities?: { entityId: number; color: string }[];
+  // Gauge customization v2 (all optional; defaults in toGaugeDefinition)
+  tickCount?: number;
+  tickLabels?: boolean;
+  tickLabelEvery?: number;
+  tickSide?: number;
+  redlineStart?: number;
+  redlineWidth?: number;
+  redlineColor?: string;
+  needleShape?: number;
+  barOrientation?: number;
+  barThickness?: number;
+  barTicks?: boolean;
+  barMinMaxLabels?: boolean;
+  barRedlineStart?: number;
+  barRedlineColor?: string;
+  colorStopColoring?: boolean;
+  panelStyle?: number;
+  flashThreshold?: number;
+  ledColor?: string;
+  digitBgColor?: string;
+  glowStrength?: number;
+  digitDecimals?: number;
+  zeroPadding?: boolean;
+  minDigitCount?: number;
+  rollAnimation?: boolean;
+  rollSpeedMs?: number;
+  segmentCount?: number;
+  segmentGap?: number;
+  ringStartAngle?: number;
+  ringSweepAngle?: number;
+  amberThreshold?: number;
+  redThreshold?: number;
+  ringCount?: number;
+  ringWidth?: number;
+  ringGap?: number;
+  peakHoldEnabled?: boolean;
+  peakHoldAutoResetSec?: number;
+  wedgeSegmentCount?: number;
+  wedgeRedlineStart?: number;
+  chartOverlays?: ChartOverlayLine[];
+  overlayPillPosition?: number;
+  overlayFontScale?: number;
+  chartLineStyle?: number;
+  chartBackgroundColor?: string;
 }
 
 // ─── Vehicle Config ──────────────────────────────────────────────────────────

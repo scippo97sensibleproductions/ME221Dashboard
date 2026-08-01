@@ -20,6 +20,8 @@ namespace ME221Dashboard.Services;
 [JsonSerializable(typeof(GaugeConfigEntry))]
 [JsonSerializable(typeof(LinkedEntityEntry))]
 [JsonSerializable(typeof(List<LinkedEntityEntry>))]
+[JsonSerializable(typeof(ChartOverlayEntry))]
+[JsonSerializable(typeof(List<ChartOverlayEntry>))]
 [JsonSerializable(typeof(ValueTransformStep))]
 [JsonSerializable(typeof(List<ValueTransformStep>))]
 [JsonSerializable(typeof(DashboardTableEntry))]

@@ -12,15 +12,46 @@
 
 	const allEntities = $derived(gauge.linkedEntities ?? []);
 
-	let entityValues = $state<Record<number, number>>({});
-	let peaks = $state<Record<number, number>>({});
+	let entityValues = $state<Record<string, number>>({});
+	let peaks = $state<Record<string, number>>({});
+	let peakTimes = $state<Record<string, number>>({});
 	let hoveredId = $state<number | null>(null);
+
+	// ── Peak hold (R18) ─────────────────────────────────────────────────
+	const peakHoldOn = $derived(gauge.peakHoldEnabled !== false);
+	const peakResetMs = $derived((gauge.peakHoldAutoResetSec ?? 0) * 1000);
+
+	$effect(() => {
+		if (!peakHoldOn) {
+			peaks = {};
+			peakTimes = {};
+		}
+	});
+
+	// Timestamp-based auto-reset: no timers, one pass over the ≤5 markers in
+	// the existing peak-update path (no allocation unless something expires).
+	function pruneExpired(now: number) {
+		if (peakResetMs <= 0) return;
+		let nextPeaks = peaks;
+		let nextTimes = peakTimes;
+		let changed = false;
+		for (const idStr of Object.keys(nextPeaks)) {
+			if (now - (nextTimes[idStr] ?? 0) > peakResetMs) {
+				if (!changed) { nextPeaks = { ...peaks }; nextTimes = { ...peakTimes }; changed = true; }
+				delete nextPeaks[idStr];
+				delete nextTimes[idStr];
+			}
+		}
+		if (changed) { peaks = nextPeaks; peakTimes = nextTimes; }
+	}
 
 	$effect(() => {
 		const ids = allEntities.map(e => e.entityId);
 		if (ids.length === 0) return;
 		const unsubscribe = HybridBridge.onMessage((msg) => {
 			if (msg.event === 'liveDataUpdate') {
+				const now = performance.now();
+				pruneExpired(now);
 				const updates: Record<number, number> = {};
 				for (const id of ids) {
 					const val = msg.values[String(id)];
@@ -28,16 +59,20 @@
 				}
 				if (Object.keys(updates).length > 0) {
 					entityValues = { ...entityValues, ...updates };
-					let nextPeaks = peaks;
-					let changed = false;
-					for (const [idStr, v] of Object.entries(updates)) {
-						const id = Number(idStr);
-						if (Number.isFinite(v) && (nextPeaks[id] === undefined || v > nextPeaks[id])) {
-							if (!changed) { nextPeaks = { ...peaks }; changed = true; }
-							nextPeaks[id] = v;
+					if (peakHoldOn) {
+						let nextPeaks = peaks;
+						let nextTimes = peakTimes;
+						let changed = false;
+						for (const [idStr, v] of Object.entries(updates)) {
+							const id = Number(idStr);
+							if (Number.isFinite(v) && (nextPeaks[id] === undefined || v > nextPeaks[id])) {
+								if (!changed) { nextPeaks = { ...peaks }; nextTimes = { ...peakTimes }; changed = true; }
+								nextPeaks[id] = v;
+								nextTimes[id] = now;
+							}
 						}
+						if (changed) { peaks = nextPeaks; peakTimes = nextTimes; }
 					}
-					if (changed) peaks = nextPeaks;
 				}
 			}
 		});
@@ -49,20 +84,25 @@
 		const v = gauge.value;
 		const id = gauge.entityId;
 		if (!Number.isFinite(v)) return;
+		const now = performance.now();
+		pruneExpired(now);
+		if (!peakHoldOn) return;
 		const cur = peaks[id];
-		if (cur === undefined || v > cur) peaks = { ...peaks, [id]: v };
+		if (cur === undefined || v > cur) {
+			peaks = { ...peaks, [id]: v };
+			peakTimes = { ...peakTimes, [id]: now };
+		}
 	});
 
 	function resetPeaks() {
 		peaks = {};
+		peakTimes = {};
 	}
 
-	// ── Geometry ─────────────────────────────────────────────────────────
+	// ── Geometry (R16/R17) ──────────────────────────────────────────────
 	const V = 360;
 	const cx = V / 2;
 	const cy = V / 2;
-	const START = 135;
-	const SWEEP = 270;
 	const DISC_R = 61;
 
 	const RING_DEFS = [
@@ -72,6 +112,20 @@
 		{ r: 91,  w: 8.5, stub: 4.5, label: 9.5 },
 		{ r: 76,  w: 7.5, stub: 3.5, label: 8.5 },
 	];
+
+	// R17: configurable sweep — 270° default (AE1, category-aware in the
+	// mapper), clamped 45–360. Dial stays centered at the top:
+	// 90 + (360 - 270)/2 = 135 (today's START).
+	const sweep = $derived(Math.min(360, Math.max(45, gauge.ringSweepAngle || 270)));
+	const start = $derived(90 + (360 - sweep) / 2);
+
+	// R16: ring count + geometry — 5 rings at the current layout stay the
+	// default (AE1). Auto width keeps the tapered strokes; auto gap keeps the
+	// current radii (21/19/17/15 spacing). Explicit values are minimums that
+	// never let ring bands overlap; rings always stay outside the center disc.
+	const ringCount = $derived(Math.min(5, Math.max(1, Math.round(gauge.ringCount || 5))));
+	const ringWidthPx = $derived(gauge.ringWidth > 0 ? gauge.ringWidth : 0); // 0 = auto
+	const ringGapPx = $derived(gauge.ringGap > 0 ? gauge.ringGap : 0);       // 0 = auto
 
 	const TICKS = [
 		{ f: 0,     major: true },
@@ -112,7 +166,11 @@
 			frac: number; minV: number; maxV: number;
 			peakFrac: number | null; isPrimary: boolean;
 		}[] = [];
-		for (let i = 0; i < allEntities.length && i < RING_DEFS.length; i++) {
+		const n = Math.min(allEntities.length, ringCount);
+		const outerR = RING_DEFS[0].r;
+		let prevR = outerR;
+		let prevSpacing = 0;
+		for (let i = 0; i < n; i++) {
 			const le = allEntities[i];
 			const isPrimary = i === 0;
 			const val = isPrimary ? gauge.value : (entityValues[le.entityId] ?? 0);
@@ -121,11 +179,19 @@
 			const frac = computeValueFraction(val, minV, maxV);
 			const peak = peaks[le.entityId];
 			const peakFrac = peak !== undefined ? computeValueFraction(peak, minV, maxV) : null;
-			const def = RING_DEFS[i];
+			const w = ringWidthPx > 0 ? ringWidthPx : RING_DEFS[i].w;
+			const r = i === 0
+				? outerR
+				: Math.max(prevR - prevSpacing, DISC_R + w / 2 + 1);
+			const nextW = ringWidthPx > 0 ? ringWidthPx : (RING_DEFS[i + 1]?.w ?? w);
+			const minSpacing = (w + nextW) / 2 + 2;
+			const autoSpacing = 21 - 2 * i; // today's radii: 148, 127, 108, 91, 76
+			prevSpacing = ringGapPx > 0 ? Math.max(ringGapPx, minSpacing) : Math.max(autoSpacing, minSpacing);
+			prevR = r;
 			result.push({
 				entityId: le.entityId,
-				r: def.r, w: def.w, stub: def.stub,
-				labelR: def.r + def.w / 2 + def.label,
+				r, w, stub: RING_DEFS[i].stub,
+				labelR: r + w / 2 + RING_DEFS[i].label,
 				color: le.color || '#0078D7',
 				label: isPrimary ? (gauge.name || 'PRIMARY') : (le.name || `CH ${le.entityId}`),
 				unit: isPrimary ? gauge.unit : (le.unit || ''),
@@ -223,15 +289,15 @@
 				onmouseleave={() => { hoveredId = null; }}
 			>
 				<!-- Track -->
-				<path d={arcPath(ring.r, START, START + SWEEP)} fill="none"
+				<path d={arcPath(ring.r, start, start + sweep)} fill="none"
 					stroke="#141420" stroke-width={ring.w + 2} />
-				<path d={arcPath(ring.r, START, START + SWEEP)} fill="none"
+				<path d={arcPath(ring.r, start, start + sweep)} fill="none"
 					stroke="#0d0d15" stroke-width={ring.w} />
 
 				<!-- Value arc -->
 				{#if ring.frac > 0.004}
 					<path
-						d={arcPath(ring.r, START, START + ring.frac * SWEEP)}
+						d={arcPath(ring.r, start, start + ring.frac * sweep)}
 						fill="none" stroke={stroke} stroke-width={ring.w} stroke-linecap="round"
 						opacity="0.92" filter="url(#{filterId})"
 						class={ring.isPrimary && gauge.warningState === 'critical' ? 'mr-crit'
@@ -241,7 +307,7 @@
 
 				<!-- Quadrant separators across the band -->
 				{#each TICKS.filter(t => t.major) as t (t.f)}
-					{@const ang = START + t.f * SWEEP}
+					{@const ang = start + t.f * sweep}
 					{@const p1 = polar(ring.r - ring.w / 2 - 2, ang)}
 					{@const p2 = polar(ring.r + ring.w / 2 + 2, ang)}
 					<line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#0a0a12" stroke-width="1.6" />
@@ -249,7 +315,7 @@
 
 				<!-- Outer tick stubs — light up as the arc passes them -->
 				{#each TICKS as t (t.f)}
-					{@const ang = START + t.f * SWEEP}
+					{@const ang = start + t.f * sweep}
 					{@const p1 = polar(ring.r + ring.w / 2 + 2.5, ang)}
 					{@const p2 = polar(ring.r + ring.w / 2 + 2.5 + (t.major ? ring.stub : ring.stub - 2), ang)}
 					{@const lit = t.f <= ring.frac + 0.001}
@@ -261,7 +327,7 @@
 
 				<!-- Per-channel scale numerals: min / mid / max -->
 				{#each SCALE_FRACS as f (f)}
-					{@const ang = START + f * SWEEP}
+					{@const ang = start + f * sweep}
 					{@const p = polar(ring.labelR, ang)}
 					{@const lit = f <= ring.frac + 0.001}
 					<text x={p.x} y={p.y} text-anchor="middle" dominant-baseline="central"
@@ -272,8 +338,8 @@
 				{/each}
 
 				<!-- Peak hold marker -->
-				{#if ring.peakFrac !== null && ring.peakFrac > 0.004}
-					{@const ang = START + ring.peakFrac * SWEEP}
+				{#if peakHoldOn && ring.peakFrac !== null && ring.peakFrac > 0.004}
+					{@const ang = start + ring.peakFrac * sweep}
 					{@const p1 = polar(ring.r - ring.w / 2 - 1, ang)}
 					{@const p2 = polar(ring.r + ring.w / 2 + 1.5, ang)}
 					<line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}

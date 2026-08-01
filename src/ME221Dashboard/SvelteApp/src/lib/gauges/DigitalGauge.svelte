@@ -2,6 +2,7 @@
   import type { GaugeDefinition } from './types';
   import { DigitalStyle } from './types';
   import { HybridBridge } from '../HybridBridge';
+  import { formatDigits } from './digitUtils';
 
   let { gauge, pixelWidth, pixelHeight, valueTextColor, valueHistory = [] }: {
     gauge: GaugeDefinition;
@@ -24,12 +25,23 @@
   const dim = $derived(Math.min(pixelWidth, pixelHeight));
   const fs = $derived(Math.max(0.5, Math.min(2.0, gauge.fontSizeScale ?? 1.0)));
 
-  // Scale font sizes to fit within the container
-  const _digitBg = '#1a1a1a';
-  const _ledColor = '#ff3333';
-  const _ledColorDim = '#ff6666';
-  const _ledBg = '#0d0d0d';
+  // Digit theming (R10): digitBgColor covers both the digit pill/cell and the
+  // LED cell roles; the dim unit variant derives from ledColor; glowStrength
+  // scales the existing glow blurs and opacities (1 + strength * 2).
+  const digitBg = $derived(gauge.digitBgColor ?? '#1a1a1a');
+  const ledColor = $derived(gauge.ledColor ?? '#ff3333');
+  const ledColorDim = $derived(mixTowardWhite(ledColor, 0.35));
+  const glowStrength = $derived(Math.max(0, Math.min(1, gauge.glowStrength ?? 0)));
+  const glowFactor = $derived(1 + glowStrength * 2);
+  const digitGlow = $derived(glowStrength > 0 ? glowText(ledColor, 6 * glowFactor, 0.25 * glowFactor) : '');
+  const valueShadow = $derived('1px 1px 3px rgba(0,0,0,0.8)' + (digitGlow ? ', ' + digitGlow : ''));
 
+  // Roll animation (R12): CSS animation restarted via keyed blocks when the
+  // formatted digit string changes; snap (no animation) when disabled.
+  const rollOn = $derived(!!gauge.rollAnimation);
+  const rollSpeed = $derived(Math.max(50, Math.min(2000, gauge.rollSpeedMs ?? 300)));
+
+  // Scale font sizes to fit within the container
   const unitSize = $derived(Math.max(8, dim * 0.08 * fs));
   const nameSize = $derived(Math.max(6, dim * 0.04 * fs));
   const largeDigitValueSize = $derived(Math.max(12, dim * 0.16 * fs));
@@ -99,8 +111,43 @@
     return padded.split('');
   }
 
-  const digits = $derived(buildDigits(gauge.formattedValue));
+  const displayValue = $derived.by(() => {
+    const dec = gauge.digitDecimals ?? -1;
+    const pad = gauge.zeroPadding ?? false;
+    const minD = gauge.minDigitCount ?? 0;
+    if (dec === -1 && !pad && minD === 0) return gauge.formattedValue;
+    return formatDigits(gauge.value, dec, pad, minD);
+  });
+
+  const digits = $derived(buildDigits(displayValue));
   const displayTextColor = $derived(valueTextColor ?? '#dee2e6');
+
+  const insetGlow = $derived(glowText('#00ff88', 4 * glowFactor, (64 / 255) * glowFactor));
+  const ringGlow = $derived(glowText(displayTextColor, 8 * glowFactor, (64 / 255) * glowFactor));
+  const ringGlowInset = $derived(glowText(displayTextColor, 6 * glowFactor, (32 / 255) * glowFactor));
+  const ringTextGlow = $derived(glowText(displayTextColor, 6 * glowFactor, (96 / 255) * glowFactor));
+
+  function mixTowardWhite(hex: string, t: number): string {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    const mix = (c: number) => Math.round(c + (255 - c) * t);
+    const toHex = (c: number) => c.toString(16).padStart(2, '0');
+    return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+  }
+
+  function rgba(hex: string, alpha: number): string {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+  }
+
+  function glowText(color: string, blur: number, alpha: number): string {
+    return `0 0 ${blur.toFixed(1)}px ${rgba(color, alpha)}`;
+  }
 </script>
 
 <div class="relative flex h-full w-full flex-col items-center justify-center overflow-hidden select-none">
@@ -113,10 +160,12 @@
     <!-- LargeDigit: value in dark pill, unit + name below, constrained to container -->
     <div class="flex flex-col items-center justify-center gap-0.5 max-h-full">
       {#if gauge.showValue}
-        <div class="rounded-lg px-3 py-0.5 max-w-full overflow-hidden" style="background: {_digitBg};">
-          <span class="block truncate" style="color: {displayTextColor}; font-size: {largeDigitValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
-            {gauge.formattedValue}
-          </span>
+        <div class="rounded-lg px-3 py-0.5 max-w-full overflow-hidden" style="background: {digitBg};">
+          {#key rollOn ? displayValue : ''}
+            <span class="block truncate {rollOn ? 'roll-digit' : ''}" style="animation-duration: {rollSpeed}ms; color: {displayTextColor}; font-size: {largeDigitValueSize}px; font-family: var(--font-display); text-shadow: {valueShadow}; line-height: 1.2;">
+              {displayValue}
+            </span>
+          {/key}
         </div>
       {/if}
       {#if gauge.showUnit}
@@ -136,10 +185,10 @@
     <div class="flex flex-col items-center justify-center gap-0.5 max-h-full">
       <div class="flex items-center justify-center gap-0.5">
         {#if gauge.showValue}
-          {#each digits as ch}
+          {#each digits as ch, i (rollOn ? `${i}-${ch}` : i)}
             <div class="flex items-center justify-center rounded-sm"
-                 style="background: {_ledBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span style="font-family: var(--font-7seg); font-size: {segmentDigitSize}px; color: {valueTextColor || _ledColor};">
+                 style="background: {digitBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
+              <span class={rollOn ? 'roll-digit' : ''} style="animation-duration: {rollSpeed}ms; font-family: var(--font-7seg); font-size: {segmentDigitSize}px; color: {valueTextColor || ledColor}; text-shadow: {digitGlow || 'none'};">
                 {ch}
               </span>
             </div>
@@ -147,7 +196,7 @@
         {/if}
       </div>
       {#if gauge.showUnit}
-        <span style="font-size: {unitSize}px; color: {_ledColorDim}; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+        <span style="font-size: {unitSize}px; color: {ledColorDim}; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.unit}
         </span>
       {/if}
@@ -163,9 +212,11 @@
     <div class="flex flex-col items-center justify-center gap-0 max-h-full">
       <div class="flex items-center gap-1">
         {#if gauge.showValue}
-          <span class="truncate" style="color: {displayTextColor}; font-size: {clusterValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
-            {gauge.formattedValue}
-          </span>
+          {#key rollOn ? displayValue : ''}
+            <span class="truncate {rollOn ? 'roll-digit' : ''}" style="animation-duration: {rollSpeed}ms; color: {displayTextColor}; font-size: {clusterValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+              {displayValue}
+            </span>
+          {/key}
         {/if}
         {#if gauge.showUnit}
           <span style="color: {displayTextColor}; font-size: {clusterUnitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1; margin-bottom: 2px;">
@@ -173,7 +224,7 @@
           </span>
         {/if}
       </div>
-      <div style="background: {_digitBg}; border-radius: 2px; height: 2px; width: {separatorWidth}px; margin: 3px 0;"></div>
+      <div style="background: {digitBg}; border-radius: 2px; height: 2px; width: {separatorWidth}px; margin: 3px 0;"></div>
       {#if gauge.showName}
         <span class="truncate max-w-full font-medium" style="color: {displayTextColor}; font-size: {clusterNameSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
           {gauge.name}
@@ -190,9 +241,11 @@
         </span>
       {/if}
       {#if gauge.showValue}
-        <span class="font-bold" style="color: {displayTextColor}; font-size: {labelTopValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
-          {gauge.formattedValue}
-        </span>
+        {#key rollOn ? gauge.formattedValue : ''}
+          <span class="font-bold {rollOn ? 'roll-digit' : ''}" style="animation-duration: {rollSpeed}ms; color: {displayTextColor}; font-size: {labelTopValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+            {gauge.formattedValue}
+          </span>
+        {/key}
       {/if}
       {#if gauge.showUnit}
         <span style="color: {displayTextColor}; opacity: 0.6; font-size: {labelTopUnitSize}px; line-height: 1.2;">
@@ -209,11 +262,13 @@
              style="width: {dim * 0.55}px; height: {dim * 0.55}px; min-width: 50px; min-height: 50px;">
           <!-- Glow ring -->
           <div class="absolute inset-0 rounded-full"
-               style="border: 2px solid {displayTextColor}; box-shadow: 0 0 8px {displayTextColor}40, inset 0 0 6px {displayTextColor}20;"></div>
+               style="border: 2px solid {displayTextColor}; box-shadow: {ringGlow}, inset {ringGlowInset};"></div>
           <!-- Value -->
-          <span class="relative z-10 font-bold" style="color: {displayTextColor}; font-size: {glowValueSize}px; font-family: var(--font-display); text-shadow: 0 0 6px {displayTextColor}60; line-height: 1.1;">
-            {gauge.formattedValue}
-          </span>
+          {#key rollOn ? gauge.formattedValue : ''}
+            <span class="relative z-10 font-bold {rollOn ? 'roll-digit' : ''}" style="animation-duration: {rollSpeed}ms; color: {displayTextColor}; font-size: {glowValueSize}px; font-family: var(--font-display); text-shadow: {ringTextGlow}; line-height: 1.1;">
+              {gauge.formattedValue}
+            </span>
+          {/key}
         </div>
       {/if}
       <div class="flex items-baseline gap-1">
@@ -237,9 +292,11 @@
            style="background: #0a0a0a; border: 1px solid #333; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), inset 0 -1px 1px rgba(255,255,255,0.05);">
         {#if gauge.showValue}
           <div class="text-center">
-            <span class="block font-bold" style="color: {valueTextColor || '#00ff88'}; font-size: {insetValueSize}px; font-family: var(--font-7seg); text-shadow: 0 0 4px #00ff8840; line-height: 1.2;">
-              {gauge.formattedValue}
-            </span>
+            {#key rollOn ? displayValue : ''}
+              <span class="block font-bold {rollOn ? 'roll-digit' : ''}" style="animation-duration: {rollSpeed}ms; color: {valueTextColor || '#00ff88'}; font-size: {insetValueSize}px; font-family: var(--font-7seg); text-shadow: {insetGlow}; line-height: 1.2;">
+                {displayValue}
+              </span>
+            {/key}
           </div>
         {/if}
         {#if gauge.showUnit}
@@ -262,10 +319,10 @@
     <div class="flex flex-col items-center justify-center gap-0.5 max-h-full">
       <div class="flex items-center justify-center gap-0.5">
         {#if gauge.showValue}
-          {#each digits as ch}
+          {#each digits as ch, i (rollOn ? `${i}-${ch}` : i)}
             <div class="flex items-center justify-center rounded-sm"
-                 style="background: {_digitBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span style="color: {displayTextColor}; font-size: {segmentDigitSize}px; font-family: var(--font-7seg); text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+                 style="background: {digitBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
+              <span class={rollOn ? 'roll-digit' : ''} style="animation-duration: {rollSpeed}ms; color: {displayTextColor}; font-size: {segmentDigitSize}px; font-family: var(--font-7seg); text-shadow: {valueShadow};">
                 {ch}
               </span>
             </div>
@@ -292,3 +349,23 @@
     </svg>
   {/if}
 </div>
+
+<style>
+  .roll-digit {
+    display: inline-block;
+    animation-name: digit-roll;
+    animation-timing-function: ease-out;
+    animation-fill-mode: backwards;
+  }
+
+  @keyframes digit-roll {
+    from {
+      transform: translateY(50%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+</style>

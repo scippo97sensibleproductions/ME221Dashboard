@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GaugeDefinition } from './types';
   import { computeValueFraction, gaugeValueColor, buildColorLuts, DEFAULT_COLOR_STOPS } from './types';
+  import { buildScaleTicks } from './scaleUtils';
   import { HybridBridge } from '../HybridBridge';
 
   let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
@@ -20,7 +21,10 @@
     }
   });
 
-  const isHorizontal = $derived(pixelWidth >= pixelHeight);
+  // 0=auto (shape-based, current behavior) 1=horizontal 2=vertical
+  const isHorizontal = $derived(
+    gauge.barOrientation === 1 ? true : gauge.barOrientation === 2 ? false : pixelWidth >= pixelHeight
+  );
   const valueFraction = $derived(computeValueFraction(gauge.value, gauge.minValue, gauge.maxValue));
   const colorLuts = $derived(buildColorLuts(
     gauge.colorStops?.length ? gauge.colorStops : DEFAULT_COLOR_STOPS,
@@ -43,15 +47,31 @@
 
   const barGap = $derived(Math.min(6, (isHorizontal ? pixelHeight : pixelWidth) * 0.04));
 
+  // barThickness: 0=auto (pixelHeight*0.3 / pixelWidth*0.3), else % of the perpendicular dimension
+  const barThicknessFrac = $derived(gauge.barThickness > 0 ? Math.min(1, gauge.barThickness / 100) : 0);
+
   const hBarW = $derived(pixelWidth * 0.9);
-  const hBarH = $derived(pixelHeight * 0.3);
+  const hBarH = $derived(barThicknessFrac > 0 ? Math.max(2, pixelHeight * barThicknessFrac) : pixelHeight * 0.3);
   const hBarX = $derived((pixelWidth - hBarW) / 2);
   const hBarY = $derived((pixelHeight - hBarH) / 2);
 
-  const vBarW = $derived(pixelWidth * 0.3);
+  const vBarW = $derived(barThicknessFrac > 0 ? Math.max(2, pixelWidth * barThicknessFrac) : pixelWidth * 0.3);
   const vBarH = $derived(pixelHeight * 0.9);
   const vBarX = $derived((pixelWidth - vBarW) / 2);
   const vBarY = $derived((pixelHeight - vBarH) / 2);
+
+  const barTicks = $derived(
+    gauge.barTicks ? buildScaleTicks(gauge.minValue, gauge.maxValue, gauge.tickCount, false, 1) : []
+  );
+  const endLabelSize = $derived(Math.max(8, Math.min(12, (isHorizontal ? hBarH : vBarW) * 0.5)));
+
+  function formatEndLabel(v: number): string {
+    if (!Number.isFinite(v)) return '';
+    if (Math.abs(v) >= 100 || Number.isInteger(v)) {
+      return Math.round(v).toLocaleString('en-US');
+    }
+    return String(Math.round(v * 10) / 10);
+  }
 
   const iconX = $derived(isHorizontal ? pixelWidth / 2 + gauge.iconOffsetX * pixelWidth : vBarX + vBarW / 2 + gauge.iconOffsetX * pixelWidth);
   const iconY = $derived(isHorizontal ? hBarY + hBarH / 2 + gauge.iconOffsetY * pixelHeight : pixelHeight / 2 + gauge.iconOffsetY * pixelHeight);
@@ -94,10 +114,42 @@
     {#if valueFraction > 0}
       <rect x={hBarX} y={hBarY} width={Math.max(4, valueFraction * hBarW)} height={hBarH} rx="4" fill={barColor} />
     {/if}
+    {#if gauge.barRedlineStart > 0}
+      <rect x={hBarX + gauge.barRedlineStart * hBarW} y={hBarY} width={Math.max(4, (1 - gauge.barRedlineStart) * hBarW)} height={hBarH} rx="4" fill={gauge.barRedlineColor} />
+    {/if}
+    {#if barTicks.length}
+      {#each barTicks as t}
+        <line x1={hBarX + t.fraction * hBarW} y1={hBarY} x2={hBarX + t.fraction * hBarW} y2={hBarY + hBarH} stroke="#868e96" stroke-width="1.5" stroke-linecap="round" />
+      {/each}
+    {/if}
+    {#if gauge.barMinMaxLabels}
+      <text x={hBarX + 3} y={hBarY + hBarH / 2 + endLabelSize * 0.35} text-anchor="start" fill="#868e96" font-size={endLabelSize}>
+        {formatEndLabel(gauge.minValue)}
+      </text>
+      <text x={hBarX + hBarW - 3} y={hBarY + hBarH / 2 + endLabelSize * 0.35} text-anchor="end" fill="#868e96" font-size={endLabelSize}>
+        {formatEndLabel(gauge.maxValue)}
+      </text>
+    {/if}
   {:else}
     <rect x={vBarX} y={vBarY} width={vBarW} height={vBarH} rx="4" fill="#ced4da" />
     {#if valueFraction > 0}
       <rect x={vBarX} y={vBarY + vBarH * (1 - valueFraction)} width={vBarW} height={Math.max(4, valueFraction * vBarH)} rx="4" fill={barColor} />
+    {/if}
+    {#if gauge.barRedlineStart > 0}
+      <rect x={vBarX} y={vBarY + vBarH * (1 - gauge.barRedlineStart)} width={vBarW} height={Math.max(4, gauge.barRedlineStart * vBarH)} rx="4" fill={gauge.barRedlineColor} />
+    {/if}
+    {#if barTicks.length}
+      {#each barTicks as t}
+        <line x1={vBarX} y1={vBarY + vBarH * (1 - t.fraction)} x2={vBarX + vBarW} y2={vBarY + vBarH * (1 - t.fraction)} stroke="#868e96" stroke-width="1.5" stroke-linecap="round" />
+      {/each}
+    {/if}
+    {#if gauge.barMinMaxLabels}
+      <text x={vBarX + vBarW / 2} y={vBarY + vBarH - 3} text-anchor="middle" fill="#868e96" font-size={endLabelSize}>
+        {formatEndLabel(gauge.minValue)}
+      </text>
+      <text x={vBarX + vBarW / 2} y={vBarY + endLabelSize} text-anchor="middle" fill="#868e96" font-size={endLabelSize}>
+        {formatEndLabel(gauge.maxValue)}
+      </text>
     {/if}
   {/if}
 

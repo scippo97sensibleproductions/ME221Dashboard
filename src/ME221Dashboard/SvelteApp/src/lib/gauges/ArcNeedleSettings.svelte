@@ -15,6 +15,13 @@
 
   let texturePicking = $state(false);
 
+  const shapePresets = [
+    { value: 0, label: 'Line' },
+    { value: 1, label: 'Tapered' },
+    { value: 2, label: 'Paddle' },
+    { value: 3, label: 'Counterweighted' },
+  ];
+
   // Local draft strings for needle physical inputs — commit only on blur
   let offsetXDraft = $state('0');
   let offsetYDraft = $state('0');
@@ -64,6 +71,22 @@
       {previewValue}
       onchange={(curve) => set('needleCurve', curve)}
     />
+  </div>
+
+  <!-- Needle Shape -->
+  <div>
+    <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Needle Shape</p>
+    <div class="grid grid-cols-2 gap-1">
+      {#each shapePresets as preset}
+        <button
+          class="flex-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
+            {(gaugeDef.needleShape ?? 0) === preset.value
+              ? 'bg-cyan-600 text-white'
+              : 'border border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-200'}"
+          onclick={() => set('needleShape', preset.value)}
+        >{preset.label}</button>
+      {/each}
+    </div>
   </div>
 
   <!-- Needle Physical -->

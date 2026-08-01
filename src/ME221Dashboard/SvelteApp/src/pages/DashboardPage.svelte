@@ -7,6 +7,7 @@
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
   import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, computeWarningState, buildWarningMap, type ValueTransformStep } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
+  import { pushSample, type ChartSample } from '../lib/gauges/chartDataUtils';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
   import { computeDerived, type ComputationInputs } from '../lib/derived/compute';
   import { DERIVED_ENTITIES } from '../lib/derived/types';
@@ -385,6 +386,13 @@
   // ─── Live data hot path ───
   // Drives gauge updates whenever the store has new data. Iterates ONLY gauges on this dashboard
   // (small N), not all entities (large K). O(N_gauges) per frame at ~10Hz = no measurable cost.
+  // Per-entity overlay history buffers for chart overlay lines (R22).
+  // Written every frame for every entityId referenced by any gauge's chartOverlays;
+  // keyed by String(entityId), null/absent values are skipped (no zero baseline).
+  let overlayHistories = $state<Record<string, ChartSample[]>>({});
+  const _overlayIdScratch = new Set<number>();
+  const _overlayWindowScratch = new Map<number, number>();
+
   $effect(() => {
     // Only track the frame tick. The loop below mutates gaugeStates in place, so tracking
     // gauge values here would make the effect read and write the same state.
@@ -414,6 +422,35 @@
           }
           buf.push(val);
           if (buf.length > HIST_BUFFER_SIZE) buf.shift();
+        }
+      }
+      // ── Overlay history writes (R22) ──
+      _overlayIdScratch.clear();
+      _overlayWindowScratch.clear();
+      for (let i = 0; i < states.length; i++) {
+        const ols = states[i].chartOverlays;
+        if (!ols) continue;
+        const winMs = states[i].chartTimeWindowSec * 1000;
+        for (let j = 0; j < ols.length; j++) {
+          const id = ols[j].entityId;
+          _overlayIdScratch.add(id);
+          const prev = _overlayWindowScratch.get(id);
+          if (prev === undefined || winMs > prev) _overlayWindowScratch.set(id, winMs);
+        }
+      }
+      if (_overlayIdScratch.size > 0) {
+        const nowT = performance.now();
+        for (const id of _overlayIdScratch) {
+          // Value source: pipelined gauge value when the id is a gauge on this
+          // dashboard; otherwise the raw liveDataStore value (unsmoothed — AE4).
+          const idx = _gaugeIndexByEntityId.get(id);
+          const val = idx !== undefined ? gaugeStates[idx].value : (v[id] ?? null);
+          if (val == null) continue;
+          const key = String(id);
+          let buf = overlayHistories[key];
+          if (!buf) { buf = []; overlayHistories[key] = buf; }
+          const winMs = _overlayWindowScratch.get(id) ?? 30000;
+          pushSample(buf, { t: nowT, v: val }, winMs, winMs / 100 + 100);
         }
       }
       computeAndInjectDerived();
@@ -957,7 +994,7 @@
           oncontextmenu={(e) => handleContextMenu(e, gauge.entityId)}
           role="button" tabindex="0"
         >
-          <GaugeCard {gauge} pixelWidth={pxW} pixelHeight={pxH} valueHistory={gaugeValueHistory.get(gauge.entityId) ?? []} />
+          <GaugeCard {gauge} pixelWidth={pxW} pixelHeight={pxH} valueHistory={gaugeValueHistory.get(gauge.entityId) ?? []} overlayHistories={overlayHistories} />
         </div>
       {/each}
       {#each tableDefs as tw (tw.tableId)}

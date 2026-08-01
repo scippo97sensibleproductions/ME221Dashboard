@@ -398,6 +398,49 @@ public partial class HybridBridgeService
                     customUnitLabel = g.CustomUnitLabel,
                     showHistogram = g.ShowHistogram,
                     linkedEntities = g.LinkedEntities?.Select(le => new { entityId = le.EntityId, color = le.Color }).ToList(),
+                    tickCount = g.TickCount,
+                    tickLabels = g.TickLabels,
+                    tickLabelEvery = g.TickLabelEvery,
+                    tickSide = g.TickSide,
+                    redlineStart = g.RedlineStart,
+                    redlineWidth = g.RedlineWidth,
+                    redlineColor = g.RedlineColor,
+                    needleShape = g.NeedleShape,
+                    barOrientation = g.BarOrientation,
+                    barThickness = g.BarThickness,
+                    barTicks = g.BarTicks,
+                    barMinMaxLabels = g.BarMinMaxLabels,
+                    barRedlineStart = g.BarRedlineStart,
+                    barRedlineColor = g.BarRedlineColor,
+                    colorStopColoring = g.ColorStopColoring,
+                    panelStyle = g.PanelStyle,
+                    flashThreshold = g.FlashThreshold,
+                    ledColor = g.LedColor,
+                    digitBgColor = g.DigitBgColor,
+                    glowStrength = g.GlowStrength,
+                    digitDecimals = g.DigitDecimals,
+                    zeroPadding = g.ZeroPadding,
+                    minDigitCount = g.MinDigitCount,
+                    rollAnimation = g.RollAnimation,
+                    rollSpeedMs = g.RollSpeedMs,
+                    segmentCount = g.SegmentCount,
+                    segmentGap = g.SegmentGap,
+                    ringStartAngle = g.RingStartAngle,
+                    ringSweepAngle = g.RingSweepAngle,
+                    amberThreshold = g.AmberThreshold,
+                    redThreshold = g.RedThreshold,
+                    ringCount = g.RingCount,
+                    ringWidth = g.RingWidth,
+                    ringGap = g.RingGap,
+                    peakHoldEnabled = g.PeakHoldEnabled,
+                    peakHoldAutoResetSec = g.PeakHoldAutoResetSec,
+                    wedgeSegmentCount = g.WedgeSegmentCount,
+                    wedgeRedlineStart = g.WedgeRedlineStart,
+                    chartOverlays = g.ChartOverlays?.Select(o => new { entityId = o.EntityId, color = o.Color, lineWidth = o.LineWidth, lineStyle = o.LineStyle }).ToList(),
+                    overlayPillPosition = g.OverlayPillPosition,
+                    overlayFontScale = g.OverlayFontScale,
+                    chartLineStyle = g.ChartLineStyle,
+                    chartBackgroundColor = g.ChartBackgroundColor,
                 }).ToList(),
                 tables = (dashboard.Tables ?? []).Select(t => new
                 {
@@ -598,6 +641,74 @@ public partial class HybridBridgeService
                             if (existing.LinkedEntities.Count == 0) existing.LinkedEntities = null;
                         }
                     }
+                    // ── Gauge customization v2 ──
+                    if (g["tickCount"] is JsonValue) existing.TickCount = g["tickCount"]!.GetValue<int>();
+                    if (g["tickLabels"] is JsonValue) existing.TickLabels = g["tickLabels"]!.GetValue<bool>();
+                    if (g["tickLabelEvery"] is JsonValue) existing.TickLabelEvery = g["tickLabelEvery"]!.GetValue<int>();
+                    if (g["tickSide"] is JsonValue) existing.TickSide = g["tickSide"]!.GetValue<int>();
+                    if (g["redlineStart"] is JsonValue) existing.RedlineStart = g["redlineStart"]!.GetValue<double>();
+                    if (g["redlineWidth"] is JsonValue) existing.RedlineWidth = g["redlineWidth"]!.GetValue<double>();
+                    if (g["redlineColor"] is JsonValue) existing.RedlineColor = g["redlineColor"]!.GetValue<string>();
+                    if (g["needleShape"] is JsonValue) existing.NeedleShape = g["needleShape"]!.GetValue<int>();
+                    if (g["barOrientation"] is JsonValue) existing.BarOrientation = g["barOrientation"]!.GetValue<int>();
+                    if (g["barThickness"] is JsonValue) existing.BarThickness = g["barThickness"]!.GetValue<double>();
+                    if (g["barTicks"] is JsonValue) existing.BarTicks = g["barTicks"]!.GetValue<bool>();
+                    if (g["barMinMaxLabels"] is JsonValue) existing.BarMinMaxLabels = g["barMinMaxLabels"]!.GetValue<bool>();
+                    if (g["barRedlineStart"] is JsonValue) existing.BarRedlineStart = g["barRedlineStart"]!.GetValue<double>();
+                    if (g["barRedlineColor"] is JsonValue) existing.BarRedlineColor = g["barRedlineColor"]!.GetValue<string>();
+                    if (g["colorStopColoring"] is JsonValue) existing.ColorStopColoring = g["colorStopColoring"]!.GetValue<bool>();
+                    if (g["panelStyle"] is JsonValue) existing.PanelStyle = g["panelStyle"]!.GetValue<int>();
+                    if (g["flashThreshold"] is JsonValue) existing.FlashThreshold = g["flashThreshold"]!.GetValue<double>();
+                    if (g["ledColor"] is JsonValue) existing.LedColor = g["ledColor"]!.GetValue<string>();
+                    if (g["digitBgColor"] is JsonValue) existing.DigitBgColor = g["digitBgColor"]!.GetValue<string>();
+                    if (g["glowStrength"] is JsonValue) existing.GlowStrength = g["glowStrength"]!.GetValue<double>();
+                    if (g["digitDecimals"] is JsonValue) existing.DigitDecimals = g["digitDecimals"]!.GetValue<int>();
+                    if (g["zeroPadding"] is JsonValue) existing.ZeroPadding = g["zeroPadding"]!.GetValue<bool>();
+                    if (g["minDigitCount"] is JsonValue) existing.MinDigitCount = g["minDigitCount"]!.GetValue<int>();
+                    if (g["rollAnimation"] is JsonValue) existing.RollAnimation = g["rollAnimation"]!.GetValue<bool>();
+                    if (g["rollSpeedMs"] is JsonValue) existing.RollSpeedMs = g["rollSpeedMs"]!.GetValue<double>();
+                    if (g["segmentCount"] is JsonValue) existing.SegmentCount = g["segmentCount"]!.GetValue<int>();
+                    if (g["segmentGap"] is JsonValue) existing.SegmentGap = g["segmentGap"]!.GetValue<double>();
+                    if (g["ringStartAngle"] is JsonValue) existing.RingStartAngle = g["ringStartAngle"]!.GetValue<double>();
+                    if (g["ringSweepAngle"] is JsonValue) existing.RingSweepAngle = g["ringSweepAngle"]!.GetValue<double>();
+                    if (g["amberThreshold"] is JsonValue) existing.AmberThreshold = g["amberThreshold"]!.GetValue<double>();
+                    if (g["redThreshold"] is JsonValue) existing.RedThreshold = g["redThreshold"]!.GetValue<double>();
+                    if (g["ringCount"] is JsonValue) existing.RingCount = g["ringCount"]!.GetValue<int>();
+                    if (g["ringWidth"] is JsonValue) existing.RingWidth = g["ringWidth"]!.GetValue<double>();
+                    if (g["ringGap"] is JsonValue) existing.RingGap = g["ringGap"]!.GetValue<double>();
+                    if (g["peakHoldEnabled"] is JsonValue) existing.PeakHoldEnabled = g["peakHoldEnabled"]!.GetValue<bool>();
+                    if (g["peakHoldAutoResetSec"] is JsonValue) existing.PeakHoldAutoResetSec = g["peakHoldAutoResetSec"]!.GetValue<double>();
+                    if (g["wedgeSegmentCount"] is JsonValue) existing.WedgeSegmentCount = g["wedgeSegmentCount"]!.GetValue<int>();
+                    if (g["wedgeRedlineStart"] is JsonValue) existing.WedgeRedlineStart = g["wedgeRedlineStart"]!.GetValue<double>();
+                    if (gObj.ContainsKey("chartOverlays"))
+                    {
+                        existing.ChartOverlays = null;
+                        if (g["chartOverlays"] is JsonArray coArr && coArr.Count > 0)
+                        {
+                            existing.ChartOverlays = coArr
+                                .Where(o => o is JsonObject)
+                                .Take(5)
+                                .Select(o => o!.AsObject())
+                                .Select(o =>
+                                {
+                                    var style = o["lineStyle"] is JsonValue sv && sv.TryGetValue<int>(out var sVal) ? sVal : 0;
+                                    if (style < 0 || style > 2) style = 0;
+                                    return new ChartOverlayEntry
+                                    {
+                                        EntityId = o["entityId"]?.GetValue<int>() ?? 0,
+                                        Color = o["color"]?.GetValue<string>(),
+                                        LineWidth = o["lineWidth"] is JsonValue lw && lw.TryGetValue<double>(out var wVal) ? wVal : 1.5,
+                                        LineStyle = style,
+                                    };
+                                })
+                                .ToList();
+                            if (existing.ChartOverlays.Count == 0) existing.ChartOverlays = null;
+                        }
+                    }
+                    if (g["overlayPillPosition"] is JsonValue) existing.OverlayPillPosition = g["overlayPillPosition"]!.GetValue<int>();
+                    if (g["overlayFontScale"] is JsonValue) existing.OverlayFontScale = g["overlayFontScale"]!.GetValue<double>();
+                    if (g["chartLineStyle"] is JsonValue) existing.ChartLineStyle = g["chartLineStyle"]!.GetValue<int>();
+                    if (g["chartBackgroundColor"] is JsonValue) existing.ChartBackgroundColor = g["chartBackgroundColor"]!.GetValue<string>();
                 }
             }
 
