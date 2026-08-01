@@ -35,7 +35,11 @@
           dl.category.toLowerCase().includes(q),
       );
     }
-    return links;
+    return links.toSorted((a, b) => {
+      const aSel = selectedIds.has(a.id) ? 0 : 1;
+      const bSel = selectedIds.has(b.id) ? 0 : 1;
+      return aSel - bSel;
+    });
   });
 
   function toggle(id: number) {
