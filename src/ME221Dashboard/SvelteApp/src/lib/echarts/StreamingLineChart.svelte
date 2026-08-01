@@ -1,6 +1,6 @@
 <script lang="ts">
   import { liveDataStore } from '../stores/LiveDataStore.svelte';
-  import { TimeSeriesBuffer } from './TimeSeriesBuffer';
+  import { TimeSeriesBuffer, WindowedSeriesCache } from './TimeSeriesBuffer';
   import { buildMultiSeriesOption, type SeriesConfig } from './timeSeriesConfig';
 
   let {
@@ -33,13 +33,12 @@
   let chart: import('echarts').ECharts | null = null;
   let destroyed = false;
   const buffer = new TimeSeriesBuffer();
-  // Full setOption(replaceMerge) is expensive (~full data-store rebuild).
-  // Live frames use cheap incremental appends instead; a full rebuild runs
-  // only every FULL_REBUILD_INTERVAL_MS to trim out-of-window points and
-  // on config changes (series set, window, markers) via the props effect.
-  const FULL_REBUILD_INTERVAL_MS = 2000;
-  let pushedCounts = new Map<string, number>();
-  let lastFullRebuildAt = 0;
+  // Live mode uses echarts' dynamic-data pattern: windowed `[t, v]` arrays
+  // are appended incrementally and the FULL array is passed to setOption
+  // every frame, so echarts only redraws the new tail. A full rebuild
+  // (setOption replaceMerge) runs only when the config changes (series set,
+  // time window, markers) via the props effect.
+  const windowCache = new WindowedSeriesCache();
 
   function initChart() {
     if (!container || chart) return;
@@ -50,14 +49,6 @@
         renderChart();
       });
     });
-  }
-
-  function baseCounts() {
-    pushedCounts = new Map();
-    for (const s of series) {
-      const pts = buffer.get(s.id);
-      if (pts) pushedCounts.set(s.id, pts.length);
-    }
   }
 
   function renderChart() {
@@ -88,28 +79,25 @@
       markerB,
     );
     chart.setOption(option, { replaceMerge: ['series'] });
-    if (mode === 'live') baseCounts();
+    if (mode === 'live') {
+      windowCache.seed(
+        series.map((s) => s.id),
+        (id) => buffer.get(id),
+        renderNow - timeWindowSec * 1000,
+      );
+    }
   }
 
   function appendTick() {
     if (!chart || mode !== 'live') return;
     const now = Date.now();
-    const seriesData: any[] = [];
-    for (const s of series) {
-      const pts = buffer.get(s.id);
-      if (!pts) continue;
-      const start = pushedCounts.get(s.id);
-      if (start == null || start >= pts.length) continue;
-      seriesData.push({ id: s.id, data: pts.slice(start).map((p) => [p.t, p.v]) });
-      pushedCounts.set(s.id, pts.length);
-    }
-    if (seriesData.length > 0) {
-      chart.setOption({ series: seriesData });
-    }
-    if (now - lastFullRebuildAt >= FULL_REBUILD_INTERVAL_MS) {
-      lastFullRebuildAt = now;
-      renderChart();
-    }
+    const seriesData = windowCache.tick(
+      series.map((s) => s.id),
+      (id) => buffer.get(id),
+      now - timeWindowSec * 1000,
+    );
+    if (seriesData.length === 0) return;
+    chart.setOption({ series: seriesData });
   }
 
   export function pushData(seriesId: string, timeMs: number, value: number) {

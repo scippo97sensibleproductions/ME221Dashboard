@@ -63,4 +63,68 @@ export class TimeSeriesBuffer {
   }
 }
 
+/**
+ * Maintains per-series windowed `[t, v]` arrays for echarts' dynamic-data
+ * update pattern: the full array is passed to setOption every frame and
+ * echarts appends only the new tail. New points are appended incrementally
+ * and points older than the window are trimmed, so per-frame work is O(1)
+ * amortized instead of O(n) filter/map over the whole buffer.
+ */
+export class WindowedSeriesCache {
+  #data = new Map<string, number[][]>();
+  #counts = new Map<string, number>();
+
+  reset(): void {
+    this.#data.clear();
+    this.#counts.clear();
+  }
+
+  /** Rebuild the cache from the current buffer contents (config changes). */
+  seed(
+    seriesIds: string[],
+    getPts: (id: string) => Pt[] | undefined,
+    cutoff: number,
+  ): void {
+    this.reset();
+    for (const id of seriesIds) {
+      const pts = getPts(id);
+      const arr: number[][] = [];
+      if (pts) {
+        for (const p of pts) {
+          if (p.t >= cutoff) arr.push([p.t, p.v]);
+        }
+        this.#counts.set(id, pts.length);
+      }
+      this.#data.set(id, arr);
+    }
+  }
+
+  /**
+   * Append points pushed since the last call, trim points older than the
+   * cutoff, and return per-series data ready for `setOption({ series })`.
+   */
+  tick(
+    seriesIds: string[],
+    getPts: (id: string) => Pt[] | undefined,
+    cutoff: number,
+  ): Array<{ id: string; data: number[][] }> {
+    const out: Array<{ id: string; data: number[][] }> = [];
+    for (const id of seriesIds) {
+      const pts = getPts(id);
+      const arr = this.#data.get(id);
+      if (!pts || !arr) continue;
+      const start = this.#counts.get(id) ?? pts.length;
+      if (start < pts.length) {
+        for (let i = start; i < pts.length; i++) {
+          if (pts[i].t >= cutoff) arr.push([pts[i].t, pts[i].v]);
+        }
+        this.#counts.set(id, pts.length);
+      }
+      while (arr.length > 0 && arr[0][0] < cutoff) arr.shift();
+      out.push({ id, data: arr });
+    }
+    return out;
+  }
+}
+
 export type { Pt };

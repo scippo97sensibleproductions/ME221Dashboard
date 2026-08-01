@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TimeSeriesBuffer } from '../TimeSeriesBuffer';
+import { TimeSeriesBuffer, WindowedSeriesCache } from '../TimeSeriesBuffer';
 
 describe('TimeSeriesBuffer', () => {
   it('returns empty for unknown series', () => {
@@ -69,5 +69,62 @@ describe('TimeSeriesBuffer', () => {
     b.push('rpm', 10, 100);
     expect(b.get('rpm')).toHaveLength(1);
     expect(b.get('rpm')![0]).toEqual({ t: 10, v: 100 });
+  });
+});
+
+describe('WindowedSeriesCache', () => {
+  const b = () => {
+    const buf = new TimeSeriesBuffer();
+    for (let t = 0; t <= 1000; t += 100) buf.push('rpm', t, t);
+    return buf;
+  };
+
+  it('seed builds windowed arrays filtered by cutoff', () => {
+    const buf = b();
+    const cache = new WindowedSeriesCache();
+    cache.seed(['rpm'], (id) => buf.get(id), 500);
+    const out = cache.tick(['rpm'], (id) => buf.get(id), 500);
+    expect(out).toHaveLength(1);
+    expect(out[0].data[0]).toEqual([500, 500]);
+    expect(out[0].data).toHaveLength(6);
+  });
+
+  it('tick appends only points pushed since the last call', () => {
+    const buf = b();
+    const cache = new WindowedSeriesCache();
+    cache.seed(['rpm'], (id) => buf.get(id), 0);
+    buf.push('rpm', 1100, 1100);
+    buf.push('rpm', 1200, 1200);
+    const out = cache.tick(['rpm'], (id) => buf.get(id), 0);
+    expect(out[0].data).toHaveLength(13);
+    expect(out[0].data[12]).toEqual([1200, 1200]);
+    // No new points → same content, no duplicates
+    const out2 = cache.tick(['rpm'], (id) => buf.get(id), 0);
+    expect(out2[0].data).toHaveLength(13);
+  });
+
+  it('tick trims points older than the cutoff', () => {
+    const buf = b();
+    const cache = new WindowedSeriesCache();
+    cache.seed(['rpm'], (id) => buf.get(id), 0);
+    buf.push('rpm', 1100, 1100);
+    const out = cache.tick(['rpm'], (id) => buf.get(id), 900);
+    expect(out[0].data[0]).toEqual([900, 900]);
+    expect(out[0].data).toHaveLength(3);
+  });
+
+  it('tick passes through the same array instances for echarts length diff', () => {
+    const buf = b();
+    const cache = new WindowedSeriesCache();
+    cache.seed(['rpm'], (id) => buf.get(id), 0);
+    const first = cache.tick(['rpm'], (id) => buf.get(id), 0);
+    buf.push('rpm', 1100, 1100);
+    const second = cache.tick(['rpm'], (id) => buf.get(id), 0);
+    expect(second[0].data).toBe(first[0].data);
+  });
+
+  it('tick skips series with no cached data', () => {
+    const cache = new WindowedSeriesCache();
+    expect(cache.tick(['nope'], () => undefined, 0)).toEqual([]);
   });
 });
