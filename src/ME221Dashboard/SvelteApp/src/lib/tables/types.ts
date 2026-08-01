@@ -94,14 +94,16 @@ export enum DataType {
 
 /**
  * Format a display value based on its DataType.
+ * TrimModPercent mirrors C# MeasurementUnitConverter.FormatValue(): values
+ * are stored as 1.0 = 0%, so display = (value - 1) * 100, one decimal.
  */
 export function formatValue(value: number, dataType: DataType, decimalPlaces: number = 2): string {
   switch (dataType) {
     case DataType.TrimModPercent: {
-      const trimmed = value - 1;
+      const trimmed = Math.round((value - 1) * 100 * 10) / 10;
       return trimmed < 0
-        ? `${trimmed.toFixed(2)} %`
-        : `+${trimmed.toFixed(2)} %`;
+        ? `${trimmed.toFixed(1)} %`
+        : `+${trimmed.toFixed(1)} %`;
     }
     case DataType.Percent:
       return `${value.toFixed(2)} %`;

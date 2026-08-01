@@ -33,6 +33,8 @@ public static class ReportParser
             var (id, type, size) = map[i];
             if (offset + size > payload.Length)
                 break;
+            if (count >= buffer.Length)
+                break;
 
             var value = type switch
             {

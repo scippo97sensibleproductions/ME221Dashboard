@@ -94,7 +94,7 @@ public static class MeasurementUnitConverter
         return dataType switch
         {
             DataType.TrimModPercent =>
-                value < 0f
+                value < 1f
                     ? (value - 1f).ToString("#0.0# %")
                     : (value - 1f).ToString("+#0.0# %"),
             DataType.Percent => value.ToString("#0.0# %"),

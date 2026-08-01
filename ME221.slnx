@@ -11,4 +11,5 @@
   <Project Path="tests/ME221.Comms.Tests/ME221.Comms.Tests.csproj" />
   <Project Path="tests/ME221.Benchmarks/ME221.Benchmarks.csproj" />
   <Project Path="tests/ME221.Data.Tests/ME221.Data.Tests.csproj" />
+  <Project Path="tests/ME221Dashboard.Comms.Tests/ME221Dashboard.Comms.Tests.csproj" />
 </Solution>
