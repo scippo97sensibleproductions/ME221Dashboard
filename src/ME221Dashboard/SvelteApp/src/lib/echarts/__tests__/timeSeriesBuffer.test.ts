@@ -62,4 +62,12 @@ describe('TimeSeriesBuffer', () => {
     expect(all.get('a')![0]).toEqual({ t: 0, v: 42 });
     expect(all).toBeInstanceOf(Map);
   });
+
+  it('get returns the live array for an existing series', () => {
+    const b = new TimeSeriesBuffer();
+    expect(b.get('rpm')).toBeUndefined();
+    b.push('rpm', 10, 100);
+    expect(b.get('rpm')).toHaveLength(1);
+    expect(b.get('rpm')![0]).toEqual({ t: 10, v: 100 });
+  });
 });

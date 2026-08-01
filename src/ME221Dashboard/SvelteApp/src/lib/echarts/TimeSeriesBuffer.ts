@@ -42,6 +42,10 @@ export class TimeSeriesBuffer {
     return buf.slice(start);
   }
 
+  get(seriesId: string): Pt[] | undefined {
+    return this.#series.get(seriesId);
+  }
+
   getAllSeries(): Map<string, Pt[]> {
     return this.#series;
   }

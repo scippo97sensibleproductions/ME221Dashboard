@@ -33,8 +33,13 @@
   let chart: import('echarts').ECharts | null = null;
   let destroyed = false;
   const buffer = new TimeSeriesBuffer();
-  let lastRenderTime = 0;
-  const RENDER_THROTTLE_MS = 50;
+  // Full setOption(replaceMerge) is expensive (~full data-store rebuild).
+  // Live frames use cheap incremental appends instead; a full rebuild runs
+  // only every FULL_REBUILD_INTERVAL_MS to trim out-of-window points and
+  // on config changes (series set, window, markers) via the props effect.
+  const FULL_REBUILD_INTERVAL_MS = 2000;
+  let pushedCounts = new Map<string, number>();
+  let lastFullRebuildAt = 0;
 
   function initChart() {
     if (!container || chart) return;
@@ -45,6 +50,14 @@
         renderChart();
       });
     });
+  }
+
+  function baseCounts() {
+    pushedCounts = new Map();
+    for (const s of series) {
+      const pts = buffer.get(s.id);
+      if (pts) pushedCounts.set(s.id, pts.length);
+    }
   }
 
   function renderChart() {
@@ -75,12 +88,26 @@
       markerB,
     );
     chart.setOption(option, { replaceMerge: ['series'] });
+    if (mode === 'live') baseCounts();
   }
 
-  function throttledRender() {
-    const now = performance.now();
-    if (now - lastRenderTime >= RENDER_THROTTLE_MS) {
-      lastRenderTime = now;
+  function appendTick() {
+    if (!chart || mode !== 'live') return;
+    const now = Date.now();
+    const seriesData: any[] = [];
+    for (const s of series) {
+      const pts = buffer.get(s.id);
+      if (!pts) continue;
+      const start = pushedCounts.get(s.id);
+      if (start == null || start >= pts.length) continue;
+      seriesData.push({ id: s.id, data: pts.slice(start).map((p) => [p.t, p.v]) });
+      pushedCounts.set(s.id, pts.length);
+    }
+    if (seriesData.length > 0) {
+      chart.setOption({ series: seriesData });
+    }
+    if (now - lastFullRebuildAt >= FULL_REBUILD_INTERVAL_MS) {
+      lastFullRebuildAt = now;
       renderChart();
     }
   }
@@ -103,6 +130,7 @@
   });
 
   $effect(() => {
+    if (mode !== 'live') return;
     const frameCount = liveDataStore.frameCount;
     const now = Date.now();
     for (const s of series) {
@@ -111,7 +139,7 @@
         buffer.push(s.id, now, val);
       }
     }
-    throttledRender();
+    appendTick();
   });
 
   $effect(() => {
