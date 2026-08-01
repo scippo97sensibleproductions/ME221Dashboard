@@ -33,12 +33,15 @@
   let chart: import('echarts').ECharts | null = null;
   let destroyed = false;
   const buffer = new TimeSeriesBuffer();
-  // Live mode uses echarts' dynamic-data pattern: windowed `[t, v]` arrays
-  // are appended incrementally and the FULL array is passed to setOption
-  // every frame, so echarts only redraws the new tail. A full rebuild
-  // (setOption replaceMerge) runs only when the config changes (series set,
+  // Live mode uses echarts' appendData API: per frame only the new points are
+  // appended (O(new points), no data-store rebuild), the time axis extent is
+  // set explicitly (appendData does not update it), and a full rebuild
+  // (setOption replaceMerge) runs every FULL_REBUILD_INTERVAL_MS to trim
+  // out-of-window points from the store, plus on config changes (series set,
   // time window, markers) via the props effect.
   const windowCache = new WindowedSeriesCache();
+  const FULL_REBUILD_INTERVAL_MS = 2000;
+  let lastFullRebuildAt = 0;
 
   function initChart() {
     if (!container || chart) return;
@@ -83,21 +86,35 @@
       windowCache.seed(
         series.map((s) => s.id),
         (id) => buffer.get(id),
-        renderNow - timeWindowSec * 1000,
       );
     }
   }
 
   function appendTick() {
-    if (!chart || mode !== 'live') return;
+    if (!chart || mode !== 'live' || series.length === 0) return;
     const now = Date.now();
-    const seriesData = windowCache.tick(
+    const windowMs = timeWindowSec * 1000;
+    const cutoff = now - windowMs;
+    const indexById = new Map(series.map((s, i) => [s.id, i]));
+    const deltas = windowCache.tick(
       series.map((s) => s.id),
       (id) => buffer.get(id),
-      now - timeWindowSec * 1000,
+      cutoff,
     );
-    if (seriesData.length === 0) return;
-    chart.setOption({ series: seriesData });
+    for (const d of deltas) {
+      const seriesIndex = indexById.get(d.id);
+      if (seriesIndex != null) {
+        chart.appendData({ seriesIndex, data: d.data });
+      }
+    }
+    // appendData does not update the axis scale extent — anchor the rolling
+    // window explicitly each frame. Series data is untouched, so the data
+    // store is preserved between full rebuilds.
+    chart.setOption({ xAxis: { min: cutoff, max: now } });
+    if (now - lastFullRebuildAt >= FULL_REBUILD_INTERVAL_MS) {
+      lastFullRebuildAt = now;
+      renderChart();
+    }
   }
 
   export function pushData(seriesId: string, timeMs: number, value: number) {

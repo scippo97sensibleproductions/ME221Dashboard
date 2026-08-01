@@ -48,6 +48,7 @@ export function buildMultiSeriesOption(
       sampling: 'lttb',
       large: true,
       largeThreshold: 500,
+      progressive: 1000,
     });
   }
 
@@ -68,6 +69,7 @@ export function buildMultiSeriesOption(
           sampling: 'lttb',
           large: true,
           largeThreshold: 500,
+          progressive: 1000,
         });
       }
     }

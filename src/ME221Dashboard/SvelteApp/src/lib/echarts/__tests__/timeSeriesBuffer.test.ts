@@ -79,52 +79,50 @@ describe('WindowedSeriesCache', () => {
     return buf;
   };
 
-  it('seed builds windowed arrays filtered by cutoff', () => {
+  it('seed baselines consumption so tick returns no data initially', () => {
     const buf = b();
     const cache = new WindowedSeriesCache();
-    cache.seed(['rpm'], (id) => buf.get(id), 500);
-    const out = cache.tick(['rpm'], (id) => buf.get(id), 500);
-    expect(out).toHaveLength(1);
-    expect(out[0].data[0]).toEqual([500, 500]);
-    expect(out[0].data).toHaveLength(6);
+    cache.seed(['rpm'], (id) => buf.get(id));
+    expect(cache.tick(['rpm'], (id) => buf.get(id), 0)).toEqual([]);
   });
 
-  it('tick appends only points pushed since the last call', () => {
+  it('tick returns only points pushed since the last call', () => {
     const buf = b();
     const cache = new WindowedSeriesCache();
-    cache.seed(['rpm'], (id) => buf.get(id), 0);
+    cache.seed(['rpm'], (id) => buf.get(id));
     buf.push('rpm', 1100, 1100);
     buf.push('rpm', 1200, 1200);
     const out = cache.tick(['rpm'], (id) => buf.get(id), 0);
-    expect(out[0].data).toHaveLength(13);
-    expect(out[0].data[12]).toEqual([1200, 1200]);
-    // No new points → same content, no duplicates
-    const out2 = cache.tick(['rpm'], (id) => buf.get(id), 0);
-    expect(out2[0].data).toHaveLength(13);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('rpm');
+    expect(out[0].data).toEqual([[1100, 1100], [1200, 1200]]);
+    // No new points → no delta, nothing duplicated
+    expect(cache.tick(['rpm'], (id) => buf.get(id), 0)).toEqual([]);
   });
 
-  it('tick trims points older than the cutoff', () => {
+  it('tick excludes points older than the cutoff', () => {
     const buf = b();
     const cache = new WindowedSeriesCache();
-    cache.seed(['rpm'], (id) => buf.get(id), 0);
+    cache.seed(['rpm'], (id) => buf.get(id));
+    buf.push('rpm', 200, 1); // old point, outside window
     buf.push('rpm', 1100, 1100);
     const out = cache.tick(['rpm'], (id) => buf.get(id), 900);
-    expect(out[0].data[0]).toEqual([900, 900]);
-    expect(out[0].data).toHaveLength(3);
+    expect(out[0].data).toEqual([[1100, 1100]]);
   });
 
-  it('tick passes through the same array instances for echarts length diff', () => {
+  it('seed resets the baseline so no previously consumed points re-emit', () => {
     const buf = b();
     const cache = new WindowedSeriesCache();
-    cache.seed(['rpm'], (id) => buf.get(id), 0);
-    const first = cache.tick(['rpm'], (id) => buf.get(id), 0);
+    cache.seed(['rpm'], (id) => buf.get(id));
     buf.push('rpm', 1100, 1100);
-    const second = cache.tick(['rpm'], (id) => buf.get(id), 0);
-    expect(second[0].data).toBe(first[0].data);
+    cache.tick(['rpm'], (id) => buf.get(id), 0);
+    cache.seed(['rpm'], (id) => buf.get(id));
+    expect(cache.tick(['rpm'], (id) => buf.get(id), 0)).toEqual([]);
   });
 
-  it('tick skips series with no cached data', () => {
+  it('tick skips series with no buffer data', () => {
     const cache = new WindowedSeriesCache();
+    cache.seed(['nope'], () => undefined);
     expect(cache.tick(['nope'], () => undefined, 0)).toEqual([]);
   });
 });

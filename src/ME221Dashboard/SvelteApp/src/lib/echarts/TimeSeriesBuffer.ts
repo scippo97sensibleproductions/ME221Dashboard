@@ -64,44 +64,31 @@ export class TimeSeriesBuffer {
 }
 
 /**
- * Maintains per-series windowed `[t, v]` arrays for echarts' dynamic-data
- * update pattern: the full array is passed to setOption every frame and
- * echarts appends only the new tail. New points are appended incrementally
- * and points older than the window are trimmed, so per-frame work is O(1)
- * amortized instead of O(n) filter/map over the whole buffer.
+ * Tracks how many buffer points per series have been handed to echarts via
+ * `chart.appendData`, so live frames only append the delta (O(new points))
+ * instead of re-sending the full window. `seed` resets the baseline on every
+ * full rebuild; `tick` returns the newly arrived points, filtered to the
+ * current window.
  */
 export class WindowedSeriesCache {
-  #data = new Map<string, number[][]>();
   #counts = new Map<string, number>();
 
   reset(): void {
-    this.#data.clear();
     this.#counts.clear();
   }
 
-  /** Rebuild the cache from the current buffer contents (config changes). */
-  seed(
-    seriesIds: string[],
-    getPts: (id: string) => Pt[] | undefined,
-    cutoff: number,
-  ): void {
+  /** Reset the consumption baseline to the current buffer contents. */
+  seed(seriesIds: string[], getPts: (id: string) => Pt[] | undefined): void {
     this.reset();
     for (const id of seriesIds) {
       const pts = getPts(id);
-      const arr: number[][] = [];
-      if (pts) {
-        for (const p of pts) {
-          if (p.t >= cutoff) arr.push([p.t, p.v]);
-        }
-        this.#counts.set(id, pts.length);
-      }
-      this.#data.set(id, arr);
+      this.#counts.set(id, pts?.length ?? 0);
     }
   }
 
   /**
-   * Append points pushed since the last call, trim points older than the
-   * cutoff, and return per-series data ready for `setOption({ series })`.
+   * Return points pushed since the last call, excluding points older than
+   * the cutoff. The result is ready for `chart.appendData({ seriesIndex, data })`.
    */
   tick(
     seriesIds: string[],
@@ -111,17 +98,19 @@ export class WindowedSeriesCache {
     const out: Array<{ id: string; data: number[][] }> = [];
     for (const id of seriesIds) {
       const pts = getPts(id);
-      const arr = this.#data.get(id);
-      if (!pts || !arr) continue;
-      const start = this.#counts.get(id) ?? pts.length;
-      if (start < pts.length) {
-        for (let i = start; i < pts.length; i++) {
-          if (pts[i].t >= cutoff) arr.push([pts[i].t, pts[i].v]);
-        }
+      if (!pts) continue;
+      const start = this.#counts.get(id);
+      if (start == null) {
         this.#counts.set(id, pts.length);
+        continue;
       }
-      while (arr.length > 0 && arr[0][0] < cutoff) arr.shift();
-      out.push({ id, data: arr });
+      if (start >= pts.length) continue;
+      const delta: number[][] = [];
+      for (let i = start; i < pts.length; i++) {
+        if (pts[i].t >= cutoff) delta.push([pts[i].t, pts[i].v]);
+      }
+      this.#counts.set(id, pts.length);
+      if (delta.length > 0) out.push({ id, data: delta });
     }
     return out;
   }
