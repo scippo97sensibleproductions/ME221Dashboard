@@ -161,7 +161,7 @@ describe('SessionRecorder exports', () => {
     expect(SessionRecorder.toCsv()).toBe('');
   });
 
-  it('toVirtualDynoCsv maps known sensor names and starts with ME221', () => {
+  it('toVirtualDynoCsv emits Time plus one value per sensor per row', () => {
     storeMock.liveDataStore.values = { 1: 100, 2: 5 };
     SessionRecorder.start([1, 2], new Map([
       [1, 'engine speed'],
@@ -173,8 +173,23 @@ describe('SessionRecorder exports', () => {
     const lines = csv.split('\n');
     expect(lines[0]).toBe('ME221');
     expect(lines[1]).toBe('Time,RPM,Coolant Temp');
-    expect(lines[2]).toContain('0.000');
-    expect(lines[3]).toContain('1.000');
+    expect(lines[2]).toBe('0.000,100,5');
+    expect(lines[3]).toBe('1.000,100,5');
+  });
+
+  it('toVirtualDynoCsv keeps column alignment when a sensor misses samples', () => {
+    storeMock.liveDataStore.values = { 1: 100, 2: 5 };
+    SessionRecorder.start([1, 2], new Map([[1, 'RPM'], [2, 'TPS']]));
+    nowMs = 100;
+    tick(100);
+    storeMock.liveDataStore.values = { 1: 150 }; // sensor 2 drops out
+    nowMs = 200;
+    tick(200);
+    const lines = SessionRecorder.toVirtualDynoCsv().split('\n');
+    expect(lines[1]).toBe('Time,RPM,Throttle Position');
+    expect(lines[2]).toBe('0.000,100,5');
+    expect(lines[3]).toBe('0.100,100,5');
+    expect(lines[4]).toBe('0.200,150,');
   });
 
   it('toVirtualDynoCsv passes through unknown names and maps substrings', () => {
@@ -184,6 +199,7 @@ describe('SessionRecorder exports', () => {
     tick(100);
     const lines = SessionRecorder.toVirtualDynoCsv().split('\n');
     expect(lines[1]).toBe('Time,Fuel Pressure');
+    expect(lines[2]).toBe('0.000,5');
   });
 
   it('toYaml emits duration and per-sensor samples', () => {

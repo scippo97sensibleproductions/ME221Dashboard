@@ -192,15 +192,19 @@ class SessionRecorderClass {
 
     const lines: string[] = ['ME221', headers.join(',')];
 
+    // One Time column plus one value per sensor per row — VirtualDyno maps
+    // columns by index, so interleaving (t,v) pairs would misalign everything.
     const maxLen = Math.max(...ids.map(id => this.#buffer.get(id)?.length ?? 0));
     for (let i = 0; i < maxLen; i++) {
       const row: string[] = [];
+      let timeCell = '';
       for (const id of ids) {
-        const buf = this.#buffer.get(id);
-        const sample = buf?.[i];
-        row.push(sample ? `${(sample.t / 1000).toFixed(3)},${sample.v}` : ',');
+        const sample = this.#buffer.get(id)?.[i];
+        if (!sample) { row.push(''); continue; }
+        if (timeCell === '') timeCell = (sample.t / 1000).toFixed(3);
+        row.push(String(sample.v));
       }
-      lines.push(row.join(','));
+      lines.push([timeCell, ...row].join(','));
     }
     return lines.join('\n');
   }
