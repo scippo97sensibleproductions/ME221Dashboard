@@ -153,4 +153,20 @@ describe('buildTooltipRows', () => {
     const rows = buildTooltipRows(series, [[0], [10], [null]], 0);
     expect(rows[1].value).toBe('--');
   });
+
+  it('appends overlay session values after the main series', () => {
+    const overlays = [{ name: 'S1', color: '#22c55e', data: new Map() }];
+    const rows = buildTooltipRows(
+      series,
+      [[0, 1], [10, 20], [null, 2.5], [100, 200], [5, 6]],
+      1,
+      overlays,
+    );
+    expect(rows).toEqual([
+      { name: 'RPM', color: '#0ea5e9', value: '20.00' },
+      { name: 'AFR', color: '#f97316', value: '2.50' },
+      { name: 'S1 - RPM', color: '#22c55e', value: '200.0' },
+      { name: 'S1 - AFR', color: '#22c55e', value: '6.00' },
+    ]);
+  });
 });

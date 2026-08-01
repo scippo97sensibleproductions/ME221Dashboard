@@ -244,7 +244,6 @@
               <StreamingLineChart
                 series={chartSeries}
                 {timeWindowSec}
-                showDataZoom={true}
                 mode="live"
               />
               {#if showStats}
@@ -316,7 +315,6 @@
             <StreamingLineChart
               series={chartSeries}
               {timeWindowSec}
-              showDataZoom={true}
               mode="live"
             />
             {#if showStats}

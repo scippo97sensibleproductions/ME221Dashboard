@@ -47,6 +47,9 @@ public partial class MainPage
         _logger = logger;
 
 #if DEBUG
+        // Dev: the virtual host serves wwwroot natively (bridge included);
+        // dev.html boots the app from the Vite dev server via the proxy.
+        hybridWebView.DefaultFile = "dev.html";
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             if (_shutdownStarted) return;

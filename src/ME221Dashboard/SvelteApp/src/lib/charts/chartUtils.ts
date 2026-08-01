@@ -136,6 +136,7 @@ export function buildTooltipRows(
   series: ChartSeries[],
   data: ChartColumns,
   idx: number,
+  overlaySessions: OverlaySession[] = [],
 ): TooltipRow[] {
   const rows: TooltipRow[] = [];
   for (let i = 0; i < series.length; i++) {
@@ -145,6 +146,18 @@ export function buildTooltipRows(
       color: series[i].color,
       value: formatChartValue(col ? col[idx] : null),
     });
+  }
+  let colOffset = series.length + 1;
+  for (const ov of overlaySessions) {
+    for (const s of series) {
+      const col = data[colOffset];
+      colOffset++;
+      rows.push({
+        name: `${ov.name} - ${s.name}`,
+        color: ov.color,
+        value: formatChartValue(col ? col[idx] : null),
+      });
+    }
   }
   return rows;
 }

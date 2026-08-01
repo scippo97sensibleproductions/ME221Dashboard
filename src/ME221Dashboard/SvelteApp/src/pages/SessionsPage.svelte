@@ -497,10 +497,9 @@
           </div>
         {:else}
           <div class="flex-1 min-h-0">
-            <StreamingLineChart
-              series={chartSeries}
-              timeWindowSec={Math.max(10, Math.ceil(activeSession.durationMs / 1000))}
-              showDataZoom={true}
+              <StreamingLineChart
+                series={chartSeries}
+                timeWindowSec={Math.max(10, Math.ceil(activeSession.durationMs / 1000))}
               mode="playback"
               playbackData={currentData}
               {playbackTimeMs}

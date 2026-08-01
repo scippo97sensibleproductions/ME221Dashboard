@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { toGaugeDefinition, toSavePayload } from '../gaugeUtils';
+import { GaugeShapeCategory } from '../gaugeTypes';
 import type { GaugeConfigEntry } from '../../HybridBridgeTypes';
 
 const overrides = {
@@ -301,5 +302,39 @@ describe('toSavePayload round-trip', () => {
     expect(json).not.toContain('tickCount');
     expect(json).not.toContain('chartOverlays');
     expect(json).not.toContain('ringCount');
+  });
+
+  it('preview panel full-config passthrough keeps textures, icons, linked entities and v2 fields (gauge preview regression)', () => {
+    // The preview panel builds its gauge from the FULL config entry (spread),
+    // not a hand-picked subset. This test pins the fields that must survive:
+    // missing texturePath/linkedEntities previously made previews wrong.
+    const cfg: GaugeConfigEntry = {
+      ...baseConfig(),
+      shapeCategory: GaugeShapeCategory.WedgeBar,
+      texturePath: 'C:\\gauge-textures\\face.png',
+      iconName: 'C:\\gauge-textures\\icon.png',
+      linkedEntities: [
+        { entityId: 55, color: '#00ff00' },
+        { entityId: 56, color: '#ff0000' },
+      ],
+      needleShape: 2,
+      tickCount: 7,
+      redlineStart: 0.5,
+      wedgeSegmentCount: 40,
+      panelStyle: 3,
+    };
+    const def = toGaugeDefinition({ ...cfg, fractionX: 0, fractionY: 0 }, overrides);
+    expect(def.texturePath).toBe('C:\\gauge-textures\\face.png');
+    expect(def.iconName).toBe('C:\\gauge-textures\\icon.png');
+    expect(def.linkedEntities).toEqual([
+      { entityId: 55, color: '#00ff00' },
+      { entityId: 56, color: '#ff0000' },
+    ]);
+    expect(def.needleShape).toBe(2);
+    expect(def.tickCount).toBe(7);
+    expect(def.redlineStart).toBe(0.5);
+    expect(def.wedgeSegmentCount).toBe(40);
+    expect(def.panelStyle).toBe(3);
+    expect(def.category).toBe(GaugeShapeCategory.WedgeBar);
   });
 });

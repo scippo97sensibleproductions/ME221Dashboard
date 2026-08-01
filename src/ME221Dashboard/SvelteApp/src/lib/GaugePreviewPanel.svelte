@@ -1,10 +1,7 @@
 <script lang="ts">
   import { GaugeShapeCategory, toGaugeDefinition, formatValue } from './gauges/types';
   import type { GaugeConfigEntry, EntityInfo } from './HybridBridge';
-  import ArcGauge from './gauges/ArcGauge.svelte';
-  import BarGauge from './gauges/BarGauge.svelte';
-  import DigitalGauge from './gauges/DigitalGauge.svelte';
-  import ChartGauge from './gauges/ChartGauge.svelte';
+  import GaugeCard from './gauges/GaugeCard.svelte';
   import NumberInput from './NumberInput.svelte';
   import { deviceMode } from './stores/deviceMode.svelte';
   import { IconZoomIn, IconZoomOut, IconRotate, IconChevronDown } from '@tabler/icons-svelte';
@@ -34,46 +31,19 @@
   const previewBarH = $derived(isMobile ? 40 : 60);
   const previewDigitalH = $derived(isMobile ? 56 : 80);
 
-  const isArc = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Arc);
   const isBar = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Bar);
   const isDigital = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Digital);
-  const isChart = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Chart);
 
+  // Pass the FULL config through toGaugeDefinition (not a hand-picked subset)
+  // so the preview matches the dashboard: textures, linkedEntities, needle shape,
+  // scale marks, redline, bar/ring/wedge options, chart overlays, etc.
   const previewGauge = $derived(toGaugeDefinition(
     {
-      entityId: gaugeDef.entityId,
-      shapeCategory: gaugeDef.shapeCategory,
-      sweepAngle: gaugeDef.sweepAngle,
-      arcPosition: gaugeDef.arcPosition,
-      digitalStyle: gaugeDef.digitalStyle,
-      wedgeStyle: gaugeDef.wedgeStyle ?? 0,
-      texturePath: gaugeDef.texturePath,
-      needleStartAngle: gaugeDef.needleStartAngle,
-      needleEndAngle: gaugeDef.needleEndAngle,
-      needleOffsetX: gaugeDef.needleOffsetX,
-      needleOffsetY: gaugeDef.needleOffsetY,
-      needleWidth: gaugeDef.needleWidth,
-      needleLength: gaugeDef.needleLength,
+      ...gaugeDef,
       needleCurve: gaugeDef.needleCurve,
-      scale: gaugeDef.scale ?? 1.0,
-      fontSizeScale: gaugeDef.fontSizeScale ?? 1.0,
-      labelVerticalOffset: gaugeDef.labelVerticalOffset,
-      showName: gaugeDef.showName,
-      showUnit: gaugeDef.showUnit,
-      showValue: gaugeDef.showValue,
-      iconName: gaugeDef.iconName,
-      iconOffsetX: gaugeDef.iconOffsetX,
-      iconOffsetY: gaugeDef.iconOffsetY,
-      iconSize: gaugeDef.iconSize,
-      barValuePosition: gaugeDef.barValuePosition,
-      barUnitPosition: gaugeDef.barUnitPosition,
-      barNamePosition: gaugeDef.barNamePosition,
-      colorStops: gaugeDef.colorStops,
-      colorHysteresis: gaugeDef.colorHysteresis,
+      linkedEntities: gaugeDef.linkedEntities,
       fractionX: 0,
       fractionY: 0,
-      widthFraction: gaugeDef.widthFraction,
-      heightFraction: gaugeDef.heightFraction,
     },
     {
       name: gaugeName,
@@ -101,25 +71,17 @@
     <div class="relative shrink-0 flex items-center justify-center rounded-lg bg-gray-800/30 overflow-hidden"
          style="width: {previewArcPx}px; height: {previewArcPx}px;">
       <div style="transform: scale({zoomLevel}); transform-origin: center center;">
-        {#if isArc}
-          <div style="width: {previewArcPx}px; height: {previewArcPx}px; position: relative;">
-            <ArcGauge gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewArcPx} />
-          </div>
-        {:else if isBar}
+        {#if isBar}
           <div style="width: {previewArcPx}px; height: {previewBarH}px;">
-            <BarGauge gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewBarH} />
+            <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewBarH} />
           </div>
         {:else if isDigital}
           <div style="width: {previewArcPx}px; height: {previewDigitalH}px;">
-            <DigitalGauge gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewDigitalH} />
-          </div>
-        {:else if isChart}
-          <div style="width: {previewArcPx}px; height: {previewArcPx}px;">
-            <ChartGauge gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewArcPx} />
+            <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewDigitalH} />
           </div>
         {:else}
-          <div class="flex h-full w-full items-center justify-center">
-            <span class="text-xs text-gray-500">Text</span>
+          <div style="width: {previewArcPx}px; height: {previewArcPx}px; position: relative;">
+            <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewArcPx} />
           </div>
         {/if}
       </div>

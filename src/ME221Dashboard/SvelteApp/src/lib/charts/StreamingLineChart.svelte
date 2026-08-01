@@ -15,7 +15,6 @@
     timeWindowSec = 10,
     yMin,
     yMax,
-    showDataZoom = true,
     mode = 'live',
     playbackData,
     playbackTimeMs,
@@ -27,7 +26,6 @@
     timeWindowSec?: number;
     yMin?: number;
     yMax?: number;
-    showDataZoom?: boolean;
     mode?: 'live' | 'playback';
     playbackData?: Map<string, Array<{ t: number; v: number }>>;
     playbackTimeMs?: number;
@@ -46,15 +44,10 @@
   // placeholder; the series-key effect below recreates columns whenever
   // `series` changes (and always on mount), so this initial count is never read
   let columns = new LiveColumns(0);
-  let zoomWindowMs: number | null = null;
-
-  function windowMs(): number {
-    return zoomWindowMs ?? timeWindowSec * 1000;
-  }
 
   function xRange(_u: unknown, _min: number, _max: number): [number, number] {
     const now = mode === 'live' ? Date.now() : (playbackTimeMs ?? Date.now());
-    const w = windowMs();
+    const w = timeWindowSec * 1000;
     return [now - w, now];
   }
 
@@ -147,13 +140,14 @@
     );
   }
 
-  function onSetCursor(c: import('uplot').default, dataIdx: number | null) {
+  function onSetCursor(c: import('uplot').default) {
     if (!tooltipEl) return;
+    const dataIdx = c.cursor.idx ?? null;
     if (dataIdx == null) {
       tooltipEl.style.display = 'none';
       return;
     }
-    const rows = buildTooltipRows(series, c.data, dataIdx);
+    const rows = buildTooltipRows(series, c.data, dataIdx, overlaySessions);
     tooltipEl.innerHTML = rows
       .map(
         (r) =>
@@ -210,7 +204,6 @@
     // change (sensor selection) recreates the chart.
     u?.destroy();
     u = null;
-    zoomWindowMs = null;
     columns = new LiveColumns(series.length);
     initChart();
   });
@@ -243,7 +236,6 @@
     void overlaySessions;
     void mode;
     void playbackData;
-    zoomWindowMs = null;
     if (mode === 'playback' && u) {
       u.setData(playbackColumns(), false);
       u.redraw();
@@ -267,32 +259,6 @@
     });
     ro.observe(container);
     return () => ro.disconnect();
-  });
-
-  $effect(() => {
-    if (!container) return;
-    const el = container;
-    const onWheel = (e: WheelEvent) => {
-      if (!showDataZoom || !u) return;
-      e.preventDefault();
-      const base = timeWindowSec * 1000;
-      const current = zoomWindowMs ?? base;
-      zoomWindowMs = Math.min(
-        MAX_WINDOW_MS,
-        Math.max(MIN_WINDOW_MS, current * (e.deltaY > 0 ? 1.3 : 1 / 1.3)),
-      );
-      u.redraw();
-    };
-    const onDblClick = () => {
-      zoomWindowMs = null;
-      u?.redraw();
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('dblclick', onDblClick);
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('dblclick', onDblClick);
-    };
   });
 </script>
 
