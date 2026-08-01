@@ -1,5 +1,5 @@
 <script lang="ts">
-  import StreamingLineChart from '../lib/echarts/StreamingLineChart.svelte';
+  import StreamingLineChart from '../lib/charts/StreamingLineChart.svelte';
   import { SessionStore, type RecordedSession } from '../lib/monitor/SessionStore';
   import { getSensorColor } from '../lib/monitor/sensorColors';
   import { HybridBridge } from '../lib/HybridBridge';
@@ -51,13 +51,16 @@
   );
 
   const chartSeries = $derived(
-    activeSession
-      ? activeSession.sensorIds.map(id => ({
-          id: String(id),
-          name: activeSession.sensorNames[id] ?? `Sensor ${id}`,
-          color: getSensorColor(id),
-        }))
-      : [],
+    (() => {
+      const s = activeSession;
+      return s
+        ? s.sensorIds.map(id => ({
+            id: String(id),
+            name: s.sensorNames[id] ?? `Sensor ${id}`,
+            color: getSensorColor(id),
+          }))
+        : [];
+    })(),
   );
 
   const currentData = $derived(

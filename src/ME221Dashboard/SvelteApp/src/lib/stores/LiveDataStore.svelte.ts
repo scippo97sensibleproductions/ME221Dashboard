@@ -199,4 +199,4 @@ class LiveDataStore {
 }
 
 export const liveDataStore = new LiveDataStore();
-export type { GpsSnapshot, OperatingPointSample };
+export type { GpsSnapshot };

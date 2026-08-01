@@ -19,7 +19,10 @@ function matchFirst(
 
 export function autoDetectMapping(
   sensors: { id: number; name: string }[]
-): Partial<VehicleConfig> {
+): Pick<
+  VehicleConfig,
+  'rpmEntityId' | 'vssSpeedEntityId' | 'mapEntityId' | 'baroEntityId' | 'gearEntityId'
+> {
   return {
     rpmEntityId: matchFirst(RPM_PATTERNS, sensors),
     vssSpeedEntityId: matchFirst(VSS_PATTERNS, sensors),

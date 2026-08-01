@@ -1,4 +1,5 @@
 import type { DataLinkWarningSetting, WarningHistoryEntry } from '../HybridBridgeTypes';
+export type { WarningHistoryEntry } from '../HybridBridgeTypes';
 import { HybridBridge } from '../HybridBridge';
 
 export type WarningSeverity = 'warning' | 'critical';

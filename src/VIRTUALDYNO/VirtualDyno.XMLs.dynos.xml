@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<Dynos xmlns="http://tempuri.org/Dynos.xsd">
+  <DynoCorrectionFactors>
+    <DynoName>DynoJet</DynoName>
+    <DynoCorrectionFactor>1.09</DynoCorrectionFactor>
+  </DynoCorrectionFactors>
+  <DynoCorrectionFactors>
+    <DynoName>Mustang Dyno</DynoName>
+    <DynoCorrectionFactor>0.95</DynoCorrectionFactor>
+  </DynoCorrectionFactors>
+  <DynoCorrectionFactors>
+    <DynoName>Virtual Dyno</DynoName>
+    <DynoCorrectionFactor>1.00</DynoCorrectionFactor>
+  </DynoCorrectionFactors>
+</Dynos>

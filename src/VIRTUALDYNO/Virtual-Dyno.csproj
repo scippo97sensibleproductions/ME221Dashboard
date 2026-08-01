@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>Virtual Dyno</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net48</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>15.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="VirtualDyno.XMLs.dynos.xml" />
+    <None Remove="VirtualDyno.XMLs.graphsettings.xml" />
+    <EmbeddedResource Include="VirtualDyno.XMLs.dynos.xml" LogicalName="VirtualDyno.XMLs.dynos.xml" />
+    <EmbeddedResource Include="VirtualDyno.XMLs.graphsettings.xml" LogicalName="VirtualDyno.XMLs.graphsettings.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="VirtualDyno.Core">
+      <HintPath>..\..\..\..\Program Files\Pnuema Productions\Virtual Dyno\VirtualDyno.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Data" />
+    <Reference Include="VirtualDyno.RunControl">
+      <HintPath>..\..\..\..\Program Files\Pnuema Productions\Virtual Dyno\VirtualDyno.RunControl.dll</HintPath>
+    </Reference>
+    <Reference Include="Ionic.Zip">
+      <HintPath>..\..\..\..\Program Files\Pnuema Productions\Virtual Dyno\Ionic.Zip.dll</HintPath>
+    </Reference>
+    <Reference Include="ZedGraph">
+      <HintPath>..\..\..\..\Program Files\Pnuema Productions\Virtual Dyno\ZedGraph.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -303,7 +303,9 @@
         {#each visibleGauges as g (g.uid)}
           {@const typeDef = TYPE_DEFS.find(t => t.type === g.shapeCategory)}
           <div class="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors"
-               onclick={() => openProps(g.uid)}>
+               role="button" tabindex="0"
+               onclick={() => openProps(g.uid)}
+               onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProps(g.uid); } }}>
             <!-- Accent dot -->
             <div class="w-0.5 self-stretch rounded-sm" style="background: {typeDef?.color}"></div>
             <!-- Type icon -->
@@ -341,7 +343,9 @@
             {/each}
             {#if g.linkedEntities.length < 5}
               <div class="flex items-center justify-center pl-9 pr-3 py-0.5 border-b border-gray-800/50 text-[8px] text-gray-600 cursor-pointer hover:text-blue-400"
-                   onclick={(e) => { e.stopPropagation(); editingUid = g.uid; sheetOpen = 'entity'; }}>
+                   role="button" tabindex="0"
+                   onclick={(e) => { e.stopPropagation(); editingUid = g.uid; sheetOpen = 'entity'; }}
+                   onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); editingUid = g.uid; sheetOpen = 'entity'; } }}>
                 + add entity
               </div>
             {/if}
@@ -514,6 +518,8 @@
                 <div class="flex gap-0.5">
                   {#each RING_COLORS as c}
                     <button class="w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-all"
+                            aria-label={`Select color ${c}`}
+                            title={c}
                             style="background: {c}; border-color: {le.color === c ? 'white' : 'transparent'}"
                             onclick={() => setRingColor(le.entityId, c)}></button>
                   {/each}

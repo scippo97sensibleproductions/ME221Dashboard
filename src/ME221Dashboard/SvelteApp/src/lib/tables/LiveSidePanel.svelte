@@ -6,7 +6,7 @@
   let { open, tableDef, liveValues, dataLinks, sensorIds, onAddSensor, onRemoveSensor, onClose }: {
     open: boolean;
     tableDef: { input0LinkId: number; input1LinkId: number; outputLinkId: number; input0Name: string; input1Name: string; outputName: string } | null;
-    liveValues: Record<string, number>;
+    liveValues: Record<string, number | null>;
     dataLinks: DataLinkDefinition[];
     sensorIds: number[];
     onAddSensor: (id: number) => void;

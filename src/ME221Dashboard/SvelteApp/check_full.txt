@@ -1,0 +1,721 @@
+
+> me221-dashboard-svelte@0.0.0 check
+> svelte-check --tsgo --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json
+
+Loading svelte-check in workspace: c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp
+Getting Svelte diagnostics...
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\GaugePreviewPanel.svelte[39m:160:15
+[31mError[39m: Type 'number | null' is not assignable to type 'number'. (ts)
+[36m            <NumberInput
+              [35mvalue[36m={useTestValue ? testValue : liveValue}
+              min={Math.floor(minValue)}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\GaugePreviewPanel.svelte[39m:196:13
+[31mError[39m: Type 'number | null' is not assignable to type 'number'. (ts)
+[36m          <NumberInput
+            [35mvalue[36m={useTestValue ? testValue : liveValue}
+            min={Math.floor(minValue)}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\GaugeSettingsModal.svelte[39m:512:22
+[31mError[39m: Cannot find name 'ArcNeedleSettings'. (ts)
+[36m                  <div class="border-t border-gray-700/30 pt-4">
+                    <[35mArcNeedleSettings[36m {gaugeDef} {onchange}
+                      minValue={Math.floor(minValue)} maxValue={Math.ceil(maxValue)} unit={entityInfo?.unit ?? ''}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\GaugeSettingsModal.svelte[39m:706:7
+[31mError[39m: '$$_ladoM0.$$slot_def' is of type 'unknown'. (ts)
+[36m      <!-- Footer -->
+      [35m[36m<svelte:fragment slot="footer">
+        <div class="flex w-full justify-end">[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\TableNotesSheet.svelte[39m:61:15
+[31mError[39m: Type '"red"' is not assignable to type '"alternative" | "brand" | "danger" | "dark" | "ghost" | "gray" | "success" | "transparent" | "warning" | undefined'. (ts)
+[36m    {#if noteText.trim()}
+      <Button [35mcolor[36m="red" class="!border-red-800/30 !bg-gray-700 !text-red-400 hover:!bg-red-900/30" onclick={deleteNote}>
+        Delete[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:41:42
+[31mError[39m: Type 'number | undefined' is not assignable to type 'number | null'. (ts)
+[36m      const detected = autoDetectMapping(sensors);
+      if (detected.rpmEntityId !== null) [35mconfig.rpmEntityId[36m = detected.rpmEntityId;
+      if (detected.vssSpeedEntityId !== null) config.vssSpeedEntityId = detected.vssSpeedEntityId;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:42:47
+[31mError[39m: Type 'number | undefined' is not assignable to type 'number | null'. (ts)
+[36m      if (detected.rpmEntityId !== null) config.rpmEntityId = detected.rpmEntityId;
+      if (detected.vssSpeedEntityId !== null) [35mconfig.vssSpeedEntityId[36m = detected.vssSpeedEntityId;
+      if (detected.mapEntityId !== null) config.mapEntityId = detected.mapEntityId;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:43:42
+[31mError[39m: Type 'number | undefined' is not assignable to type 'number | null'. (ts)
+[36m      if (detected.vssSpeedEntityId !== null) config.vssSpeedEntityId = detected.vssSpeedEntityId;
+      if (detected.mapEntityId !== null) [35mconfig.mapEntityId[36m = detected.mapEntityId;
+      if (detected.baroEntityId !== null) config.baroEntityId = detected.baroEntityId;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:44:43
+[31mError[39m: Type 'number | undefined' is not assignable to type 'number | null'. (ts)
+[36m      if (detected.mapEntityId !== null) config.mapEntityId = detected.mapEntityId;
+      if (detected.baroEntityId !== null) [35mconfig.baroEntityId[36m = detected.baroEntityId;
+    }[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:74:3
+[31mError[39m: '$$_ladoM0.$$slot_def' is of type 'unknown'. (ts)
+[36m<Modal bind:open size="lg" placement="center" outsideclose={true} class="backdrop:bg-gray-900/80" ontoggle={(e) => { if (e.newState === 'closed') onclose(); }}>
+  [35m[36m<svelte:fragment slot="header">
+    <div class="flex w-full items-center justify-between">[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\VehicleConfigModal.svelte[39m:160:3
+[31mError[39m: '$$_ladoM0.$$slot_def' is of type 'unknown'. (ts)
+[36m
+  [35m[36m<svelte:fragment slot="footer">
+    {#if tab !== 'gauges'}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\WarningPanel.svelte[39m:3:51
+[31mError[39m: Module '"./stores/warningStore.svelte"' declares 'WarningHistoryEntry' locally, but it is not exported. (ts)
+[36m  import { IconAlertTriangle, IconX, IconTrash, IconClock } from '@tabler/icons-svelte';
+  import { warningStore, type ActiveWarning, type [35mWarningHistoryEntry[36m } from './stores/warningStore.svelte';[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\AppSettingsPage.svelte[39m:45:27
+[31mError[39m: Type 'EcuInfoResult' is not assignable to type '{ product: string; model: string; version: string; }'. (ts)
+[36m        const info = await HybridBridge.getEcuInfo();
+        if (info.success) [35me[36mcuInfo = info;
+      }[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardConfigPage.svelte[39m:181:7
+[31mError[39m: Type '{ id: number; name: string; category: string; viewInTree: boolean; enabled: boolean; tableType: string; cols: number; rows: number; input0Name: string; input1Name: string; outputName: string; input0LinkId: number; input1LinkId: number; outputLinkId: number; incrementValue: number; defaultValue: number | null; }[]' is not assignable to type 'TableDefinition[]'. (ts)
+[36m      if (!mounted) return;
+      [35mavailableTables[36m = tableResult.tables ?? [];[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:26:33
+[31mError[39m: Block-scoped variable 'canvasWidth' used before its declaration. (ts)
+[36m  let containerEl = $state<HTMLDivElement | null>(null);
+  let containerWidth = $derived([35mcanvasWidth[36m);
+  let containerHeight = $derived(canvasHeight);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:26:33
+[31mError[39m: Variable 'canvasWidth' is used before being assigned. (ts)
+[36m  let containerEl = $state<HTMLDivElement | null>(null);
+  let containerWidth = $derived([35mcanvasWidth[36m);
+  let containerHeight = $derived(canvasHeight);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:27:34
+[31mError[39m: Block-scoped variable 'canvasHeight' used before its declaration. (ts)
+[36m  let containerWidth = $derived(canvasWidth);
+  let containerHeight = $derived([35mcanvasHeight[36m);
+  let gaugeDefs = $state<GaugeConfigEntry[]>([]);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:27:34
+[31mError[39m: Variable 'canvasHeight' is used before being assigned. (ts)
+[36m  let containerWidth = $derived(canvasWidth);
+  let containerHeight = $derived([35mcanvasHeight[36m);
+  let gaugeDefs = $state<GaugeConfigEntry[]>([]);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:174:21
+[31mError[39m: Argument of type 'ComputationResult' is not assignable to parameter of type 'Record<string, number | null>'. (ts)
+[36m      const result = computeDerived(inputs);
+      injectDerived([35mresult[36m);
+    }, 20);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:327:37
+[31mError[39m: Property 'minValue' does not exist on type '{ smoothingEnabled: boolean; smoothingFactor: number; smoothingResponseMs: number; spikeGatePercent: number; transformSteps?: ValueTransformStep[] | undefined; }'. (ts)
+[36m    // Spike gate: reject jumps beyond threshold (percentage of gauge range)
+    if (g.spikeGatePercent > 0 && g.[35mminValue[36m != null && g.maxValue != null) {
+      const prevRaw = _prevRawValues.get(entityId) ?? raw;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:327:59
+[31mError[39m: Property 'maxValue' does not exist on type '{ smoothingEnabled: boolean; smoothingFactor: number; smoothingResponseMs: number; spikeGatePercent: number; transformSteps?: ValueTransformStep[] | undefined; }'. (ts)
+[36m    // Spike gate: reject jumps beyond threshold (percentage of gauge range)
+    if (g.spikeGatePercent > 0 && g.minValue != null && g.[35mmaxValue[36m != null) {
+      const prevRaw = _prevRawValues.get(entityId) ?? raw;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:329:32
+[31mError[39m: Property 'maxValue' does not exist on type '{ smoothingEnabled: boolean; smoothingFactor: number; smoothingResponseMs: number; spikeGatePercent: number; transformSteps?: ValueTransformStep[] | undefined; }'. (ts)
+[36m      const prevRaw = _prevRawValues.get(entityId) ?? raw;
+      const range = Math.abs(g.[35mmaxValue[36m - g.minValue);
+      const maxDelta = range * (g.spikeGatePercent / 100);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:329:45
+[31mError[39m: Property 'minValue' does not exist on type '{ smoothingEnabled: boolean; smoothingFactor: number; smoothingResponseMs: number; spikeGatePercent: number; transformSteps?: ValueTransformStep[] | undefined; }'. (ts)
+[36m      const prevRaw = _prevRawValues.get(entityId) ?? raw;
+      const range = Math.abs(g.maxValue - g.[35mminValue[36m);
+      const maxDelta = range * (g.spikeGatePercent / 100);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:647:11
+[31mError[39m: 'dragging' is possibly 'null'. (ts)
+[36m          dragRaf = null;
+          [35mdragging[36m.deltaFracX = pendingDragDx;
+          dragging.deltaFracY = pendingDragDy;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:648:11
+[31mError[39m: 'dragging' is possibly 'null'. (ts)
+[36m          dragging.deltaFracX = pendingDragDx;
+          [35mdragging[36m.deltaFracY = pendingDragDy;
+        });[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:657:11
+[31mError[39m: 'tableDragging' is possibly 'null'. (ts)
+[36m          dragRaf = null;
+          [35mtableDragging[36m.deltaFracX = pendingDragDx;
+          tableDragging.deltaFracY = pendingDragDy;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:658:11
+[31mError[39m: 'tableDragging' is possibly 'null'. (ts)
+[36m          tableDragging.deltaFracX = pendingDragDx;
+          [35mtableDragging[36m.deltaFracY = pendingDragDy;
+        });[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:969:32
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m        {const visual = $derived(estimateVisualSize(gauge.category, pxW, pxH, {
+          fontSizeScale: gauge.[35mfontSizeScale[36m,
+          digitalStyle: gauge.digitalStyle,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:1034:54
+[31mError[39m: Expected 1 arguments, but got 2. (ts)
+[36m            showDimensionBadge={tw.showDimensionBadge}
+            onTap={(id) => onNavigate('tableEditor', [35m{ tableId: id }[36m)}
+            onSettings={(id) => {[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\DashboardPage.svelte[39m:1062:6
+[31mError[39m: Object literal may only specify known properties, and 'tableSettingsName' does not exist in type 'Props'. (ts)
+[36m    open={true}
+    {[35mtableSettingsName[36m}
+    entry={tableSettingsEntry}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\EcuMonitorPage.svelte[39m:39:38
+[31mError[39m: Cannot find name 'RangeStats'. (ts)
+[36m  let showStats = $state(true);
+  let liveStats = $state<Map<number, [35mRangeStats[36m>>(new Map());
+  const _statsAccum = new Map<number, RangeStats>();[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\EcuMonitorPage.svelte[39m:40:39
+[31mError[39m: Cannot find name 'RangeStats'. (ts)
+[36m  let liveStats = $state<Map<number, RangeStats>>(new Map());
+  const _statsAccum = new Map<number, [35mRangeStats[36m>();[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\GaugeBuilderPage.svelte[39m:305:11
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m          {@const typeDef = TYPE_DEFS.find(t => t.type === g.shapeCategory)}
+          [35m<div class="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors"
+               onclick={() => openProps(g.uid)}>
+            <!-- Accent dot -->
+            <div class="w-0.5 self-stretch rounded-sm" style="background: {typeDef?.color}"></div>
+            <!-- Type icon -->
+            <div class="w-5 h-5 flex items-center justify-center text-[11px] border border-gray-700 shrink-0"
+                 style="color: {typeDef?.color}">{typeDef?.icon}</div>
+            <!-- Info -->
+            <div class="flex-1 min-w-0 flex items-center gap-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wide" style="color: {typeDef?.color}">{typeDef?.name}</span>
+              <span class="text-gray-700 text-[8px]">┬À</span>
+              {#if g.shapeCategory === GaugeShapeCategory.MultiRing}
+                <span class="text-gray-400 text-[10px] truncate">
+                  {g.linkedEntities.length > 0 ? `${g.linkedEntities.length} entit${g.linkedEntities.length === 1 ? 'y' : 'ies'}` : 'ÔÇö'}
+                </span>
+              {:else}
+                <span class="text-gray-400 text-[10px] truncate">{g.primaryEntityId != null ? getEntityName(g.primaryEntityId) : 'ÔÇö'}</span>
+                {#if g.primaryEntityId != null}
+                  <span class="text-gray-600 text-[8px] font-mono shrink-0">{getEntityUnit(g.primaryEntityId)}</span>
+                {/if}
+              {/if}
+            </div>
+            <!-- Delete -->
+            <button class="w-5 h-5 flex items-center justify-center border border-gray-700 text-gray-600 hover:border-red-500 hover:text-red-500 shrink-0"
+                    onclick={(e) => { e.stopPropagation(); removeGauge(g.uid); }}>
+              <IconX size={10} />
+            </button>
+          </div>[36m
+          <!-- Multi-ring sub-rows -->[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\GaugeBuilderPage.svelte[39m:305:11
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m          {@const typeDef = TYPE_DEFS.find(t => t.type === g.shapeCategory)}
+          [35m<div class="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors"
+               onclick={() => openProps(g.uid)}>
+            <!-- Accent dot -->
+            <div class="w-0.5 self-stretch rounded-sm" style="background: {typeDef?.color}"></div>
+            <!-- Type icon -->
+            <div class="w-5 h-5 flex items-center justify-center text-[11px] border border-gray-700 shrink-0"
+                 style="color: {typeDef?.color}">{typeDef?.icon}</div>
+            <!-- Info -->
+            <div class="flex-1 min-w-0 flex items-center gap-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wide" style="color: {typeDef?.color}">{typeDef?.name}</span>
+              <span class="text-gray-700 text-[8px]">┬À</span>
+              {#if g.shapeCategory === GaugeShapeCategory.MultiRing}
+                <span class="text-gray-400 text-[10px] truncate">
+                  {g.linkedEntities.length > 0 ? `${g.linkedEntities.length} entit${g.linkedEntities.length === 1 ? 'y' : 'ies'}` : 'ÔÇö'}
+                </span>
+              {:else}
+                <span class="text-gray-400 text-[10px] truncate">{g.primaryEntityId != null ? getEntityName(g.primaryEntityId) : 'ÔÇö'}</span>
+                {#if g.primaryEntityId != null}
+                  <span class="text-gray-600 text-[8px] font-mono shrink-0">{getEntityUnit(g.primaryEntityId)}</span>
+                {/if}
+              {/if}
+            </div>
+            <!-- Delete -->
+            <button class="w-5 h-5 flex items-center justify-center border border-gray-700 text-gray-600 hover:border-red-500 hover:text-red-500 shrink-0"
+                    onclick={(e) => { e.stopPropagation(); removeGauge(g.uid); }}>
+              <IconX size={10} />
+            </button>
+          </div>[36m
+          <!-- Multi-ring sub-rows -->[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\GaugeBuilderPage.svelte[39m:343:15
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m            {#if g.linkedEntities.length < 5}
+              [35m<div class="flex items-center justify-center pl-9 pr-3 py-0.5 border-b border-gray-800/50 text-[8px] text-gray-600 cursor-pointer hover:text-blue-400"
+                   onclick={(e) => { e.stopPropagation(); editingUid = g.uid; sheetOpen = 'entity'; }}>
+                + add entity
+              </div>[36m
+            {/if}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\GaugeBuilderPage.svelte[39m:343:15
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m            {#if g.linkedEntities.length < 5}
+              [35m<div class="flex items-center justify-center pl-9 pr-3 py-0.5 border-b border-gray-800/50 text-[8px] text-gray-600 cursor-pointer hover:text-blue-400"
+                   onclick={(e) => { e.stopPropagation(); editingUid = g.uid; sheetOpen = 'entity'; }}>
+                + add entity
+              </div>[36m
+            {/if}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\GaugeBuilderPage.svelte[39m:516:21
+[33mWarn[39m: Buttons and links should either contain text or have an `aria-label`, `aria-labelledby` or `title` attribute
+https://svelte.dev/e/a11y_consider_explicit_label (svelte)
+[36m                  {#each RING_COLORS as c}
+                    [35m<button class="w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-all"
+                            style="background: {c}; border-color: {le.color === c ? 'white' : 'transparent'}"
+                            onclick={() => setRingColor(le.entityId, c)}></button>[36m
+                  {/each}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\SessionsPage.svelte[39m:57:17
+[31mError[39m: 'activeSession' is possibly 'null'. (ts)
+[36m          id: String(id),
+          name: [35mactiveSession[36m.sensorNames[id] ?? `Sensor ${id}`,
+          color: getSensorColor(id),[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\SessionsPage.svelte[39m:453:71
+[31mError[39m: Expected 3 arguments, but got 2. (ts)
+[36m                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-text-secondary hover:bg-metro-hover hover:text-white transition-colors duration-150 text-left"
+                  onclick={(e) => { e.stopPropagation(); HybridBridge.[35msaveFile[36m(`${session.name}.csv`, buildSessionCsv(session)); openMenuId = null; }}
+                >[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\SessionsPage.svelte[39m:460:71
+[31mError[39m: Expected 3 arguments, but got 2. (ts)
+[36m                  class="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-metro-text-secondary hover:bg-metro-hover hover:text-white transition-colors duration-150 text-left"
+                  onclick={(e) => { e.stopPropagation(); HybridBridge.[35msaveFile[36m(`${session.name}.csv`, buildSessionVdCsv(session)); openMenuId = null; }}
+                >[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\TableEditorPage.svelte[39m:1401:14
+[31mError[39m: Type '"input0" | "input1" | "output"' is not assignable to type '"input0" | "output" | undefined'. (ts)
+[36m            {selection}
+            {[35mselectionType[36m}
+            {dirtyCells}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\pages\TableEditorPage.svelte[39m:1481:12
+[31mError[39m: Type 'Record<string, number | null>' is not assignable to type 'Record<string, number>'. (ts)
+[36m          {tableDef}
+          {[35ml[36miveValues}
+          dataLinks={allDataLinks}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\ArcGauge.svelte[39m:128:68
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m
+  const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));
+  const valueSize = $derived(Math.max(14, arcBox * 0.22 * fontSizeScale));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\ArcLayoutSettings.svelte[39m:2:35
+[31mError[39m: Module '"../HybridBridge"' has no exported member 'NeedleCurvePoint'. (ts)
+[36m<script lang="ts">
+  import type { GaugeConfigEntry, [35mNeedleCurvePoint[36m } from '../HybridBridge';
+  import ScaleMarksSettings from './ScaleMarksSettings.svelte';[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\BarGauge.svelte[39m:42:68
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m
+  const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));
+  const valueSize = $derived(Math.max(12, (isHorizontal ? pixelHeight : pixelWidth) * 0.22 * fontSizeScale));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\DigitalGauge.svelte[39m:26:57
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m  const dim = $derived(Math.min(pixelWidth, pixelHeight));
+  const fs = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\LedRingGauge.svelte[39m:27:68
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m
+  const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));
+  const size = $derived(Math.min(pixelWidth, pixelHeight));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\LedRingGauge.svelte[39m:102:52
+[31mError[39m: Object literal may only specify known properties, and '"text-transform"' does not exist in type 'HTMLProps<"text", SVGAttributes<any>>'. (ts)
+[36m      fill="#666666" font-family="'Segoe UI',sans-serif"
+      font-size={nameSize} letter-spacing="0.08em" [35mtext-transform[36m="uppercase">
+      {gauge.name}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\MultiRingGauge.svelte[39m:285:4
+[33mWarn[39m: `<g>` with a mouseenter or mouseleave handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m			{@const stroke = ring.isPrimary ? primaryStroke : ring.color}
+			[35m<g
+				class="mr-ring"
+				class:dimmed
+				onmouseenter={() => { hoveredId = ring.entityId; }}
+				onmouseleave={() => { hoveredId = null; }}
+			>
+				<!-- Track -->
+				<path d={arcPath(ring.r, start, start + sweep)} fill="none"
+					stroke="#141420" stroke-width={ring.w + 2} />
+				<path d={arcPath(ring.r, start, start + sweep)} fill="none"
+					stroke="#0d0d15" stroke-width={ring.w} />
+
+				<!-- Value arc -->
+				{#if ring.frac > 0.004}
+					<path
+						d={arcPath(ring.r, start, start + ring.frac * sweep)}
+						fill="none" stroke={stroke} stroke-width={ring.w} stroke-linecap="round"
+						opacity="0.92" filter="url(#{filterId})"
+						class={ring.isPrimary && gauge.warningState === 'critical' ? 'mr-crit'
+							: ring.isPrimary && gauge.warningState === 'warning' ? 'mr-warn' : ''}
+					/>
+				{/if}
+
+				<!-- Quadrant separators across the band -->
+				{#each TICKS.filter(t => t.major) as t (t.f)}
+					{@const ang = start + t.f * sweep}
+					{@const p1 = polar(ring.r - ring.w / 2 - 2, ang)}
+					{@const p2 = polar(ring.r + ring.w / 2 + 2, ang)}
+					<line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#0a0a12" stroke-width="1.6" />
+				{/each}
+
+				<!-- Outer tick stubs ÔÇö light up as the arc passes them -->
+				{#each TICKS as t (t.f)}
+					{@const ang = start + t.f * sweep}
+					{@const p1 = polar(ring.r + ring.w / 2 + 2.5, ang)}
+					{@const p2 = polar(ring.r + ring.w / 2 + 2.5 + (t.major ? ring.stub : ring.stub - 2), ang)}
+					{@const lit = t.f <= ring.frac + 0.001}
+					<line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+						stroke={lit ? ring.color : '#2c2c3a'}
+						stroke-width={t.major ? 1.4 : 0.8}
+						opacity={lit ? 0.9 : 0.7} />
+				{/each}
+
+				<!-- Per-channel scale numerals: min / mid / max -->
+				{#each SCALE_FRACS as f (f)}
+					{@const ang = start + f * sweep}
+					{@const p = polar(ring.labelR, ang)}
+					{@const lit = f <= ring.frac + 0.001}
+					<text x={p.x} y={p.y} text-anchor="middle" dominant-baseline="central"
+						font-family="'JetBrains Mono',monospace" font-size="6.5" font-weight="600"
+						fill={lit ? ring.color : '#3f3f50'} opacity={lit ? 0.95 : 0.8}>
+						{fmtScale(f === 0 ? ring.minV : f === 1 ? ring.maxV : (ring.minV + ring.maxV) / 2)}
+					</text>
+				{/each}
+
+				<!-- Peak hold marker -->
+				{#if peakHoldOn && ring.peakFrac !== null && ring.peakFrac > 0.004}
+					{@const ang = start + ring.peakFrac * sweep}
+					{@const p1 = polar(ring.r - ring.w / 2 - 1, ang)}
+					{@const p2 = polar(ring.r + ring.w / 2 + 1.5, ang)}
+					<line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+						stroke="#ffffff" stroke-width="1.3" opacity="0.85" />
+				{/if}
+			</g>[36m
+		{/each}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\MultiRingGauge.svelte[39m:391:5
+[33mWarn[39m: `<g>` with a mouseenter or mouseleave handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m				{@const dimmed = hoveredId !== null && !hovered}
+				[35m<g
+					class="mr-chip"
+					class:dimmed
+					onmouseenter={() => { hoveredId = ring.entityId; }}
+					onmouseleave={() => { hoveredId = null; }}
+				>
+					<rect x={x} y="306" width={chipW} height="27"
+						fill={hovered ? '#161624' : '#0f0f18'}
+						stroke={hovered ? ring.color : '#1d1d2b'} stroke-width="0.75" />
+					<rect x={x} y="306" width="2.5" height="27" fill={ring.color} />
+					<text x={x + chipW / 2 + 1} y="314.5" text-anchor="middle"
+						font-family="'Segoe UI',sans-serif" font-size="5" font-weight="600"
+						letter-spacing="0.08em" fill="#565669">
+						{trunc(ring.label, 13).toUpperCase()}
+					</text>
+					<text x={x + chipW / 2 + 1} y="327.5" text-anchor="middle"
+						font-family="'JetBrains Mono',monospace" font-size="10.5" font-weight="700"
+						fill={ring.color}>
+						{fmtVal(ring.value)}<tspan dx="2" font-size="6" fill="#565669">{ring.unit}</tspan>
+					</text>
+				</g>[36m
+			{/each}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\TextGauge.svelte[39m:50:28
+[33mWarn[39m: This reference only captures the initial value of `gauge`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  // displayed value triggers a one-shot CSS transition class (AE1: 0 = off).
+  let prevDisplayedValue = [35mgauge[36m.value;
+  let flashActive = $state(false);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\TextGauge.svelte[39m:24:68
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m  const dim = $derived(Math.min(pixelWidth, pixelHeight));
+  const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));
+  const valueSize = $derived(Math.max(14, dim * 0.22 * fontSizeScale));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\WedgeBarGauge.svelte[39m:28:67
+[31mError[39m: Property 'fontSizeScale' does not exist on type 'GaugeDefinition'. (ts)
+[36m	const style = $derived(gauge.wedgeStyle ?? WedgeStyle.Classic);
+	const fontSizeScale = $derived(Math.max(0.5, Math.min(2.0, gauge.[35mfontSizeScale[36m ?? 1.0)));[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\monitor\PresetSensorPicker.svelte[39m:104:18
+[31mError[39m: Property 'preset' does not exist on type '{ success: boolean; error?: string | undefined; }'. (ts)
+[36m      quickSaveName = '';
+      if (result.[35mpreset[36m) {
+        presetStore.loadPreset(result.preset.id);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\monitor\PresetSensorPicker.svelte[39m:105:39
+[31mError[39m: Property 'preset' does not exist on type '{ success: boolean; error?: string | undefined; }'. (ts)
+[36m      if (result.preset) {
+        presetStore.loadPreset(result.[35mpreset[36m.id);
+      }[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\CurveEditor.svelte[39m:472:105
+[31mError[39m: Property 'toLocaleString' does not exist on type 'never'. (ts)
+[36m          >
+            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.[35mtoLocaleString[36m()}
+          </div>[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableGrid.svelte[39m:38:24
+[31mError[39m: Block-scoped variable 'isMobile' used before its declaration. (ts)
+[36m
+  let cellW = $derived([35misMobile[36m ? 42 : 64);
+  let gridStyle = $derived(isMobile[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableGrid.svelte[39m:38:24
+[31mError[39m: Variable 'isMobile' is used before being assigned. (ts)
+[36m
+  let cellW = $derived([35misMobile[36m ? 42 : 64);
+  let gridStyle = $derived(isMobile[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableGrid.svelte[39m:39:28
+[31mError[39m: Block-scoped variable 'isMobile' used before its declaration. (ts)
+[36m  let cellW = $derived(isMobile ? 42 : 64);
+  let gridStyle = $derived([35misMobile[36m
+    ? `grid-template-columns: 40px repeat(${tableDef.cols}, ${cellW}px); grid-template-rows: 24px repeat(${tableDef.rows}, 1fr); font-size: 8px; height: 100%;`[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableGrid.svelte[39m:39:28
+[31mError[39m: Variable 'isMobile' is used before being assigned. (ts)
+[36m  let cellW = $derived(isMobile ? 42 : 64);
+  let gridStyle = $derived([35misMobile[36m
+    ? `grid-template-columns: 40px repeat(${tableDef.cols}, ${cellW}px); grid-template-rows: 24px repeat(${tableDef.rows}, 1fr); font-size: 8px; height: 100%;`[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableGrid.svelte[39m:357:105
+[31mError[39m: Property 'toLocaleString' does not exist on type 'never'. (ts)
+[36m          >
+            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.[35mtoLocaleString[36m()}
+          </div>[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableSettingsModal.svelte[39m:52:42
+[31mError[39m: Type '(e: CustomEvent) => void' is not assignable to type 'ToggleEventHandler<HTMLDialogElement>'. (ts)
+[36m  <Modal open={open} size="lg" placement="center" outsideclose={true} dismissable={false}
+         class="backdrop:bg-gray-900/80" [35mo[36mntoggle={(e: CustomEvent) => { if (e.detail?.newState === 'closed') handleClose(); }}>
+    <div class="flex items-center justify-between border-b border-gray-700/50 px-4 py-3">[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableToolbar.svelte[39m:17:5
+[31mError[39m: Duplicate identifier 'livePanelOpen'. (ts)
+[36m    showContours?: boolean;
+    [35mlivePanelOpen[36m?: boolean;
+    view3D?: boolean;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableToolbar.svelte[39m:35:5
+[31mError[39m: Duplicate identifier 'livePanelOpen'. (ts)
+[36m    onOpenHistory?: () => void;
+    [35mlivePanelOpen[36m?: boolean;
+    onToggleLivePanel?: () => void;[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableWidget.svelte[39m:291:63
+[31mError[39m: Expected 1 arguments, but got 0. (ts)
+[36m  onclick={handleClick}
+  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') [35mhandleClick[36m(); }}
+>[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableWidget.svelte[39m:294:136
+[31mError[39m: Property 'headerH' does not exist on type '{ rows: number; cols: number; cellW: number; cellH: number; labelW: number; labelH: number; gridW: number; gridH: number; } | { rows: number; cols: number; cellW: number; cellH: number; labelW: number; labelH: number; headerH: number; gridW: number; gridH: number; }'. (ts)
+[36m  <!-- Header -->
+  <div class="flex shrink-0 items-center justify-between border-b px-2 py-1" style="border-color: var(--metro-border); height: {layout.[35mheaderH[36m}px;">
+    <span class="truncate text-[11px] font-bold uppercase tracking-wider {liveOutputVal != null ? 'text-white' : ''}" style="color: {liveOutputVal != null ? '#fff' : 'var(--metro-text-secondary)'};">[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableWidget.svelte[39m:351:70
+[31mError[39m: Argument of type 'string' is not assignable to parameter of type 'ColorScheme | undefined'. (ts)
+[36m              {#each tableData.output as val, c}
+                {@const color = heatColor(val, range.min, range.max, [35mcolorScheme[36m)}
+                {@const opOpacity = opColRange ? rangeOpacity(opColRange, c) : 0}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tables\TableWidget.svelte[39m:420:72
+[31mError[39m: Argument of type 'string' is not assignable to parameter of type 'ColorScheme | undefined'. (ts)
+[36m                  {@const val = getOutputValue(tableData, r, c, layout.cols)}
+                  {@const color = heatColor(val, range.min, range.max, [35mcolorScheme[36m)}
+                  {@const opRowOp = opRowRange ? rangeOpacity(opRowRange, r) : 0}[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\HybridBridge.ts[39m:277:32
+[31mError[39m: Property 'tables' is missing in type '{ found: false; gauges: never[]; gridRows: number; gridColumns: number; }' but required in type 'DashboardConfigResult'. (ts)
+[36m  getDashboardConfig: async (dashboardName: string = 'default'): Promise<DashboardConfigResult> => {
+    if (!isWebViewAvailable()) [35mreturn[36m { found: false, gauges: [], gridRows: 4, gridColumns: 7 };
+    const result = await invokeDotNetLogged('GetDashboardConfig', [dashboardName]);[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\__tests__\legacyCompat.test.ts[39m:2:30
+[31mError[39m: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig. (ts)
+[36mimport { describe, it, expect } from 'vitest';
+import { readFileSync } from [35m'node:fs'[36m;
+import { fileURLToPath } from 'node:url';[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\__tests__\legacyCompat.test.ts[39m:3:31
+[31mError[39m: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig. (ts)
+[36mimport { readFileSync } from 'node:fs';
+import { fileURLToPath } from [35m'node:url'[36m;
+import { dirname, join } from 'node:path';[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\__tests__\legacyCompat.test.ts[39m:4:31
+[31mError[39m: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig. (ts)
+[36mimport { fileURLToPath } from 'node:url';
+import { dirname, join } from [35m'node:path'[36m;
+import { toGaugeDefinition } from '../gaugeUtils';[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:321:5
+[31mError[39m: Object literal may only specify known properties, and 'fontSizeScale' does not exist in type 'GaugeDefinition'. (ts)
+[36m    scale: config.scale,
+    [35mfontSizeScale[36m: config.fontSizeScale,
+    labelVerticalOffset: config.labelVerticalOffset,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:554:29
+[31mError[39m: Property 'chartTimeWindowSec' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    texturePath: def.texturePath,
+    chartTimeWindowSec: def.[35mchartTimeWindowSec[36m,
+    chartYMin: def.chartYMin,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:555:20
+[31mError[39m: Property 'chartYMin' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartTimeWindowSec: def.chartTimeWindowSec,
+    chartYMin: def.[35mchartYMin[36m,
+    chartYMax: def.chartYMax,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:556:20
+[31mError[39m: Property 'chartYMax' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartYMin: def.chartYMin,
+    chartYMax: def.[35mchartYMax[36m,
+    chartLineColor: def.chartLineColor,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:557:25
+[31mError[39m: Property 'chartLineColor' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartYMax: def.chartYMax,
+    chartLineColor: def.[35mchartLineColor[36m,
+    chartLineWidth: def.chartLineWidth,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:558:25
+[31mError[39m: Property 'chartLineWidth' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartLineColor: def.chartLineColor,
+    chartLineWidth: def.[35mchartLineWidth[36m,
+    chartShowGrid: def.chartShowGrid,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:559:24
+[31mError[39m: Property 'chartShowGrid' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartLineWidth: def.chartLineWidth,
+    chartShowGrid: def.[35mchartShowGrid[36m,
+    chartFillUnder: def.chartFillUnder,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:560:25
+[31mError[39m: Property 'chartFillUnder' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartShowGrid: def.chartShowGrid,
+    chartFillUnder: def.[35mchartFillUnder[36m,
+    chartShowLabels: def.chartShowLabels,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:561:26
+[31mError[39m: Property 'chartShowLabels' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartFillUnder: def.chartFillUnder,
+    chartShowLabels: def.[35mchartShowLabels[36m,
+    chartPrecision: def.chartPrecision,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\gauges\gaugeUtils.ts[39m:562:25
+[31mError[39m: Property 'chartPrecision' does not exist on type '{ entityId: number; fractionX: number; fractionY: number; widthFraction: number; heightFraction: number; sweepAngle: number; arcPosition: ArcPosition; digitalStyle: DigitalStyle; wedgeStyle?: number | undefined; needleStartAngle: number; needleEndAngle: number; needleOffsetX: number; needleOffsetY: number; needleWidth: number; needleLength: number; needleCurve?: NeedleCurvePoint[] | undefined; scale: number; fontSizeScale: number; labelVerticalOffset: number; showName: boolean; showUnit: boolean; showValue: boolean; iconName: string | null; iconOffsetX: number; iconOffsetY: number; iconSize: number; smoothingEnabled?: boolean | undefined; smoothingFactor?: number | undefined; smoothingResponseMs?: number | undefined; spikeGatePercent?: number | undefined; barValuePosition: number; barUnitPosition: number; barNamePosition: number; colorStops?: ColorStop[] | undefined; colorHysteresis?: number | undefined; shapeCategory: number; texturePath?: string | null | undefined; textColor?: string | undefined; zIndex: number; transformSteps?: ValueTransformStep[] | undefined; customUnitLabel?: string | null | undefined; showHistogram?: boolean | undefined; linkedEntities?: { entityId: number; color: string; minValue?: number | undefined; maxValue?: number | undefined; }[] | undefined; tickCount?: number | undefined; tickLabels?: boolean | undefined; tickLabelEvery?: number | undefined; tickSide?: number | undefined; redlineStart?: number | undefined; redlineWidth?: number | undefined; redlineColor?: string | undefined; needleShape?: number | undefined; barOrientation?: number | undefined; barThickness?: number | undefined; barTicks?: boolean | undefined; barMinMaxLabels?: boolean | undefined; barRedlineStart?: number | undefined; barRedlineColor?: string | undefined; colorStopColoring?: boolean | undefined; panelStyle?: number | undefined; flashThreshold?: number | undefined; ledColor?: string | undefined; digitBgColor?: string | undefined; glowStrength?: number | undefined; digitDecimals?: number | undefined; zeroPadding?: boolean | undefined; minDigitCount?: number | undefined; rollAnimation?: boolean | undefined; rollSpeedMs?: number | undefined; segmentCount?: number | undefined; segmentGap?: number | undefined; ringStartAngle?: number | undefined; ringSweepAngle?: number | undefined; amberThreshold?: number | undefined; redThreshold?: number | undefined; ringCount?: number | undefined; ringWidth?: number | undefined; ringGap?: number | undefined; peakHoldEnabled?: boolean | undefined; peakHoldAutoResetSec?: number | undefined; wedgeSegmentCount?: number | undefined; wedgeRedlineStart?: number | undefined; chartOverlays?: ChartOverlayLine[] | undefined; overlayPillPosition?: number | undefined; overlayFontScale?: number | undefined; chartLineStyle?: number | undefined; chartBackgroundColor?: string | undefined; }'. (ts)
+[36m    chartShowLabels: def.chartShowLabels,
+    chartPrecision: def.[35mchartPrecision[36m,
+    textColor: def.textColor,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\stores\LiveDataStore.svelte.ts[39m:124:23
+[31mError[39m: Property 'odometer' does not exist on type 'GpsUpdateEvent'. (ts)
+[36m      timestamp: event.timestamp,
+      odometer: event.[35modometer[36m,
+      odometerUnit: event.odometerUnit,[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\stores\LiveDataStore.svelte.ts[39m:125:27
+[31mError[39m: Property 'odometerUnit' does not exist on type 'GpsUpdateEvent'. (ts)
+[36m      odometer: event.odometer,
+      odometerUnit: event.[35modometerUnit[36m,
+    };[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\stores\LiveDataStore.svelte.ts[39m:202:28
+[31mError[39m: Export declaration conflicts with exported declaration of 'OperatingPointSample'. (ts)
+[36mexport const liveDataStore = new LiveDataStore();
+export type { GpsSnapshot, [35mOperatingPointSample[36m };[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:152:27
+[31mError[39m: Property 'x' does not exist on type '{}'. (ts)
+[36m          x: {
+            name: t.axes?.[35mx[36m?.name as string || '',
+            unit: t.axes?.x?.unit as string || '',[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:153:27
+[31mError[39m: Property 'x' does not exist on type '{}'. (ts)
+[36m            name: t.axes?.x?.name as string || '',
+            unit: t.axes?.[35mx[36m?.unit as string || '',
+            values: Array.isArray(t.axes?.x?.values) ? t.axes.x.values as number[] : [],[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:154:43
+[31mError[39m: Property 'x' does not exist on type '{}'. (ts)
+[36m            unit: t.axes?.x?.unit as string || '',
+            values: Array.isArray(t.axes?.[35mx[36m?.values) ? t.axes.x.values as number[] : [],
+          },[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:154:63
+[31mError[39m: Property 'x' does not exist on type '{}'. (ts)
+[36m            unit: t.axes?.x?.unit as string || '',
+            values: Array.isArray(t.axes?.x?.values) ? t.axes.[35mx[36m.values as number[] : [],
+          },[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:156:23
+[31mError[39m: Property 'y' does not exist on type '{}'. (ts)
+[36m          },
+          ...(t.axes?.[35my[36m ? {
+            y: {[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:158:28
+[31mError[39m: Property 'y' does not exist on type '{}'. (ts)
+[36m            y: {
+              name: t.axes.[35my[36m.name as string || '',
+              unit: t.axes.y.unit as string || '',[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:159:28
+[31mError[39m: Property 'y' does not exist on type '{}'. (ts)
+[36m              name: t.axes.y.name as string || '',
+              unit: t.axes.[35my[36m.unit as string || '',
+              values: Array.isArray(t.axes.y.values) ? t.axes.y.values as number[] : [],[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:160:44
+[31mError[39m: Property 'y' does not exist on type '{}'. (ts)
+[36m              unit: t.axes.y.unit as string || '',
+              values: Array.isArray(t.axes.[35my[36m.values) ? t.axes.y.values as number[] : [],
+            }[39m
+
+c:\Hobby\Me221App\src\ME221Dashboard\SvelteApp\[32msrc\lib\tableExport.ts[39m:160:63
+[31mError[39m: Property 'y' does not exist on type '{}'. (ts)
+[36m              unit: t.axes.y.unit as string || '',
+              values: Array.isArray(t.axes.y.values) ? t.axes.[35my[36m.values as number[] : [],
+            }[39m
+
+====================================
+[31msvelte-check found 86 errors and 8 warnings in 31 files
+[39m

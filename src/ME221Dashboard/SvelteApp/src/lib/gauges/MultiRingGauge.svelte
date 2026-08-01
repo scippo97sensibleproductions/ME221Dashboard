@@ -285,6 +285,7 @@
 			<g
 				class="mr-ring"
 				class:dimmed
+				role="presentation"
 				onmouseenter={() => { hoveredId = ring.entityId; }}
 				onmouseleave={() => { hoveredId = null; }}
 			>
@@ -391,6 +392,7 @@
 				<g
 					class="mr-chip"
 					class:dimmed
+					role="presentation"
 					onmouseenter={() => { hoveredId = ring.entityId; }}
 					onmouseleave={() => { hoveredId = null; }}
 				>

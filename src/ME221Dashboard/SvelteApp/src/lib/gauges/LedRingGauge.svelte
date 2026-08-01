@@ -99,7 +99,7 @@
   {#if gauge.showName}
     <text x={cx} y={cy + outerR + ringWidth + nameSize + 4} text-anchor="middle"
       fill="#666666" font-family="'Segoe UI',sans-serif"
-      font-size={nameSize} letter-spacing="0.08em" text-transform="uppercase">
+      font-size={nameSize} letter-spacing="0.08em" style="text-transform: uppercase">
       {gauge.name}
     </text>
   {/if}

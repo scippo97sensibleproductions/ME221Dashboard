@@ -9,7 +9,7 @@
   import type { GaugeDefinition } from '../lib/gauges/types';
   import { pushSample, type ChartSample } from '../lib/gauges/chartDataUtils';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
-  import { computeDerived, type ComputationInputs } from '../lib/derived/compute';
+  import { computeDerived, type ComputationInputs, type ComputationResult } from '../lib/derived/compute';
   import { DERIVED_ENTITIES } from '../lib/derived/types';
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
   import TableWidget from '../lib/tables/TableWidget.svelte';
@@ -18,13 +18,11 @@
 
   let { dashboardName, onNavigate, gpsLocation }: {
     dashboardName: string;
-    onNavigate: (page: string) => void;
+    onNavigate: (page: string, params?: Record<string, unknown>) => void;
     gpsLocation: GpsLocation | null;
   } = $props();
 
   let containerEl = $state<HTMLDivElement | null>(null);
-  let containerWidth = $derived(canvasWidth);
-  let containerHeight = $derived(canvasHeight);
   let gaugeDefs = $state<GaugeConfigEntry[]>([]);
   let entityLookup = $state<Record<string, EntityInfo>>({});
   let entityValues = liveDataStore.values;
@@ -132,7 +130,7 @@
   // ── Derived value computation ──────────────────────────────────────────
   let derivedLookupInjected = false;
 
-  function injectDerived(result: Record<string, number | null>) {
+  function injectDerived(result: ComputationResult) {
     if (!derivedLookupInjected) {
       const entries: Record<string, EntityInfo> = {};
       for (const [idStr, info] of Object.entries(DERIVED_ENTITIES)) {
@@ -318,6 +316,8 @@
     smoothingFactor: number;
     smoothingResponseMs: number;
     spikeGatePercent: number;
+    minValue?: number;
+    maxValue?: number;
     transformSteps?: ValueTransformStep[];
   }): number {
     let v = raw;
@@ -642,20 +642,22 @@
       pendingDragDx = (e.clientX - dragging.startClientX) / containerWidth;
       pendingDragDy = (e.clientY - dragging.startClientY) / containerHeight;
       if (dragRaf === null) {
+        const drag = dragging;
         dragRaf = requestAnimationFrame(() => {
           dragRaf = null;
-          dragging.deltaFracX = pendingDragDx;
-          dragging.deltaFracY = pendingDragDy;
+          drag.deltaFracX = pendingDragDx;
+          drag.deltaFracY = pendingDragDy;
         });
       }
     } else if (tableDragging) {
       pendingDragDx = (e.clientX - tableDragging.startClientX) / containerWidth;
       pendingDragDy = (e.clientY - tableDragging.startClientY) / containerHeight;
       if (dragRaf === null) {
+        const drag = tableDragging;
         dragRaf = requestAnimationFrame(() => {
           dragRaf = null;
-          tableDragging.deltaFracX = pendingDragDx;
-          tableDragging.deltaFracY = pendingDragDy;
+          drag.deltaFracX = pendingDragDx;
+          drag.deltaFracY = pendingDragDy;
         });
       }
     }
@@ -877,6 +879,9 @@
     return Math.round(Math.min(byH, byW));
   });
 
+  let containerWidth = $derived(canvasWidth);
+  let containerHeight = $derived(canvasHeight);
+
   $effect(() => {
     if (containerEl && loaded && gaugeStates.length > 0) {
       observeContainer();
@@ -1059,7 +1064,7 @@
 {#if tableSettingsOpen && tableSettingsEntry}
   <TableSettingsModal
     open={true}
-    {tableSettingsName}
+    tableName={tableSettingsName}
     entry={tableSettingsEntry}
     onclose={handleTableSettingsClose}
     onchange={handleTableSettingsChange}

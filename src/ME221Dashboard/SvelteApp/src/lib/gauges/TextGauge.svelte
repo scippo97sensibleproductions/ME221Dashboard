@@ -47,14 +47,14 @@
 
   // R9 — change flash: jump bigger than flashThreshold × range since the last
   // displayed value triggers a one-shot CSS transition class (AE1: 0 = off).
-  let prevDisplayedValue = gauge.value;
+  let prevDisplayedValue: number | null = null;
   let flashActive = $state(false);
   const valueJump = $derived.by(() => {
     const v = gauge.value;
     const th = gauge.flashThreshold ?? 0;
     const range = gauge.maxValue - gauge.minValue;
     let jumped = false;
-    if (th > 0 && range > 0) {
+    if (th > 0 && range > 0 && prevDisplayedValue != null) {
       jumped = Math.abs(v - prevDisplayedValue) > th * range;
     }
     prevDisplayedValue = v;

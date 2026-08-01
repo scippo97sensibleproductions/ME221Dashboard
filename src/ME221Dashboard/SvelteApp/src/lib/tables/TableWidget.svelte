@@ -12,17 +12,17 @@
     fromRaw,
   } from './types';
   import { IconSettings } from '@tabler/icons-svelte';
-  import type { TableDefinition, TableData, InterpolationRange } from './types';
+  import type { TableDefinition, TableData, InterpolationRange, ColorScheme } from './types';
 
   let { tableId, tableName, onTap, onSettings, colorScheme = 'thermal', showLabels = true, showDimensionBadge = true, maxFontSize }: {
     tableId: number;
     tableName: string;
     onTap: (tableId: number) => void;
     onSettings?: (tableId: number) => void;
-    colorScheme?: string;
+    colorScheme?: ColorScheme;
     showLabels?: boolean;
     showDimensionBadge?: boolean;
-    maxFontSize?: number;
+    maxFontSize?: number | null;
   } = $props();
 
   let tableDef = $state<TableDefinition | null>(null);
@@ -172,7 +172,7 @@
   // Pick cell dimensions to fit
   let layout = $derived.by(() => {
     if (!tableDef || !tableData) {
-      return { rows: 1, cols: 1, cellW: 0, cellH: 0, labelW: 0, labelH: 0, gridW: 0, gridH: 0 };
+      return { rows: 1, cols: 1, cellW: 0, cellH: 0, labelW: 0, labelH: 0, headerH: 26, gridW: 0, gridH: 0 };
     }
     const rows = tableDef.rows;
     const cols = tableDef.cols;
@@ -249,7 +249,7 @@
     if (dx > CLICK_SLOP || dy > CLICK_SLOP) movedDuringPress = true;
   }
 
-  function handleClick(e: MouseEvent) {
+  function handleClick(e?: MouseEvent) {
     // If buttons (settings, retry) were the click target, the parent DashboardPage wrapper
     // has its own pointer capture; we only fire onTap when no movement happened on our own surface.
     if (movedDuringPress) return;

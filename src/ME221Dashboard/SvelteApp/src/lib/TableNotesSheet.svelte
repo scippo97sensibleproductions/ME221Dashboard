@@ -58,7 +58,7 @@
   ></textarea>
   <div class="mt-3 flex gap-2">
     {#if noteText.trim()}
-      <Button color="red" class="!border-red-800/30 !bg-gray-700 !text-red-400 hover:!bg-red-900/30" onclick={deleteNote}>
+      <Button color="danger" class="!border-red-800/30 !bg-gray-700 !text-red-400 hover:!bg-red-900/30" onclick={deleteNote}>
         Delete
       </Button>
     {/if}

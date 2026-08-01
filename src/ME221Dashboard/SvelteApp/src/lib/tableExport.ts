@@ -142,6 +142,12 @@ export function parseImportBundle(yamlString: string): ExportBundle | null {
 
     const tables: ExportTable[] = parsed.tables.map((t: Record<string, unknown>) => {
       const output = t.output as { name?: unknown; unit?: unknown; values?: unknown } | undefined;
+      const axes = t.axes as
+        | {
+            x?: { name?: unknown; unit?: unknown; values?: unknown };
+            y?: { name?: unknown; unit?: unknown; values?: unknown };
+          }
+        | undefined;
       return {
         name: t.name as string,
         category: (t.category as string) || '',
@@ -149,15 +155,15 @@ export function parseImportBundle(yamlString: string): ExportBundle | null {
         description: (t.description as string) || '',
         axes: {
           x: {
-            name: t.axes?.x?.name as string || '',
-            unit: t.axes?.x?.unit as string || '',
-            values: Array.isArray(t.axes?.x?.values) ? t.axes.x.values as number[] : [],
+            name: (axes?.x?.name as string) || '',
+            unit: (axes?.x?.unit as string) || '',
+            values: Array.isArray(axes?.x?.values) ? axes.x.values as number[] : [],
           },
-          ...(t.axes?.y ? {
+          ...(axes?.y ? {
             y: {
-              name: t.axes.y.name as string || '',
-              unit: t.axes.y.unit as string || '',
-              values: Array.isArray(t.axes.y.values) ? t.axes.y.values as number[] : [],
+              name: (axes.y.name as string) || '',
+              unit: (axes.y.unit as string) || '',
+              values: Array.isArray(axes.y.values) ? axes.y.values as number[] : [],
             }
           } : {}),
         },

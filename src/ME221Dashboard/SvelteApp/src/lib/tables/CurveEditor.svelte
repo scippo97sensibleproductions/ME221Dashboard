@@ -14,7 +14,7 @@
     maxVal: number;
     anchor: { row: number; col: number } | null;
     selection: { startRow: number; startCol: number; endRow: number; endCol: number } | null;
-    selectionType?: 'output' | 'input0';
+    selectionType?: 'output' | 'input0' | 'input1';
     dirtyCells: Set<string>;
     dirtyInput0: Set<number>;
     diffMode?: boolean;
@@ -469,7 +469,7 @@
             onpointermove={handlePointerMove}
             onpointercancel={handlePointerCancel}
           >
-            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.toLocaleString()}
+            {formatValueAdaptive(colVal, tableDef.input0DataType)}
           </div>
         {/each}
 

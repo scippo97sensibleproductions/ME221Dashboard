@@ -2,6 +2,7 @@
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo } from './HybridBridge';
   import { GaugeShapeCategory, toGaugeDefinition, formatValue } from './gauges/types';
   import ArcLayoutSettings from './gauges/ArcLayoutSettings.svelte';
+  import ArcNeedleSettings from './gauges/ArcNeedleSettings.svelte';
   import BarGaugeSettings from './gauges/BarGaugeSettings.svelte';
   import DigitalGaugeSettings from './gauges/DigitalGaugeSettings.svelte';
   import ChartGaugeSettings from './gauges/ChartGaugeSettings.svelte';
@@ -703,10 +704,10 @@
       </div>
 
       <!-- Footer -->
-      <svelte:fragment slot="footer">
+      {#snippet footer()}
         <div class="flex w-full justify-end">
           <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600 !text-xs" onclick={onclose}>Close</Button>
         </div>
-      </svelte:fragment>
+      {/snippet}
     </Modal>
 {/if}

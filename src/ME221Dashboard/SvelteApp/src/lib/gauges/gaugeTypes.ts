@@ -63,6 +63,7 @@ export interface GaugeDefinition {
   needleLength: number;
   needleCurve: NeedleCurvePoint[];
   scale: number;
+  fontSizeScale: number;
   labelVerticalOffset: number;
   showName: boolean;
   showUnit: boolean;

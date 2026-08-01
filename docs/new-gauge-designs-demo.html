@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ME221 — New Gauge Design Concepts</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080810;
+    --surface: #0e0e18;
+    --border: #1e1e30;
+    --text: #d8d6d3;
+    --text-muted: #6a6a78;
+    --amber: #e8963e;
+    --amber-dim: #e8963e30;
+    --red-zone: #ef4444;
+    --green: #4ade80;
+    --blue: #38bdf8;
+    --yellow: #facc15;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .page-header {
+    text-align: center;
+    padding: 2.5rem 1rem 0.5rem;
+  }
+  .page-header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: clamp(1.4rem, 3.5vw, 2.4rem);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--amber);
+    text-shadow: 0 0 30px var(--amber-dim);
+  }
+  .page-header p {
+    color: var(--text-muted);
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    max-width: 640px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  .page-header .refs {
+    margin-top: 0.6rem;
+    font-size: 0.7rem;
+    color: #4a4a58;
+    font-style: italic;
+  }
+
+  .gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    max-width: 1400px;
+    margin: 1.5rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+
+  .gauge-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.5rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber) 30%, var(--amber) 70%, transparent);
+    opacity: 0.3;
+  }
+
+  .gauge-card h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 0.2rem;
+  }
+  .gauge-card .subtitle {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: 1.2rem;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .gauge-canvas {
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+  }
+  .gauge-canvas.short { aspect-ratio: 2.1 / 1; }
+  .gauge-canvas.square { aspect-ratio: 1 / 1; max-width: 360px; }
+
+
+  .gauge-meta {
+    margin-top: 0.8rem;
+    display: flex;
+    gap: 1.2rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
+  .gauge-meta span { display: flex; align-items: center; gap: 0.3rem; }
+  .gauge-meta .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+
+  .controls {
+    margin-top: 0.6rem;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+  }
+  .controls label {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    min-width: 40px;
+  }
+  .controls input[type="range"] { flex: 1; accent-color: var(--amber); cursor: pointer; }
+  .controls .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text);
+    min-width: 54px;
+    text-align: right;
+  }
+
+  .hint {
+    text-align: center;
+    font-size: 0.62rem;
+    color: #3a3a48;
+    margin-top: 0.5rem;
+  }
+
+  svg text { user-select: none; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Gauge Concepts</h1>
+  <p>Four linear gauge designs — no arc dials, no needles. Fiat Uno wedge, S2000 curved sweep, multi-ring radial, and LED ring.</p>
+  <div class="refs">Fiat Uno Turbo IE digital dash &middot; Honda S2000 AP1 cluster</div>
+</div>
+
+<div class="gauge-grid">
+
+  <!-- ═══ GAUGE 1: Wedge Bar-Graph ═══ -->
+  <div class="gauge-card">
+    <h2>Wedge Bar-Graph</h2>
+    <p class="subtitle">Horizontal segmented bar that widens toward redline. Fiat Uno RPM style.</p>
+    <div class="gauge-canvas short">
+      <div id="wedge" style="width:100%;height:100%;"></div>
+    </div>
+    <div class="controls">
+      <label>RPM</label>
+      <input type="range" id="wedge-rpm" min="0" max="8000" value="3800" step="100">
+      <span class="val" id="wedge-rpm-val">3800</span>
+    </div>
+    <div class="gauge-meta">
+      <span><span class="dot" style="background:var(--amber)"></span> Normal</span>
+      <span><span class="dot" style="background:var(--red-zone)"></span> Redline</span>
+    </div>
+    <p class="hint">Click gauge to auto-animate</p>
+  </div>
+
+  <!-- ═══ GAUGE 2: S2000 Curved Sweep ═══ -->
+  <div class="gauge-card">
+    <h2>Curved Sweep</h2>
+    <p class="subtitle">Curved segmented bar sweeping upward — S2000 tachometer style.</p>
+    <div class="gauge-canvas short">
+      <div id="sweep" style="width:100%;height:100%;"></div>
+    </div>
+    <div class="controls">
+      <label>RPM</label>
+      <input type="range" id="sweep-rpm" min="0" max="9000" value="4500" step="100">
+      <span class="val" id="sweep-rpm-val">4500</span>
+    </div>
+    <div class="gauge-meta">
+      <span><span class="dot" style="background:#ff6a00"></span> Orange sweep</span>
+      <span><span class="dot" style="background:var(--red-zone)"></span> Redline 8k</span>
+    </div>
+    <p class="hint">Click gauge to auto-animate</p>
+  </div>
+
+  <!-- ═══ GAUGE 3: Multi-Ring Radial ═══ -->
+  <div class="gauge-card">
+    <h2>Multi-Ring Radial</h2>
+    <p class="subtitle">Three concentric arcs — RPM, Boost, AFR at a glance.</p>
+    <div class="gauge-canvas square">
+      <div id="radial" style="width:100%;height:100%;"></div>
+    </div>
+    <div class="controls">
+      <label>RPM</label>
+      <input type="range" id="radial-rpm" min="0" max="8000" value="5200" step="100">
+      <span class="val" id="radial-rpm-val">5200</span>
+    </div>
+    <div class="controls">
+      <label>Boost</label>
+      <input type="range" id="radial-boost" min="0" max="30" value="16" step="0.5">
+      <span class="val" id="radial-boost-val">16 psi</span>
+    </div>
+    <div class="controls">
+      <label>AFR</label>
+      <input type="range" id="radial-afr" min="10" max="20" value="14.7" step="0.1">
+      <span class="val" id="radial-afr-val">14.7</span>
+    </div>
+    <p class="hint">Click gauge to auto-animate</p>
+  </div>
+
+  <!-- ═══ GAUGE 4: Radial LED Ring ═══ -->
+  <div class="gauge-card">
+    <h2>LED Ring</h2>
+    <p class="subtitle">Segments in a circle, progressive fill, digital center. Like a modern fuel gauge on steroids.</p>
+    <div class="gauge-canvas square">
+      <div id="ledring" style="width:100%;height:100%;"></div>
+    </div>
+    <div class="controls">
+      <label>Value</label>
+      <input type="range" id="led-val" min="0" max="100" value="64">
+      <span class="val" id="led-val-disp">64%</span>
+    </div>
+    <div class="gauge-meta">
+      <span><span class="dot" style="background:var(--blue)"></span> Low</span>
+      <span><span class="dot" style="background:var(--amber)"></span> Mid</span>
+      <span><span class="dot" style="background:var(--red-zone)"></span> High</span>
+    </div>
+    <p class="hint">Click gauge to auto-animate</p>
+  </div>
+
+</div>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Utility
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const polarToCart = (cx, cy, r, angleDeg) => {
+  const rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+};
+const describeArc = (cx, cy, r, startAngle, endAngle) => {
+  const s = polarToCart(cx, cy, r, endAngle);
+  const e = polarToCart(cx, cy, r, startAngle);
+  const large = endAngle - startAngle > 180 ? 1 : 0;
+  return `M${s.x},${s.y} A${r},${r} 0 ${large} 0 ${e.x},${e.y}`;
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  1. Horizontal Wedge Bar-Graph (Fiat Uno RPM)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function drawWedge(container, fraction) {
+  const W = 440, H = 210;
+  const pad = { l: 24, r: 16, t: 14, b: 44 };
+  const barAreaW = W - pad.l - pad.r;
+  const barAreaH = H - pad.t - pad.b;
+  const totalSegments = 32;
+  const segGap = 3;
+  const segW = (barAreaW - (totalSegments - 1) * segGap) / totalSegments;
+  const activeCount = Math.round(fraction * totalSegments);
+  const redlineStart = 0.8;
+  const minH = barAreaH * 0.22;
+  const maxH = barAreaH * 0.92;
+
+  const segColor = (i) => {
+    const f = i / totalSegments;
+    if (f >= redlineStart) return '#ef4444';
+    if (f >= redlineStart - 0.04) return '#f97316';
+    return '#e8963e';
+  };
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<defs>
+    <filter id="wg"><feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="wg2"><feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  svg += `<rect x="${pad.l-2}" y="${pad.t+barAreaH*0.06}" width="${barAreaW+4}" height="${maxH+4}" rx="3" fill="#0a0a14" stroke="#1a1a28" stroke-width="0.5"/>`;
+
+  for (let i = 0; i < totalSegments; i++) {
+    const x = pad.l + i * (segW + segGap);
+    const segFrac = (i + 0.5) / totalSegments;
+    const h = lerp(minH, maxH, segFrac);
+    const y = pad.t + barAreaH - h;
+    const active = i < activeCount;
+    const col = active ? segColor(i) : '#14141e';
+    const f = i / totalSegments;
+    const useF = active && f >= redlineStart ? 'filter="url(#wg2)"' : active ? 'filter="url(#wg)"' : '';
+    svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${segW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${col}" opacity="${active?1:0.5}" ${useF}/>`;
+  }
+
+  const scaleMarks = [0, 10, 20, 30, 40, 50, 60, 70];
+  const scaleY = pad.t + barAreaH + 16;
+  for (let i = 0; i < scaleMarks.length; i++) {
+    const f = i / (scaleMarks.length - 1);
+    const x = pad.l + f * barAreaW;
+    const rl = scaleMarks[i] >= 60;
+    svg += `<text x="${x}" y="${scaleY}" text-anchor="middle" fill="${rl?'#ef4444':'#6a6a78'}" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">${scaleMarks[i]}</text>`;
+    svg += `<line x1="${x}" y1="${pad.t+barAreaH+2}" x2="${x}" y2="${pad.t+barAreaH+7}" stroke="${rl?'#ef444450':'#2a2a38'}" stroke-width="1"/>`;
+  }
+  svg += `<text x="${pad.l+barAreaW}" y="${scaleY+14}" text-anchor="end" fill="#4a4a58" font-family="Inter,sans-serif" font-size="8" letter-spacing="0.05em">x 100 RPM</text>`;
+
+  const rpmVal = Math.round(fraction * 8000);
+  svg += `<rect x="${W-pad.r-90}" y="${pad.t}" width="90" height="28" rx="4" fill="#0a0a14cc" stroke="#1a1a28" stroke-width="0.5"/>`;
+  svg += `<text x="${W-pad.r-4}" y="${pad.t+18}" text-anchor="end" fill="${fraction>=redlineStart?'#ef4444':'#e8963e'}" font-family="Orbitron,sans-serif" font-size="16" font-weight="700" filter="${fraction>=redlineStart?'url(#wg2)':'url(#wg)'}">${rpmVal}</text>`;
+  svg += `<text x="${pad.l}" y="${pad.t+10}" fill="#4a4a58" font-family="Inter,sans-serif" font-size="8" letter-spacing="0.1em">RPM</text>`;
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  2. S2000 Curved Sweep (fixed — wide 260° arc, full range visible)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function drawSweep(container, fraction) {
+  const W = 440, H = 220;
+  const cx = W / 2, cy = H + 60;
+  const arcR = 200;
+  const totalSegments = 44;
+  const segThickness = 13;
+  const redlineStart = 0.82;
+
+  // Wide 260° sweep: from lower-left to lower-right, arcing over the top
+  const startAngle = -130;
+  const endAngle = 130;
+  const sweep = endAngle - startAngle; // 260°
+
+  const segColor = (i) => {
+    const f = i / totalSegments;
+    if (f >= redlineStart) return '#ef4444';
+    if (f >= redlineStart - 0.04) return '#ff5500';
+    return '#ff6a00';
+  };
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<defs>
+    <filter id="sw"><feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="sw2"><feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="sweep-clip"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>
+  </defs>`;
+
+  svg += `<g clip-path="url(#sweep-clip)">`;
+
+  // Background track
+  const bgS = polarToCart(cx, cy, arcR, startAngle);
+  const bgE = polarToCart(cx, cy, arcR, endAngle);
+  svg += `<path d="M${bgE.x},${bgE.y} A${arcR},${arcR} 0 1 0 ${bgS.x},${bgS.y}" fill="none" stroke="#141420" stroke-width="${segThickness + 6}" stroke-linecap="round"/>`;
+
+  // Segments
+  const activeCount = Math.round(fraction * totalSegments);
+  const pad = 8;
+  const usableSweep = sweep - pad * 2;
+
+  for (let i = 0; i < totalSegments; i++) {
+    const f = i / totalSegments;
+    const angle = startAngle + pad + f * usableSweep;
+    const active = i < activeCount;
+    const col = active ? segColor(i) : '#1a1a24';
+    const opacity = active ? 1 : 0.35;
+
+    const p1 = polarToCart(cx, cy, arcR - segThickness / 2, angle);
+    const p2 = polarToCart(cx, cy, arcR + segThickness / 2, angle);
+    const useF = active && f >= redlineStart ? 'filter="url(#sw2)"' : active ? 'filter="url(#sw)"' : '';
+
+    svg += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${col}" stroke-width="${(usableSweep / totalSegments) * arcR * 0.5}" stroke-linecap="round" opacity="${opacity}" ${useF}/>`;
+  }
+
+  // Scale numbers
+  const numLabels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  for (let i = 0; i < numLabels.length; i++) {
+    const f = i / (numLabels.length - 1);
+    const angle = startAngle + pad + f * usableSweep;
+    const p = polarToCart(cx, cy, arcR + segThickness / 2 + 16, angle);
+    const isRedline = numLabels[i] >= 8;
+    svg += `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central"
+      fill="${isRedline ? '#ef4444' : '#6a6a78'}" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">${numLabels[i]}</text>`;
+  }
+
+  // "x1000r/min" label near the 1K mark
+  const lp = polarToCart(cx, cy, arcR + segThickness / 2 + 30, startAngle + pad + 0.1 * usableSweep);
+  svg += `<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" text-anchor="start" fill="#4a4a58" font-family="Inter,sans-serif" font-size="7" letter-spacing="0.05em">x1000r/min</text>`;
+
+  // Digital readout
+  const rpmVal = Math.round(fraction * 9000);
+  const readoutX = W / 2, readoutY = H - 16;
+  svg += `<rect x="${readoutX - 60}" y="${readoutY - 16}" width="120" height="34" rx="5" fill="#0a0a14dd" stroke="#1a1a28" stroke-width="0.5"/>`;
+  svg += `<text x="${readoutX}" y="${readoutY + 3}" text-anchor="middle" dominant-baseline="central"
+    fill="${fraction >= redlineStart ? '#ef4444' : '#ff6a00'}" font-family="Orbitron,sans-serif" font-size="22" font-weight="900"
+    filter="${fraction >= redlineStart ? 'url(#sw2)' : 'url(#sw)' }">${rpmVal}</text>`;
+  svg += `<text x="${readoutX}" y="${readoutY + 24}" text-anchor="middle" fill="#4a4a58" font-family="Inter,sans-serif" font-size="8" letter-spacing="0.15em">RPM</text>`;
+
+  svg += `</g>`;
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  3. Multi-Ring Radial
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function drawRadial(container, rpmFrac, boostFrac, afrFrac) {
+  const size = 360;
+  const cx = size / 2, cy = size / 2;
+  const sweep = 270, startAngle = 135;
+
+  const rings = [
+    { r: 150, w: 14, frac: clamp(rpmFrac,0,1), color: '#e8963e', label: 'RPM', val: Math.round(rpmFrac*8000) },
+    { r: 124, w: 11, frac: clamp(boostFrac,0,1), color: '#38bdf8', label: 'BOOST', val: (boostFrac*30).toFixed(1)+' psi' },
+    { r: 102, w: 9,  frac: clamp(afrFrac,0,1), color: '#4ade80', label: 'AFR', val: (10+afrFrac*10).toFixed(1) },
+  ];
+
+  let svg = `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<defs><filter id="rg"><feGaussianBlur stdDeviation="3" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+
+  for (const ring of rings) {
+    svg += `<path d="${describeArc(cx,cy,ring.r,startAngle,startAngle+sweep)}" fill="none" stroke="#141420" stroke-width="${ring.w}" stroke-linecap="round"/>`;
+    if (ring.frac > 0.005)
+      svg += `<path d="${describeArc(cx,cy,ring.r,startAngle,startAngle+ring.frac*sweep)}" fill="none" stroke="${ring.color}" stroke-width="${ring.w}" stroke-linecap="round" filter="url(#rg)" opacity="0.9"/>`;
+    if (ring.r === 150) {
+      for (let i = 0; i <= 8; i++) {
+        const a = startAngle + (i/8)*sweep;
+        const p1 = polarToCart(cx,cy,ring.r-ring.w/2-4,a);
+        const p2 = polarToCart(cx,cy,ring.r+ring.w/2+4,a);
+        svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#2a2a38" stroke-width="0.8"/>`;
+        const pn = polarToCart(cx,cy,ring.r+ring.w/2+14,a);
+        svg += `<text x="${pn.x}" y="${pn.y}" text-anchor="middle" dominant-baseline="central" fill="#4a4a58" font-family="JetBrains Mono,monospace" font-size="8" font-weight="600">${i}</text>`;
+      }
+    }
+    const la = startAngle+sweep+8;
+    const lp = polarToCart(cx,cy,ring.r,la);
+    svg += `<text x="${lp.x+4}" y="${lp.y}" text-anchor="start" dominant-baseline="central" fill="${ring.color}" font-family="Inter,sans-serif" font-size="7" font-weight="600" letter-spacing="0.08em" opacity="0.6">${ring.label}</text>`;
+  }
+
+  svg += `<circle cx="${cx}" cy="${cy}" r="68" fill="#0a0a14" stroke="#1a1a28" stroke-width="1"/>`;
+  svg += `<text x="${cx}" y="${cy-16}" text-anchor="middle" dominant-baseline="central" fill="#e8963e" font-family="Orbitron,sans-serif" font-size="28" font-weight="900" filter="url(#rg)">${Math.round(rpmFrac*8000)}</text>`;
+  svg += `<text x="${cx}" y="${cy+4}" text-anchor="middle" fill="#4a4a58" font-family="Inter,sans-serif" font-size="8" letter-spacing="0.15em">RPM</text>`;
+  svg += `<line x1="${cx-28}" y1="${cy+16}" x2="${cx+28}" y2="${cy+16}" stroke="#1a1a28" stroke-width="0.5"/>`;
+  svg += `<text x="${cx}" y="${cy+30}" text-anchor="middle" fill="#38bdf8" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" filter="url(#rg)">${(boostFrac*30).toFixed(1)} <tspan fill="#4a4a58" font-size="8">psi</tspan></text>`;
+  svg += `<text x="${cx}" y="${cy+48}" text-anchor="middle" fill="#4ade80" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" filter="url(#rg)">${(10+afrFrac*10).toFixed(1)} <tspan fill="#4a4a58" font-size="8">AFR</tspan></text>`;
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  4. Radial LED Ring
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function drawLedRing(container, fraction) {
+  const size = 360;
+  const cx = size / 2, cy = size / 2;
+  const totalSegments = 36;
+  const ringR = 138;
+  const segLen = 18;
+  const segGap = 1.5;
+  const sweep = 340;
+  const startAngle = 190;
+  const activeCount = Math.round(fraction * totalSegments);
+
+  const segColor = (i) => {
+    const f = i / totalSegments;
+    if (f < 0.35) return '#38bdf8';
+    if (f < 0.6) return '#4ade80';
+    if (f < 0.8) return '#e8963e';
+    return '#ef4444';
+  };
+
+  let svg = `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<defs>
+    <filter id="lr"><feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="lr2"><feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  // Outer ring track
+  svg += `<circle cx="${cx}" cy="${cy}" r="${ringR}" fill="none" stroke="#141420" stroke-width="${segLen + 2}"/>`;
+
+  // Inner subtle ring
+  svg += `<circle cx="${cx}" cy="${cy}" r="${ringR - segLen / 2 - 4}" fill="none" stroke="#1a1a28" stroke-width="0.5"/>`;
+  svg += `<circle cx="${cx}" cy="${cy}" r="${ringR + segLen / 2 + 4}" fill="none" stroke="#1a1a28" stroke-width="0.5"/>`;
+
+  // Segments
+  const pad = 10;
+  const usableSweep = sweep - pad * 2;
+  const segAngularWidth = (usableSweep / totalSegments) * 0.65;
+
+  for (let i = 0; i < totalSegments; i++) {
+    const f = i / totalSegments;
+    const midAngle = startAngle + pad + f * usableSweep;
+    const active = i < activeCount;
+    const col = active ? segColor(i) : '#1a1a24';
+    const opacity = active ? 1 : 0.3;
+    const useF = active && f >= 0.8 ? 'filter="url(#lr2)"' : active ? 'filter="url(#lr)"' : '';
+
+    // Draw segment as an arc chunk
+    const a1 = midAngle - segAngularWidth / 2;
+    const a2 = midAngle + segAngularWidth / 2;
+    const p1 = polarToCart(cx, cy, ringR - segLen / 2, a1);
+    const p2 = polarToCart(cx, cy, ringR + segLen / 2, a1);
+    const p3 = polarToCart(cx, cy, ringR + segLen / 2, a2);
+    const p4 = polarToCart(cx, cy, ringR - segLen / 2, a2);
+    const large = segAngularWidth > 180 ? 1 : 0;
+
+    const d = `M${p1.x.toFixed(1)},${p1.y.toFixed(1)} L${p2.x.toFixed(1)},${p2.y.toFixed(1)} A${ringR + segLen / 2},${ringR + segLen / 2} 0 ${large} 1 ${p3.x.toFixed(1)},${p3.y.toFixed(1)} L${p4.x.toFixed(1)},${p4.y.toFixed(1)} A${ringR - segLen / 2},${ringR - segLen / 2} 0 ${large} 0 ${p1.x.toFixed(1)},${p1.y.toFixed(1)} Z`;
+    svg += `<path d="${d}" fill="${col}" opacity="${opacity}" ${useF}/>`;
+  }
+
+  // Center disc
+  svg += `<circle cx="${cx}" cy="${cy}" r="82" fill="#0a0a14"/>`;
+  svg += `<circle cx="${cx}" cy="${cy}" r="82" fill="none" stroke="#1a1a28" stroke-width="1"/>`;
+
+  // Percentage value
+  const pctVal = Math.round(fraction * 100);
+  svg += `<text x="${cx}" y="${cy - 10}" text-anchor="middle" dominant-baseline="central"
+    fill="${fraction >= 0.8 ? '#ef4444' : '#e8e6e3'}" font-family="Orbitron,sans-serif" font-size="48" font-weight="900"
+    filter="url(#lr)">${pctVal}</text>`;
+
+  // Percent symbol
+  svg += `<text x="${cx}" y="${cy + 28}" text-anchor="middle" fill="#4a4a58"
+    font-family="Orbitron,sans-serif" font-size="14" font-weight="500">%</text>`;
+
+  // Ring labels at start and end
+  const startP = polarToCart(cx, cy, ringR + segLen / 2 + 14, startAngle + pad);
+  const endP = polarToCart(cx, cy, ringR + segLen / 2 + 14, startAngle + pad + usableSweep);
+  svg += `<text x="${startP.x}" y="${startP.y}" text-anchor="middle" dominant-baseline="central"
+    fill="#4a4a58" font-family="JetBrains Mono,monospace" font-size="8" font-weight="600">0</text>`;
+  svg += `<text x="${endP.x}" y="${endP.y}" text-anchor="middle" dominant-baseline="central"
+    fill="#ef4444" font-family="JetBrains Mono,monospace" font-size="8" font-weight="600">100</text>`;
+
+  // Color legend around the bottom
+  const legendY = cy + 92;
+  const legendItems = [
+    { label: 'LOW', color: '#38bdf8', x: cx - 60 },
+    { label: 'OK', color: '#4ade80', x: cx - 15 },
+    { label: 'WARM', color: '#e8963e', x: cx + 30 },
+    { label: 'HOT', color: '#ef4444', x: cx + 78 },
+  ];
+  for (const item of legendItems) {
+    svg += `<circle cx="${item.x}" cy="${legendY}" r="3" fill="${item.color}" opacity="0.7"/>`;
+    svg += `<text x="${item.x + 7}" y="${legendY + 1}" text-anchor="start" dominant-baseline="central"
+      fill="#4a4a58" font-family="Inter,sans-serif" font-size="6.5" letter-spacing="0.05em">${item.label}</text>`;
+  }
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Wiring
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const $ = id => document.getElementById(id);
+
+function updateWedge() {
+  const v = +$('wedge-rpm').value;
+  $('wedge-rpm-val').textContent = v;
+  drawWedge($('wedge'), v / 8000);
+}
+function updateSweep() {
+  const v = +$('sweep-rpm').value;
+  $('sweep-rpm-val').textContent = v;
+  drawSweep($('sweep'), v / 9000);
+}
+function updateRadial() {
+  const r = +$('radial-rpm').value, b = +$('radial-boost').value, a = +$('radial-afr').value;
+  $('radial-rpm-val').textContent = r;
+  $('radial-boost-val').textContent = b + ' psi';
+  $('radial-afr-val').textContent = a.toFixed(1);
+  drawRadial($('radial'), r / 8000, b / 30, (a - 10) / 10);
+}
+function updateLed() {
+  const v = +$('led-val').value;
+  $('led-val-disp').textContent = v + '%';
+  drawLedRing($('ledring'), v / 100);
+}
+
+$('wedge-rpm').addEventListener('input', updateWedge);
+$('sweep-rpm').addEventListener('input', updateSweep);
+$('radial-rpm').addEventListener('input', updateRadial);
+$('radial-boost').addEventListener('input', updateRadial);
+$('radial-afr').addEventListener('input', updateRadial);
+$('led-val').addEventListener('input', updateLed);
+
+updateWedge(); updateSweep(); updateRadial(); updateLed();
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Auto-animate
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let animating = false, animFrame;
+function autoAnimate() {
+  if (!animating) return;
+  const t = Date.now() / 1000;
+  const rpm = clamp(2000 + Math.sin(t*0.5)*2500 + Math.sin(t*4.7)*200 + Math.sin(t*7.3)*100, 0, 8000);
+  const boost = clamp(2 + (rpm/8000)*22 + Math.sin(t*1.3)*3, 0, 30);
+  const afr = clamp(14.7 - (rpm/8000)*3 + Math.sin(t*0.9)*1.5, 10, 20);
+  const ledVal = clamp(30 + Math.sin(t*0.4)*25 + (rpm/8000)*30, 0, 100);
+  const sweep9k = clamp(rpm * 1.1, 0, 9000);
+
+  $('wedge-rpm').value = Math.round(rpm);
+  $('sweep-rpm').value = Math.round(sweep9k);
+  $('radial-rpm').value = Math.round(rpm);
+  $('radial-boost').value = boost.toFixed(1);
+  $('radial-afr').value = afr.toFixed(1);
+  $('led-val').value = Math.round(ledVal);
+
+  updateWedge(); updateSweep(); updateRadial(); updateLed();
+  animFrame = requestAnimationFrame(autoAnimate);
+}
+
+document.querySelectorAll('.gauge-canvas').forEach(el => {
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', () => {
+    animating = !animating;
+    if (animating) autoAnimate(); else cancelAnimationFrame(animFrame);
+  });
+});
+</script>
+
+</body>
+</html>

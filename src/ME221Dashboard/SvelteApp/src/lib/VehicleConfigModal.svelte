@@ -71,11 +71,11 @@
 </script>
 
 <Modal bind:open size="lg" placement="center" outsideclose={true} class="backdrop:bg-gray-900/80" ontoggle={(e) => { if (e.newState === 'closed') onclose(); }}>
-  <svelte:fragment slot="header">
+  {#snippet header()}
     <div class="flex w-full items-center justify-between">
       <h2 class="text-base font-semibold text-gray-100">Derived Values</h2>
     </div>
-  </svelte:fragment>
+  {/snippet}
 
   <!-- Tabs -->
   <div class="-mx-5 -mt-5 mb-4 flex border-b border-gray-700 px-4">
@@ -157,12 +157,12 @@
     {/if}
   </div>
 
-  <svelte:fragment slot="footer">
+  {#snippet footer()}
     {#if tab !== 'gauges'}
       <div class="flex w-full justify-end gap-2">
         <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600" onclick={onclose}>Cancel</Button>
         <Button class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600" onclick={handleSave}>Save</Button>
       </div>
     {/if}
-  </svelte:fragment>
+  {/snippet}
 </Modal>

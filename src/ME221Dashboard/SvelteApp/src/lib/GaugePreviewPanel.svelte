@@ -157,7 +157,7 @@
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500" />
             <NumberInput
-              value={useTestValue ? testValue : liveValue}
+              value={useTestValue ? (testValue ?? 0) : (liveValue ?? 0)}
               min={Math.floor(minValue)}
               max={Math.ceil(maxValue)}
               unit={entityInfo?.unit ?? ''}
@@ -193,7 +193,7 @@
             [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-cyan-500/30" />
         <div class="mt-2">
           <NumberInput
-            value={useTestValue ? testValue : liveValue}
+            value={useTestValue ? (testValue ?? 0) : (liveValue ?? 0)}
             min={Math.floor(minValue)}
             max={Math.ceil(maxValue)}
             unit={entityInfo?.unit ?? ''}

@@ -435,6 +435,8 @@ export interface GpsUpdateEvent {
   course?: number;
   accuracy?: number;
   timestamp: string;
+  odometer?: number;
+  odometerUnit?: string;
 }
 
 export interface OdometerUpdateEvent {

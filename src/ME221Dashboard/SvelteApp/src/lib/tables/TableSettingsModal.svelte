@@ -49,7 +49,7 @@
 
 {#if open && draft}
   <Modal open={open} size="lg" placement="center" outsideclose={true} dismissable={false}
-         class="backdrop:bg-gray-900/80" ontoggle={(e: CustomEvent) => { if (e.detail?.newState === 'closed') handleClose(); }}>
+         class="backdrop:bg-gray-900/80" ontoggle={(e) => { if (e.newState === 'closed') handleClose(); }}>
     <div class="flex items-center justify-between border-b border-gray-700/50 px-4 py-3">
       <div>
         <h3 class="text-sm font-bold text-cyan-400">{tableName}</h3>

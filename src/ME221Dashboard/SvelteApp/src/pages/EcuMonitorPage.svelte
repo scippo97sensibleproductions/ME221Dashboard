@@ -1,5 +1,5 @@
 <script lang="ts">
-  import StreamingLineChart from '../lib/echarts/StreamingLineChart.svelte';
+  import StreamingLineChart from '../lib/charts/StreamingLineChart.svelte';
   import SensorPicker from '../lib/monitor/PresetSensorPicker.svelte';
   import EcuInfoPanel from '../lib/monitor/EcuInfoPanel.svelte';
   import { SessionRecorder, type RecordingState } from '../lib/monitor/SessionRecorder';
@@ -9,6 +9,7 @@
   import { deviceMode } from '../lib/stores/deviceMode.svelte';
   import type { DataLinkDefinition } from '../lib/HybridBridgeTypes';
   import { getSensorColor } from '../lib/monitor/sensorColors';
+  import type { RangeStats } from '../lib/monitor/StatsComputer';
   import {
     IconChartLine, IconAdjustments, IconCircleDotted,
     IconBookmark, IconPlayerPlay, IconPlayerStop, IconStack2,

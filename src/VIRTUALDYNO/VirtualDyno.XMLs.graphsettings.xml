@@ -1,0 +1,31 @@
+<?xml version="1.0" standalone="yes"?>
+<GraphSettings xmlns="http://tempuri.org/GraphSettings.xsd">
+  <GraphSettings>
+    <ShowDataPoints>false</ShowDataPoints>
+    <AutoTrimTPS>true</AutoTrimTPS>
+    <IncludeAFR>true</IncludeAFR>
+    <SmoothingFactor>1</SmoothingFactor>
+    <DynoCorrectionFactor>1.09</DynoCorrectionFactor>
+    <DynoName>DynoJet</DynoName>
+    <BackgroundTransparency>0</BackgroundTransparency>
+    <BackgroundStretch>true</BackgroundStretch>
+    <IncludeBoost>true</IncludeBoost>
+    <BezierSmoothing>false</BezierSmoothing>
+    <GraphBackgroundColor>-1</GraphBackgroundColor>
+    <ChartBackgroundColor>-1</ChartBackgroundColor>
+    <SmoothAFRBoost>false</SmoothAFRBoost>
+    <MetricHP>false</MetricHP>
+    <MetricTQ>false</MetricTQ>
+    <ShowMaximums>true</ShowMaximums>
+    <LineThickness>2.50</LineThickness>
+    <MetricWeightandTemp>false</MetricWeightandTemp>
+    <ShowLegend>true</ShowLegend>
+    <ConvertBoost>PSI</ConvertBoost>
+    <ShowConfirmCloseMessage>true</ShowConfirmCloseMessage>
+  </GraphSettings>
+  <Layout>
+    <Width>973</Width>
+    <Height>740</Height>
+    <IsMaximized>false</IsMaximized>
+  </Layout>
+</GraphSettings>

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { HybridBridge } from '../lib/HybridBridge';
+  import type { EcuInfoResult } from '../lib/HybridBridgeTypes';
   import { IconDownload, IconUpload, IconCar, IconPackage, IconFileCode, IconCheck, IconX, IconLoader2, IconInfoCircle } from '@tabler/icons-svelte';
   import MecalImportPreview from '../lib/MecalImportPreview.svelte';
 
   let connected = $state(false);
-  let ecuInfo = $state<{ product: string; model: string; version: string } | null>(null);
+  let ecuInfo = $state<EcuInfoResult | null>(null);
 
   // ── Calibration state ──
   let calExporting = $state(false);

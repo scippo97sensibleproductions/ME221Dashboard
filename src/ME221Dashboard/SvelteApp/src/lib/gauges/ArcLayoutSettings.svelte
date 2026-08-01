@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { GaugeConfigEntry, NeedleCurvePoint } from '../HybridBridge';
+  import type { GaugeConfigEntry } from '../HybridBridge';
+  import type { NeedleCurvePoint } from './gaugeTypes';
   import ScaleMarksSettings from './ScaleMarksSettings.svelte';
   import RedlineBandSettings from './RedlineBandSettings.svelte';
 

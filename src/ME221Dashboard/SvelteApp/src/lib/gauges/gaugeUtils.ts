@@ -461,6 +461,16 @@ export function toSavePayload(def: {
   colorHysteresis?: number;
   shapeCategory: number;
   texturePath?: string | null;
+  // Chart-specific
+  chartTimeWindowSec?: number;
+  chartYMin?: number | null;
+  chartYMax?: number | null;
+  chartLineColor?: string;
+  chartLineWidth?: number;
+  chartShowGrid?: boolean;
+  chartFillUnder?: boolean;
+  chartShowLabels?: boolean;
+  chartPrecision?: number;
   textColor?: string;
   zIndex: number;
   transformSteps?: ValueTransformStep[];

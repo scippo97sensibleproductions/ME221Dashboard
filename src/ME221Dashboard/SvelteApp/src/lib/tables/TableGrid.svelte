@@ -35,6 +35,9 @@
     onContextMenu?: (e: MouseEvent, row: number, col: number, type: 'output' | 'input0' | 'input1') => void;
   } = $props();
 
+  // ── Component state ───────────────────────────────────────────────────
+  let isMobile = $derived(deviceMode.uiMode === 'mobile');
+
   let cellW = $derived(isMobile ? 42 : 64);
   let gridStyle = $derived(isMobile
     ? `grid-template-columns: 40px repeat(${tableDef.cols}, ${cellW}px); grid-template-rows: 24px repeat(${tableDef.rows}, 1fr); font-size: 8px; height: 100%;`
@@ -68,8 +71,6 @@
       return `rgb(${r}, 40, 40)`;
     }
   }
-
-  let isMobile = $derived(deviceMode.uiMode === 'mobile');
 
   let longPressTimer = 0;
   let longPressTriggered = false;
@@ -354,7 +355,7 @@
             onpointermove={handlePointerMove}
             onpointercancel={handlePointerCancel}
           >
-            {typeof colVal === 'number' ? formatValueAdaptive(colVal, tableDef.input0DataType) : colVal.toLocaleString()}
+            {formatValueAdaptive(colVal, tableDef.input0DataType)}
           </div>
         {/each}
 

@@ -34,6 +34,7 @@ import type {
   UiMode,
 } from './HybridBridgeTypes';
 import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
+import type { TableDefinition } from './tables/types';
 
 // Re-export all types for backward compatibility
 export type {
@@ -274,7 +275,7 @@ export const HybridBridge = {
   },
 
   getDashboardConfig: async (dashboardName: string = 'default'): Promise<DashboardConfigResult> => {
-    if (!isWebViewAvailable()) return { found: false, gauges: [], gridRows: 4, gridColumns: 7 };
+    if (!isWebViewAvailable()) return { found: false, gauges: [], tables: [], gridRows: 4, gridColumns: 7 };
     const result = await invokeDotNetLogged('GetDashboardConfig', [dashboardName]);
     return JSON.parse(result);
   },
@@ -361,13 +362,7 @@ export const HybridBridge = {
 
   // ─── Table Methods ────────────────────────────────────────────────────────
 
-  getTableDefinitions: async (): Promise<{ tables: Array<{
-    id: number; name: string; category: string; viewInTree: boolean;
-    enabled: boolean; tableType: string; cols: number; rows: number;
-    input0Name: string; input1Name: string; outputName: string;
-    input0LinkId: number; input1LinkId: number; outputLinkId: number;
-    incrementValue: number; defaultValue: number | null;
-  }>; error?: string }> => {
+  getTableDefinitions: async (): Promise<{ tables: TableDefinition[]; error?: string }> => {
     if (!isWebViewAvailable()) return { tables: [] };
     const result = await invokeDotNetLogged('GetTableDefinitions');
     return JSON.parse(result);
@@ -418,7 +413,7 @@ export const HybridBridge = {
 
   // ─── File Export ──────────────────────────────────────────────────────────
 
-  saveFile: async (filename: string, content: string, fileExtension: string): Promise<{
+  saveFile: async (filename: string, content: string, fileExtension: string = ''): Promise<{
     success: boolean;
     path?: string;
     error?: string;

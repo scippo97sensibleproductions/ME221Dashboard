@@ -36,7 +36,7 @@ class PresetStoreClass {
     this.#initialized = true;
   }
 
-  async createPreset(name: string, datalinkIds: number[]): Promise<{ success: boolean; error?: string }> {
+  async createPreset(name: string, datalinkIds: number[]): Promise<{ success: boolean; preset?: MonitoringPreset; error?: string }> {
     try {
       const result = await HybridBridge.createMonitoringPreset(name, datalinkIds);
       if (result.success && result.preset) {

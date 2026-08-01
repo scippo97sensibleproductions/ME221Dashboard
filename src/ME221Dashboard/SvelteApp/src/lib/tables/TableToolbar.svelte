@@ -32,7 +32,6 @@
     onTableNameClick?: () => void;
     onToggleContours?: () => void;
     onOpenHistory?: () => void;
-    livePanelOpen?: boolean;
     onToggleLivePanel?: () => void;
     onToggleView3D?: () => void;
   } = $props();
