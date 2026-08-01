@@ -298,7 +298,7 @@
 				{trunc(primary.label, 16).toUpperCase()}
 			</text>
 			<text x={cx} y={cy + 8} text-anchor="middle" fill={valueFill}
-				font-family="'Orbitron','Segoe UI',sans-serif" font-size={valueFs} font-weight="900"
+				font-family="'Orbitron Variable','Segoe UI',sans-serif" font-size={valueFs} font-weight="900"
 				filter="url(#{filterId})"
 				class={gauge.warningState === 'critical' ? 'mr-crit' : gauge.warningState === 'warning' ? 'mr-warn' : ''}>
 				{gauge.formattedValue}

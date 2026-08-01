@@ -78,7 +78,7 @@
   <!-- Value -->
   {#if gauge.showValue}
     <text x={cx} y={cy + 1} text-anchor="middle" dominant-baseline="central"
-      fill={valueTextColor || ringColor} font-family="'Orbitron','Segoe UI',sans-serif"
+      fill={valueTextColor || ringColor} font-family="'Orbitron Variable','Segoe UI',sans-serif"
       font-size={valueSize} font-weight="800"
       filter={`url(#lr-${gauge.entityId})`}>
       {gauge.formattedValue}

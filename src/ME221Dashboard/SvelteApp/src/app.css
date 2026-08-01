@@ -142,6 +142,13 @@
   --color-teal-800: #004D4D;
   --color-teal-900: #003333;
   --color-teal-950: #001A1A;
+
+  /* ── Fonts (automotive cluster) ──────────────────────────────────────
+     Orbitron = futuristic tech display (gauge values)
+     DSEG7 Classic = seven-segment LED (digital displays, odometer)
+     Bundled locally via @fontsource → works fully offline in the app.  */
+  --font-display: 'Orbitron Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-7seg: 'DSEG7 Classic', 'Consolas', monospace;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

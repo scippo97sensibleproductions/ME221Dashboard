@@ -106,7 +106,7 @@
   {/if}
 
   {#if gauge.showValue}
-    <text x={valuePos.x} y={valuePos.y} text-anchor="middle" fill={displayTextColor} font-size={valueSize} font-weight="bold">
+    <text x={valuePos.x} y={valuePos.y} text-anchor="middle" fill={displayTextColor} font-size={valueSize} font-weight="bold" font-family="var(--font-display)">
       {gauge.formattedValue}
     </text>
   {/if}

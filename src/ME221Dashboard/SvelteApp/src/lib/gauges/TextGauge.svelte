@@ -34,7 +34,7 @@
          style="width: {iconSz}px; height: {iconSz}px; left: calc(50% + {gauge.iconOffsetX * 100}% - {iconSz / 2}px); top: calc(50% + {gauge.iconOffsetY * 100}% - {iconSz / 2}px);" />
   {/if}
   {#if gauge.showValue}
-    <span class="font-bold leading-tight" style="color: {displayTextColor}; font-size: {valueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+    <span class="font-bold leading-tight" style="color: {displayTextColor}; font-size: {valueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
       {gauge.formattedValue}
     </span>
   {/if}

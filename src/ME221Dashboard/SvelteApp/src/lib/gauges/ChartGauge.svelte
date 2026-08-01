@@ -123,7 +123,7 @@
         const hasUnit = gauge.showUnit && gauge.unit;
         const hasName = gauge.showName && gauge.name;
 
-        ctx.font = `bold ${valueFs}px monospace`;
+        ctx.font = `bold ${valueFs}px 'Orbitron Variable', sans-serif`;
         const valueW = hasValue ? ctx.measureText(gauge.formattedValue).width : 0;
         ctx.font = `${unitFs}px sans-serif`;
         const unitW = hasUnit ? ctx.measureText(gauge.unit).width : 0;
@@ -145,7 +145,7 @@
         let rx = w - pad - 4;
         const ty = 3 + pillH * 0.55;
         if (hasValue) {
-          ctx.font = `bold ${valueFs}px monospace`;
+          ctx.font = `bold ${valueFs}px 'Orbitron Variable', sans-serif`;
           ctx.fillStyle = gauge.chartLineColor || '#22c55e';
           ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
           ctx.fillText(gauge.formattedValue, rx, ty);
@@ -267,7 +267,7 @@
       const nameFs = Math.round(baseFs * 0.8);
 
       // Measure text widths for layout
-      ctx.font = `bold ${valueFs}px monospace`;
+      ctx.font = `bold ${valueFs}px 'Orbitron Variable', sans-serif`;
       const valueW = hasValue ? ctx.measureText(gauge.formattedValue).width : 0;
       ctx.font = `${unitFs}px sans-serif`;
       const unitW = hasUnit ? ctx.measureText(gauge.unit).width : 0;
@@ -298,7 +298,7 @@
       let rx = w - pad - 4;
       const ty = 3 + pillH * 0.55;
       if (hasValue) {
-        ctx.font = `bold ${valueFs}px monospace`;
+        ctx.font = `bold ${valueFs}px 'Orbitron Variable', sans-serif`;
         ctx.fillStyle = vc(gauge.value, gauge.value);
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.fillText(gauge.formattedValue, rx, ty);

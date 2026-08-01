@@ -114,7 +114,7 @@
     <div class="flex flex-col items-center justify-center gap-0.5 max-h-full">
       {#if gauge.showValue}
         <div class="rounded-lg px-3 py-0.5 max-w-full overflow-hidden" style="background: {_digitBg};">
-          <span class="block truncate" style="color: {displayTextColor}; font-size: {largeDigitValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
+          <span class="block truncate" style="color: {displayTextColor}; font-size: {largeDigitValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.2;">
             {gauge.formattedValue}
           </span>
         </div>
@@ -139,7 +139,7 @@
           {#each digits as ch}
             <div class="flex items-center justify-center rounded-sm"
                  style="background: {_ledBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span class="font-bold" style="font-size: {segmentDigitSize}px; color: {valueTextColor || _ledColor};">
+              <span style="font-family: var(--font-7seg); font-size: {segmentDigitSize}px; color: {valueTextColor || _ledColor};">
                 {ch}
               </span>
             </div>
@@ -163,7 +163,7 @@
     <div class="flex flex-col items-center justify-center gap-0 max-h-full">
       <div class="flex items-center gap-1">
         {#if gauge.showValue}
-          <span class="truncate" style="color: {displayTextColor}; font-size: {clusterValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+          <span class="truncate" style="color: {displayTextColor}; font-size: {clusterValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
             {gauge.formattedValue}
           </span>
         {/if}
@@ -190,7 +190,7 @@
         </span>
       {/if}
       {#if gauge.showValue}
-        <span class="font-bold" style="color: {displayTextColor}; font-size: {labelTopValueSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
+        <span class="font-bold" style="color: {displayTextColor}; font-size: {labelTopValueSize}px; font-family: var(--font-display); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); line-height: 1.1;">
           {gauge.formattedValue}
         </span>
       {/if}
@@ -211,7 +211,7 @@
           <div class="absolute inset-0 rounded-full"
                style="border: 2px solid {displayTextColor}; box-shadow: 0 0 8px {displayTextColor}40, inset 0 0 6px {displayTextColor}20;"></div>
           <!-- Value -->
-          <span class="relative z-10 font-bold" style="color: {displayTextColor}; font-size: {glowValueSize}px; text-shadow: 0 0 6px {displayTextColor}60; line-height: 1.1;">
+          <span class="relative z-10 font-bold" style="color: {displayTextColor}; font-size: {glowValueSize}px; font-family: var(--font-display); text-shadow: 0 0 6px {displayTextColor}60; line-height: 1.1;">
             {gauge.formattedValue}
           </span>
         </div>
@@ -237,14 +237,14 @@
            style="background: #0a0a0a; border: 1px solid #333; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), inset 0 -1px 1px rgba(255,255,255,0.05);">
         {#if gauge.showValue}
           <div class="text-center">
-            <span class="block font-mono font-bold" style="color: {valueTextColor || '#00ff88'}; font-size: {insetValueSize}px; text-shadow: 0 0 4px #00ff8840; line-height: 1.2;">
+            <span class="block font-bold" style="color: {valueTextColor || '#00ff88'}; font-size: {insetValueSize}px; font-family: var(--font-7seg); text-shadow: 0 0 4px #00ff8840; line-height: 1.2;">
               {gauge.formattedValue}
             </span>
           </div>
         {/if}
         {#if gauge.showUnit}
           <div class="text-center">
-            <span class="block font-mono" style="color: #00ff88; opacity: 0.5; font-size: {insetUnitSize}px; line-height: 1.2;">
+            <span class="block" style="color: #00ff88; opacity: 0.5; font-size: {insetUnitSize}px; font-family: var(--font-7seg); line-height: 1.2;">
               {gauge.unit}
             </span>
           </div>
@@ -265,7 +265,7 @@
           {#each digits as ch}
             <div class="flex items-center justify-center rounded-sm"
                  style="background: {_digitBg}; width: {segmentCellW}px; height: {segmentCellH}px;">
-              <span style="color: {displayTextColor}; font-size: {segmentDigitSize}px; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
+              <span style="color: {displayTextColor}; font-size: {segmentDigitSize}px; font-family: var(--font-7seg); text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
                 {ch}
               </span>
             </div>

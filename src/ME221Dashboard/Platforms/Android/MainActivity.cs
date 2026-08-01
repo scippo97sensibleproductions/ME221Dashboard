@@ -20,6 +20,11 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
         Instance = this;
+
+        // Keep the display on while the dashboard is visible — the flag is
+        // automatically ignored when the window loses visibility, so the
+        // screen can still sleep normally when the app is backgrounded.
+        Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
     }
 
     protected override void OnNewIntent(Intent? intent)

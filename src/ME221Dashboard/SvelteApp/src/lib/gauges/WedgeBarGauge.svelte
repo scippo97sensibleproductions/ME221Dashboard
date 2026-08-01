@@ -256,7 +256,7 @@
 	<!-- ── Shared: value / name / unit ── -->
 	<text x={W - pad.r} y={pad.t + valueSize} text-anchor="end"
 		fill={valueTextColor || gauge.textColor}
-		font-family={style === WedgeStyle.Wire ? "'JetBrains Mono',monospace" : "'Orbitron','Segoe UI',sans-serif"}
+		font-family={style === WedgeStyle.Wire ? "'JetBrains Mono',monospace" : "'Orbitron Variable','Segoe UI',sans-serif"}
 		font-size={valueSize} font-weight="700"
 		filter={valueFraction >= redlineStart ? `url(#wg2-${gauge.entityId})` : ''}>
 		{gauge.formattedValue}

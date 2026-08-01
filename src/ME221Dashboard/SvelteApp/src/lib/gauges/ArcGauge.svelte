@@ -135,7 +135,7 @@
       {#if gauge.showValue}
         <text x={cx} y="0" text-anchor="middle" fill={displayTextColor}
               font-size={valueSize} font-weight="bold"
-              >
+              font-family="var(--font-display)">
           {gauge.formattedValue}
         </text>
         {@const valueHeight = valueSize}

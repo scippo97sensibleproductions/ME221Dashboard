@@ -260,7 +260,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-700" style="background: var(--metro-sidebar)">
     <div class="flex items-center gap-2">
-      <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--metro-blue); font-family: 'Orbitron', sans-serif">GAUGE BUILDER</span>
+      <span class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--metro-blue); font-family: 'Orbitron Variable', sans-serif">GAUGE BUILDER</span>
       <div class="flex items-center gap-1">
         <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 border"
               style={step === 'build' ? 'color: var(--metro-blue); border-color: var(--metro-blue); background: rgba(0,120,215,0.08)' : 'color: var(--metro-text-muted); border-color: transparent'}>
@@ -355,7 +355,7 @@
   {#if step === 'review'}
     <div class="flex-1 overflow-y-auto p-3">
       <div class="text-center mb-3">
-        <div class="text-[12px] font-bold uppercase tracking-wider" style="color: var(--metro-blue); font-family: 'Orbitron', sans-serif">CONFIG SUMMARY</div>
+        <div class="text-[12px] font-bold uppercase tracking-wider" style="color: var(--metro-blue); font-family: 'Orbitron Variable', sans-serif">CONFIG SUMMARY</div>
         <div class="text-[9px] text-gray-500 mt-0.5">Tap ← Back to edit. On the dashboard, drag to position.</div>
       </div>
       <div class="max-w-sm mx-auto">
