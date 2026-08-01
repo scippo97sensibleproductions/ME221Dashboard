@@ -140,31 +140,34 @@ export function parseImportBundle(yamlString: string): ExportBundle | null {
     if (!parsed || typeof parsed !== 'object') return null;
     if (!parsed.tables || !Array.isArray(parsed.tables)) return null;
 
-    const tables: ExportTable[] = parsed.tables.map((t: Record<string, unknown>) => ({
-      name: t.name as string,
-      category: (t.category as string) || '',
-      type: (t.type as string) || '',
-      description: (t.description as string) || '',
-      axes: {
-        x: {
-          name: t.axes?.x?.name as string || '',
-          unit: t.axes?.x?.unit as string || '',
-          values: Array.isArray(t.axes?.x?.values) ? t.axes.x.values as number[] : [],
+    const tables: ExportTable[] = parsed.tables.map((t: Record<string, unknown>) => {
+      const output = t.output as { name?: unknown; unit?: unknown; values?: unknown } | undefined;
+      return {
+        name: t.name as string,
+        category: (t.category as string) || '',
+        type: (t.type as string) || '',
+        description: (t.description as string) || '',
+        axes: {
+          x: {
+            name: t.axes?.x?.name as string || '',
+            unit: t.axes?.x?.unit as string || '',
+            values: Array.isArray(t.axes?.x?.values) ? t.axes.x.values as number[] : [],
+          },
+          ...(t.axes?.y ? {
+            y: {
+              name: t.axes.y.name as string || '',
+              unit: t.axes.y.unit as string || '',
+              values: Array.isArray(t.axes.y.values) ? t.axes.y.values as number[] : [],
+            }
+          } : {}),
         },
-        ...(t.axes?.y ? {
-          y: {
-            name: t.axes.y.name as string || '',
-            unit: t.axes.y.unit as string || '',
-            values: Array.isArray(t.axes.y.values) ? t.axes.y.values as number[] : [],
-          }
-        } : {}),
-      },
-      output: {
-        name: t.output?.name as string || '',
-        unit: t.output?.unit as string || '',
-        values: Array.isArray(t.output?.values) ? t.output.values as number[][] : [],
-      },
-    }));
+        output: {
+          name: (output?.name as string) || '',
+          unit: (output?.unit as string) || '',
+          values: Array.isArray(output?.values) ? output?.values as number[][] : [],
+        },
+      };
+    });
 
     return {
       ecu: {
