@@ -38,6 +38,7 @@ export function buildMultiSeriesOption(
     const pts = data.get(s.id) ?? [];
     const visible = pts.filter((p) => p.t >= cutoff);
     echartsSeries.push({
+      id: s.id,
       name: s.name,
       type: 'line',
       data: visible.map((p) => [p.t, p.v]),
