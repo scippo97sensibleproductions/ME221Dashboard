@@ -14,6 +14,10 @@ export function getToasts(): Toast[] {
   return toasts;
 }
 
+export function clearToasts(): void {
+  toasts = [];
+}
+
 export function toast(message: string, type: ToastType = 'info', duration = 3000): void {
   const id = nextId++;
   const t: Toast = { id, message, type, dismissing: false };

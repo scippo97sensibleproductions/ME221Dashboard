@@ -28,7 +28,7 @@
         delete notes[tableId];
       }
       await HybridBridge.saveTableNotes(notes);
-    } catch {}
+    } catch { /* notes are best-effort */ }
     onclose();
   }
 
@@ -37,7 +37,7 @@
       const notes = await HybridBridge.getTableNotes();
       delete notes[tableId];
       await HybridBridge.saveTableNotes(notes);
-    } catch {}
+    } catch { /* notes are best-effort */ }
     noteText = '';
     onclose();
   }

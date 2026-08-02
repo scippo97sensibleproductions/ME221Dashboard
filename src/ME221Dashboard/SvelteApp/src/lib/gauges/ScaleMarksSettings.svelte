@@ -47,7 +47,7 @@
             <span class="text-xs font-mono text-cyan-400">{tickLabelEvery}</span>
           </div>
           <div class="flex gap-1">
-            {#each [1, 2, 3, 4, 5] as n}
+            {#each [1, 2, 3, 4, 5] as n (n)}
               <button
                 class="flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
                   {tickLabelEvery === n

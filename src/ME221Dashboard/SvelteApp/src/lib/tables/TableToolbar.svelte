@@ -50,7 +50,6 @@
     <IconArrowLeft size={14} />
   </button>
 
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="min-w-0 flex-1 cursor-pointer px-1" role="button" tabindex="0" onclick={onTableNameClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTableNameClick?.(); } }}>
     <div class="truncate text-[12px] font-bold text-white hover:text-[var(--metro-orange)] transition-colors">{tableName}</div>
     <div class="text-[9px] uppercase tracking-wider text-[var(--metro-text-secondary)]">{dimensions}</div>
@@ -238,7 +237,7 @@
     {/if}
     {#if onColorSchemeChange}
       <div class="border-t border-[var(--metro-border)] px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-[var(--metro-text-muted)]">Color Scheme</div>
-      {#each [{ id: 'thermal', label: 'Thermal' }, { id: 'viridis', label: 'Viridis' }, { id: 'grayscale', label: 'Grayscale' }, { id: 'ember', label: 'Ember' }] as scheme}
+      {#each [{ id: 'thermal', label: 'Thermal' }, { id: 'viridis', label: 'Viridis' }, { id: 'grayscale', label: 'Grayscale' }, { id: 'ember', label: 'Ember' }] as scheme (scheme.id)}
         <DropdownItem onclick={() => onColorSchemeChange!(scheme.id)} class="flex items-center gap-2 text-[12px] {colorScheme === scheme.id ? 'text-[var(--metro-orange)]' : 'text-[var(--metro-text-secondary)]'}">
           <IconPalette size={14} />
           {scheme.label}

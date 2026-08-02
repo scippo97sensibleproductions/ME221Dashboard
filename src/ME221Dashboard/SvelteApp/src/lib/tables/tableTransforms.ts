@@ -186,7 +186,7 @@ export function applyTransform(
           }
         }
         const oldVal = snapshot[r * cols + c];
-        let newVal = Math.round((sum / count) * 100) / 100;
+        const newVal = Math.round((sum / count) * 100) / 100;
         if (oldVal === newVal) continue;
         newOutput[r * cols + c] = newVal;
         entries.push({ type: 'output', key: cellKey(r, c), row: r, col: c, oldVal, newVal, groupId });
@@ -203,7 +203,7 @@ export function applyTransform(
       const rightVal = getOutputValue(tableData, b.minRow, b.maxCol, cols);
       for (let c = b.minCol + 1; c < b.maxCol; c++) {
         const t = (c - b.minCol) / colSpan;
-        let newVal = Math.round((leftVal + (rightVal - leftVal) * t) * 100) / 100;
+        const newVal = Math.round((leftVal + (rightVal - leftVal) * t) * 100) / 100;
         const oldVal = getOutputValue(tableData, b.minRow, c, cols);
         if (oldVal === newVal) continue;
         newOutput[b.minRow * cols + c] = newVal;
@@ -214,7 +214,7 @@ export function applyTransform(
       const bottomVal = getOutputValue(tableData, b.maxRow, b.minCol, cols);
       for (let r = b.minRow + 1; r < b.maxRow; r++) {
         const t = (r - b.minRow) / rowSpan;
-        let newVal = Math.round((topVal + (bottomVal - topVal) * t) * 100) / 100;
+        const newVal = Math.round((topVal + (bottomVal - topVal) * t) * 100) / 100;
         const oldVal = getOutputValue(tableData, r, b.minCol, cols);
         if (oldVal === newVal) continue;
         newOutput[r * cols + b.minCol] = newVal;
@@ -235,7 +235,7 @@ export function applyTransform(
           const tx = (c - b.minCol) / colSpan;
           const top = topLeft + (topRight - topLeft) * tx;
           const bottom = bottomLeft + (bottomRight - bottomLeft) * tx;
-          let newVal = Math.round((top + (bottom - top) * ty) * 100) / 100;
+          const newVal = Math.round((top + (bottom - top) * ty) * 100) / 100;
           const oldVal = getOutputValue(tableData, r, c, cols);
           if (oldVal === newVal) continue;
           newOutput[r * cols + c] = newVal;
@@ -425,7 +425,7 @@ export function applyTransform(
     for (let r = b.minRow; r <= b.maxRow; r++) {
       for (let c = b.minCol; c <= b.maxCol; c++) {
         const oldVal = getOutputValue(tableData, r, c, cols);
-        let matches = false;
+        let matches: boolean;
         if (condOp === 0) matches = oldVal > threshold;
         else if (condOp === 1) matches = oldVal < threshold;
         else matches = Math.abs(oldVal - threshold) < 0.001;

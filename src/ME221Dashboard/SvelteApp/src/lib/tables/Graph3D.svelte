@@ -2,22 +2,20 @@
   import { onMount, onDestroy } from 'svelte';
   import * as THREE from 'three';
   import type { TableDefinition, TableData, ColorScheme } from './types';
-  import { getOutputValue, heatColor, getDataRange, findNearestIndex, fromRaw, findInterpolationRange } from './types';
+  import { getOutputValue, heatColor, getDataRange, fromRaw, findInterpolationRange } from './types';
   import { IconRotate2, IconEye, IconGridDots, IconDownload, IconPaint, IconKeyboard, IconChevronRight, IconChevronDown, IconArrowUp, IconArrowDown, IconPlus, IconMinus, IconWaveSine } from '@tabler/icons-svelte';
   import { HybridBridge } from '../HybridBridge';
+  import { SvelteSet } from 'svelte/reactivity';
 
   let {
     tableDef,
     tableData,
     colorScheme = 'thermal',
-    showContours = false,
     opRow = -1,
     opCol = -1,
     operatingPointHistory = [],
     onEditCell,
     onBatchEdit,
-    onUndo,
-    onRedo,
     onSelectionChange,
   }: {
     tableDef: TableDefinition;
@@ -47,12 +45,10 @@
   let smoothRadius = $state(2);
   let increment = $state(1);
   let showWireframe = $state(true);
-  let showSurface = $state(true);
   let showContoursLocal = $state(false);
   let autoRotate = $state(false);
   let brushMode = $state(false);
   let brushSelection = $state<Set<string>>(new Set());
-  let hoveredVertex = $state<{ row: number; col: number; value: number } | null>(null);
   let showHelp = $state(false);
   let viewMode = $state<'perspective' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso'>('perspective');
 
@@ -70,7 +66,6 @@
   let hoverMarker: THREE.Mesh;
 
   // ViewCube
-  let viewCubeEl: HTMLDivElement;
   let vcRenderer: THREE.WebGLRenderer;
   let vcScene: THREE.Scene;
   let vcCamera: THREE.OrthographicCamera;
@@ -97,7 +92,7 @@
     wasDragged: false,
     pressStartTime: 0,
     pressStartPos: { x: 0, y: 0 },
-    longPressTimer: 0 as any,
+    longPressTimer: 0 as ReturnType<typeof setTimeout>,
     longPressFired: false,
   };
 
@@ -202,12 +197,12 @@
     wireframeMesh.visible = showWireframe;
 
     // Contour lines
-    buildContours(positions, rows, cols, offsetX, offsetZ, scaleX, scaleZ, heightScale);
+    buildContours(rows, cols, offsetX, offsetZ, scaleX, scaleZ, heightScale);
 
     return { positions, rows, cols, offsetX, offsetZ, scaleX, scaleZ, heightScale };
   }
 
-  function buildContours(positions: Float32Array, rows: number, cols: number, offsetX: number, offsetZ: number, scaleX: number, scaleZ: number, heightScale: number) {
+  function buildContours(rows: number, cols: number, offsetX: number, offsetZ: number, scaleX: number, scaleZ: number, heightScale: number) {
     if (zMax === zMin) {
       if (contourLines) contourLines.visible = false;
       return;
@@ -294,13 +289,15 @@
 
   function buildAxisLabels() {
     if (axisGroup) {
-      axisGroup.children.forEach(c => {
-        if ((c as any).geometry) (c as any).geometry.dispose();
-        if ((c as any).material) {
-          if ((c as any).material.map) (c as any).material.map.dispose();
-          (c as any).material.dispose();
-        }
-      });
+    axisGroup.children.forEach((c) => {
+      const meshLike = c as THREE.Mesh | THREE.LineSegments;
+      if (meshLike.geometry) meshLike.geometry.dispose();
+      const spriteLike = c as THREE.Sprite;
+      if (spriteLike.material) {
+        if (spriteLike.material.map) spriteLike.material.map.dispose();
+        spriteLike.material.dispose();
+      }
+    });
       scene.remove(axisGroup);
     }
     axisGroup = new THREE.Group();
@@ -315,7 +312,6 @@
     const offsetX = -5;
     const offsetZ = -5;
     const range = zMax - zMin;
-    const heightScale = range > 0 ? 5 / range : 0;
 
     function makeTextSprite(text: string, fontSize = 10, color = '#aaa'): THREE.Sprite {
       const canvas = document.createElement('canvas');
@@ -406,35 +402,6 @@
     axisGroup.add(edges);
 
     scene.add(axisGroup);
-  }
-
-  function updateVertexPosition(row: number, col: number, newVal: number) {
-    if (!surfaceMesh || !Number.isFinite(newVal)) return;
-    const posAttr = surfaceMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const idx = row * tableDef.cols + col;
-    const rows = tableDef.rows;
-    const cols = tableDef.cols;
-    const scaleX = cols > 1 ? 10 / (cols - 1) : 10;
-    const scaleZ = rows > 1 ? 10 / (rows - 1) : 10;
-    const range = zMax - zMin;
-    const heightScale = range > 0 ? 5 / range : 0;
-
-    posAttr.setY(idx, (newVal - zMin) * heightScale);
-    posAttr.needsUpdate = true;
-    surfaceMesh.geometry.computeVertexNormals();
-
-    // Update color
-    const colAttr = surfaceMesh.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const c = getColor(newVal);
-    colAttr.setXYZ(idx, c.r, c.g, c.b);
-    colAttr.needsUpdate = true;
-
-    // Update wireframe
-    if (wireframeMesh) {
-      const wPosAttr = wireframeMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
-      wPosAttr.setY(idx, (newVal - zMin) * heightScale);
-      wPosAttr.needsUpdate = true;
-    }
   }
 
   function rebuildAll() {
@@ -694,7 +661,6 @@
 
   function setView(mode: string) {
     viewMode = mode as typeof viewMode;
-    const dist = spherical.radius;
     switch (mode) {
       case 'front': spherical.theta = 0; spherical.phi = Math.PI / 2; break;
       case 'back': spherical.theta = Math.PI; spherical.phi = Math.PI / 2; break;
@@ -727,7 +693,7 @@
         const vert = findNearestVertex(e.clientX, e.clientY);
         if (vert) {
           const key = `${vert.row},${vert.col}`;
-          const newSet = new Set(brushSelection);
+          const newSet = new SvelteSet(brushSelection);
           if (newSet.has(key)) newSet.delete(key);
           else newSet.add(key);
           brushSelection = newSet;
@@ -765,15 +731,12 @@
       // Hover
       const vert = findNearestVertex(e.clientX, e.clientY);
       if (vert) {
-        const val = getOutputValue(tableData, vert.row, vert.col, tableDef.cols);
-        hoveredVertex = { row: vert.row, col: vert.col, value: val };
         if (hoverMarker) {
           const pos = gridToWorld(vert.row, vert.col);
           hoverMarker.position.set(pos.x, pos.y + 0.1, pos.z);
           hoverMarker.visible = true;
         }
       } else {
-        hoveredVertex = null;
         if (hoverMarker) hoverMarker.visible = false;
       }
     }
@@ -1054,6 +1017,17 @@
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────
 
+  // Three.js owns its canvas elements; Svelte only renders the container div.
+  // Mount/unmount helpers isolate the imperative canvas wiring from the
+  // Svelte-managed DOM tree.
+  function mountCanvas(node: HTMLElement, child: HTMLElement | null | undefined): void {
+    if (child && child.parentNode !== node) node.appendChild(child);
+  }
+
+  function unmountCanvas(node: HTMLElement | null | undefined, child: HTMLElement | null | undefined): void {
+    if (node && child && child.parentNode === node) node.removeChild(child);
+  }
+
   onMount(() => {
     mounted = true;
     const width = containerEl.clientWidth;
@@ -1064,7 +1038,7 @@
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x0a0a0a, 1);
-    containerEl.appendChild(renderer.domElement);
+    mountCanvas(containerEl, renderer.domElement);
 
     // Scene
     scene = new THREE.Scene();
@@ -1243,7 +1217,7 @@
     vcRenderer.setClearColor(0x000000, 0);
     vcRenderer.domElement.id = 'viewcube-canvas';
     vcRenderer.domElement.style.cssText = `position:absolute;top:44px;right:${Math.max(4, Math.floor(vcSize * 0.05))}px;border-radius:6px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.12);cursor:pointer;z-index:15;touch-action:none;`;
-    containerEl.appendChild(vcRenderer.domElement);
+    mountCanvas(containerEl, vcRenderer.domElement);
 
     vcRenderer.domElement.addEventListener('click', (e: MouseEvent) => {
       const rect = vcRenderer.domElement.getBoundingClientRect();
@@ -1352,9 +1326,9 @@
     containerEl?.removeEventListener('touchmove', onTouchMove);
     containerEl?.removeEventListener('touchend', onTouchEnd);
     renderer?.dispose();
-    containerEl?.removeChild(renderer?.domElement);
+    unmountCanvas(containerEl, renderer?.domElement);
     vcRenderer?.dispose();
-    if (vcRenderer && containerEl) containerEl.removeChild(vcRenderer.domElement);
+    unmountCanvas(containerEl, vcRenderer?.domElement);
   });
 
   // No $effect for rebuilds — smooth ops call rebuildAll() directly,
@@ -1444,7 +1418,7 @@
         { id: 'left', label: 'Left' },
         { id: 'right', label: 'Right' },
         { id: 'top', label: 'Top' },
-      ] as view, i}
+      ] as view, i (view.id)}
         {#if i > 0}<div class="h-5 w-px" style="background-color: var(--metro-border);"></div>{/if}
         <button
           class="flex h-5 items-center px-2 text-[9px] font-bold uppercase tracking-wider transition-colors duration-150"

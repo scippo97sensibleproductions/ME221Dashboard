@@ -17,7 +17,7 @@
   <div class="mb-1 flex items-center gap-2 border-l-[4px] pl-2 pb-2" style="border-color: var(--metro-purple);">
     <span class="text-[10px] font-extrabold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Categories</span>
   </div>
-  {#each categories as cat}
+  {#each categories as cat (cat.name)}
     {@const isActive = cat.name === selectedCategory}
     <button
             class="mb-0.5 flex w-full items-center justify-between px-3 py-2.5 text-left text-[13px] transition-colors duration-150"
@@ -42,7 +42,7 @@
 
 <!-- Mobile chips -->
 <div class="mb-3 flex shrink-0 gap-1.5 overflow-x-auto pb-1 lg:hidden">
-  {#each categories as cat}
+  {#each categories as cat (cat.name)}
     {@const isActive = cat.name === selectedCategory}
     <button
             class="shrink-0 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-colors duration-150"

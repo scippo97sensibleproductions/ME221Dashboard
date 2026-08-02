@@ -14,7 +14,9 @@
      */
     "allowJs": true,
     "checkJs": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["src/**/*.ts", "src/**/*.svelte.ts", "src/**/*.js", "src/**/*.svelte"],
   "exclude": ["src/**/__tests__/**"]

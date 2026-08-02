@@ -105,7 +105,7 @@
       { key: 'small' as const, label: formatMag(magSmall) },
       { key: 'med' as const, label: formatMag(magMed) },
       { key: 'big' as const, label: formatMag(magBig) },
-    ] as opt}
+    ] as opt (opt.key)}
       <button
         class="rounded-md px-3 py-1.5 text-[11px] font-bold transition-colors min-h-[32px] tabular-nums
           {activeMag === opt.key

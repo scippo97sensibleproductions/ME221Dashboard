@@ -17,8 +17,6 @@ import {
   type TableData,
 } from '../types';
 
-const TOL = 0.01;
-
 describe('fromRaw', () => {
   it('converts Volt to 0-5V scale', () => {
     expect(fromRaw(0, MeasurementUnitType.Volt)).toBeCloseTo(0, 5);

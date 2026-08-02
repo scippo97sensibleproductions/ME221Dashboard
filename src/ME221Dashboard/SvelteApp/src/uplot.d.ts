@@ -5,7 +5,7 @@ declare module 'uplot' {
   type AlignedData = (number | null)[][];
 
   interface RangeFunction {
-    (u: any, dataMin: number, dataMax: number): [number, number];
+    (u: uPlot, dataMin: number, dataMax: number): [number, number];
   }
 
   interface SeriesOpts {
@@ -22,7 +22,7 @@ declare module 'uplot' {
     stroke?: string;
     font?: string;
     size?: number;
-    values?: (u: any, ticks: number[]) => string[];
+    values?: (u: uPlot, ticks: number[]) => string[];
     grid?: { stroke?: string };
     ticks?: { stroke?: string; size?: number };
   }

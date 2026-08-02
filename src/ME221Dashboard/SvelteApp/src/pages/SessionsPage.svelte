@@ -30,6 +30,10 @@
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
+  function errMessage(err: unknown, fallback: string): string {
+    return err instanceof Error && err.message ? err.message : fallback;
+  }
+
   // ── State ──────────────────────────────────────────────────────────────
   let sessions = $state<RecordedSession[]>(SessionStore.sessions);
   let activeSession = $state<RecordedSession | null>(null);
@@ -229,8 +233,8 @@
       } else if (result.error) {
         sessionError = result.error;
       }
-    } catch (err: any) {
-      sessionError = err?.message ?? 'Import failed';
+    } catch (err) {
+      sessionError = errMessage(err, 'Import failed');
     } finally {
       busyAction = null;
     }
@@ -243,8 +247,8 @@
     try {
       const result = await SessionStore.exportToMes(session);
       if (!result.success && result.error) sessionError = result.error;
-    } catch (err: any) {
-      sessionError = err?.message ?? 'Export failed';
+    } catch (err) {
+      sessionError = errMessage(err, 'Export failed');
     } finally {
       busyAction = null;
     }
@@ -256,8 +260,8 @@
     try {
       const result = await SessionStore.exportAllToMes();
       if (!result.success && result.error) sessionError = result.error;
-    } catch (err: any) {
-      sessionError = err?.message ?? 'Export failed';
+    } catch (err) {
+      sessionError = errMessage(err, 'Export failed');
     } finally {
       busyAction = null;
     }
@@ -412,7 +416,7 @@
             >
               <!-- Sensor color dots -->
               <div class="flex flex-col gap-0.5 shrink-0">
-                {#each session.sensorIds.slice(0, 3) as sid}
+                {#each session.sensorIds.slice(0, 3) as sid (sid)}
                   <div class="w-1.5 h-1.5 rounded-full" style="background: {getSensorColor(sid)}"></div>
                 {/each}
                 {#if sensorCount > 3}
@@ -511,7 +515,7 @@
         {#if activeSession.freezeFrames.length > 0}
           <div class="flex items-center gap-2 mt-2 px-3 py-1.5 bg-metro-card border border-metro-border">
             <span class="text-[10px] text-metro-text-muted uppercase tracking-wider font-bold shrink-0">Bookmarks</span>
-            {#each activeSession.freezeFrames as ff}
+            {#each activeSession.freezeFrames as ff (ff.timestamp)}
               <button
                 class="metro-btn-secondary px-2 py-0.5 text-[10px]"
                 onclick={() => seekTo(ff.timeMs)}

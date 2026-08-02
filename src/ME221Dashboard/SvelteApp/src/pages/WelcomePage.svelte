@@ -70,7 +70,6 @@
   let usbHostOk = $state(true);
 
   let currentStep = $derived(steps[currentStepIdx]);
-  let currentStatus = $derived(stepStatuses[currentStep.key]);
 
   // ─── Permissions Status ────────────────────────────────────────────────────
 
@@ -199,7 +198,7 @@
 
   <!-- Progress dots -->
   <div class="mb-6 flex items-center gap-2">
-    {#each steps as step, i}
+    {#each steps as step, i (step.key)}
       <div
         class="flex h-2.5 rounded-full transition-all duration-300 {i === currentStepIdx
           ? 'w-6 bg-cyan-400'
@@ -346,7 +345,7 @@
         </p>
 
         <div class="w-full space-y-2">
-          {#each steps.slice(0, -1) as step}
+          {#each steps.slice(0, -1) as step (step.key)}
             <div class="flex items-center gap-3 rounded-lg bg-gray-900/60 px-4 py-2.5">
               <IconCircleCheck size={18} class="shrink-0 text-green-400" />
               <span class="text-sm text-gray-200">{step.title}</span>

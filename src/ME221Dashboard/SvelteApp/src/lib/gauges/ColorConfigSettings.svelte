@@ -71,7 +71,7 @@
   <div class="h-3 rounded-full border border-gray-700/50" style="background: linear-gradient(to right, {previewStops()})"></div>
 
   <!-- Stops -->
-  {#each stops as stop, idx}
+  {#each stops as stop, idx (idx)}
     <div class="flex items-center gap-2.5">
       <!-- Color picker -->
       <input

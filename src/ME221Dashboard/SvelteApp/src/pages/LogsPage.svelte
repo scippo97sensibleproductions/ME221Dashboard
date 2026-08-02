@@ -8,7 +8,7 @@
   } from '@tabler/icons-svelte';
   import { toast } from '../lib/toasts.svelte';
   import {
-    type LogEntry, type LogMarker, type LevelStats, type ChannelStats,
+    type LogEntry, type LogMarker,
     type SearchMode, LEVEL_COLORS, LEVEL_BG, ALL_LEVELS,
     computeLevelStats, computeChannelStats, truncateCategory, formatTimestamp,
   } from '../lib/LogViewerTypes';
@@ -18,7 +18,7 @@
     EVENT_ICONS, EVENT_COLORS,
   } from '../lib/logEventDetector';
 
-  let { onNavigate }: { onNavigate: (page: string) => void } = $props();
+  let { onNavigate: _onNavigate }: { onNavigate: (page: string) => void } = $props();
 
   // ── State ──────────────────────────────────────────────────────────────
   let logs = $state<LogEntry[]>([]);
@@ -373,7 +373,7 @@
   <!-- Level statistics bar -->
   <div class="flex shrink-0 flex-wrap items-center gap-1.5 px-4 py-2" style="background-color: #111; border-bottom: 1px solid var(--metro-border-subtle);">
     <span class="mr-1 text-[9px] font-bold uppercase tracking-wider" style="color: var(--metro-text-muted);">Levels</span>
-    {#each levelStats as stat}
+    {#each levelStats as stat (stat.level)}
       <button
         class="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold transition-all duration-150"
         style="background-color: {filterLevel === stat.level ? stat.color : 'var(--metro-card)'}; color: {filterLevel === stat.level ? '#000' : stat.color}; border: 1px solid {filterLevel === stat.level ? stat.color : 'var(--metro-border)'}; opacity: {stat.count === 0 ? 0.4 : 1};"
@@ -419,7 +419,7 @@
     <div class="flex shrink-0 flex-wrap items-center gap-1.5 px-4 py-1.5" style="background-color: #111; border-bottom: 1px solid var(--metro-border-subtle);">
       <IconSparkles size="11" style="color: var(--metro-text-muted);" />
       <span class="mr-1 text-[9px] font-bold uppercase tracking-wider" style="color: var(--metro-text-muted);">Events</span>
-      {#each (['spike', 'flatline', 'dropout', 'abnormal'] as EventType[]) as eventType}
+      {#each (['spike', 'flatline', 'dropout', 'abnormal'] as EventType[]) as eventType (eventType)}
         {@const count = eventTypeCounts[eventType] ?? 0}
         <button
           class="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold transition-all duration-150"
@@ -569,7 +569,7 @@
       onblur={(e) => { e.currentTarget.style.borderColor = 'var(--metro-border)'; }}
     >
       <option value="All">All Levels</option>
-      {#each ALL_LEVELS as level}
+      {#each ALL_LEVELS as level (level)}
         <option value={level}>{level}</option>
       {/each}
     </select>
@@ -622,7 +622,8 @@
         {@const inRange = inMarkerRange(i)}
         <div
           class="flex gap-2 px-4 py-0.5 relative"
-          style="border-bottom: 1px solid var(--metro-border-subtle); {bgColor ? `background-color: ${bgColor};` : ''} {inRange ? 'background-color: rgba(34,139,234,0.05);' : ''}"
+          style="border-bottom: 1px solid var(--metro-border-subtle);"
+          style:background-color={inRange ? 'rgba(34,139,234,0.05)' : bgColor || undefined}
         >
           <!-- Marker indicator line -->
           {#if markerId}
@@ -663,7 +664,7 @@
           {#if eventIndexSet.has(log.originalIndex!) && filterEventType === 'All'}
             {@const evts = getEventsAtIndex(log.originalIndex!)}
             <span class="flex shrink-0 items-center gap-0.5" title={evts.map(e => e.description).join(' | ')}>
-              {#each evts as ev}
+              {#each evts as ev (ev.type)}
                 <span
                   class="inline-flex items-center justify-center rounded px-1 text-[9px] font-bold leading-none"
                   style="background-color: {EVENT_COLORS[ev.type]}; color: #fff;"

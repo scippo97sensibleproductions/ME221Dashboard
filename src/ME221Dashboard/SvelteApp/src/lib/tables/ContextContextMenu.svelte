@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconCopy, IconClipboard, IconTransform, IconSelectAll, IconRowInsertTop, IconColumnInsertRight, IconTarget } from '@tabler/icons-svelte';
+  import { IconCopy } from '@tabler/icons-svelte';
 
   let { open, x, y, items, onSelect, onClose }: {
     open: boolean;
@@ -55,7 +55,7 @@
     class="fixed z-[90] min-w-[180px] border py-1"
     style="left: {x}px; top: {y}px; background-color: var(--metro-card); border-color: var(--metro-border);"
   >
-    {#each items as item}
+    {#each items as item (item.action)}
       <button
         class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[12px] transition-colors duration-100 disabled:opacity-40"
         style="color: var(--metro-text-secondary);"

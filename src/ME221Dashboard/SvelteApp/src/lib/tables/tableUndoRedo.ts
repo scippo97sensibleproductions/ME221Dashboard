@@ -55,9 +55,9 @@ export function undo(
 
   const groupId = state.undoStack[state.undoStack.length - 1].groupId;
   const entries: UndoEntry[] = [];
-  let newOutput = [...tableData.output];
-  let newInput0 = [...tableData.input0];
-  let newInput1 = [...tableData.input1];
+  const newOutput = [...tableData.output];
+  const newInput0 = [...tableData.input0];
+  const newInput1 = [...tableData.input1];
 
   while (state.undoStack.length > 0 && state.undoStack[state.undoStack.length - 1].groupId === groupId) {
     const entry = state.undoStack.pop()!;
@@ -86,9 +86,9 @@ export function redo(
 
   const groupId = state.redoStack[state.redoStack.length - 1].groupId;
   const entries: UndoEntry[] = [];
-  let newOutput = [...tableData.output];
-  let newInput0 = [...tableData.input0];
-  let newInput1 = [...tableData.input1];
+  const newOutput = [...tableData.output];
+  const newInput0 = [...tableData.input0];
+  const newInput1 = [...tableData.input1];
 
   while (state.redoStack.length > 0 && state.redoStack[state.redoStack.length - 1].groupId === groupId) {
     const entry = state.redoStack.pop()!;
@@ -166,7 +166,7 @@ export function saveSessionCache(
 
 export function clearSessionCache(tableId: number): void {
   _sessionCache.delete(tableId);
-  try { localStorage.removeItem(`table-undo-${tableId}`); } catch {}
+  try { localStorage.removeItem(`table-undo-${tableId}`); } catch { /* localStorage unavailable */ }
 }
 
 // ─── localStorage persistence (survives app restart) ───────────────────────
@@ -190,7 +190,7 @@ function saveToLocalStorage(
     }
     const payload = JSON.stringify({ undoStack: prunedUndo, redoStack, originalData, bookmarks });
     localStorage.setItem(`table-undo-${tableId}`, payload);
-  } catch {}
+  } catch { /* localStorage unavailable */ }
 }
 
 function loadFromLocalStorage(tableId: number): TableSessionCache | undefined {
@@ -206,6 +206,6 @@ function loadFromLocalStorage(tableId: number): TableSessionCache | undefined {
         bookmarks: parsed.bookmarks ?? [],
       };
     }
-  } catch {}
+  } catch { /* localStorage unavailable */ }
   return undefined;
 }

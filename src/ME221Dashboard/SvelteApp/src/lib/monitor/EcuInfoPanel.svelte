@@ -1,23 +1,19 @@
 <script lang="ts">
   import { liveDataStore } from '../stores/LiveDataStore.svelte';
   import { HybridBridge } from '../HybridBridge';
-  import type { ConnectionStateInfo, EcuInfoResult } from '../HybridBridgeTypes';
+  import type { ConnectionStateInfo } from '../HybridBridgeTypes';
 
   let connectionState = $state<ConnectionStateInfo | null>(null);
-  let ecuInfo = $state<EcuInfoResult | null>(null);
 
-  let tick = $state(0);
   $effect(() => {
     const id = setInterval(async () => {
-      tick++;
       try {
         const cs = await HybridBridge.getConnectionState();
         connectionState = cs;
-      } catch {}
+      } catch { /* transient polling errors are ignored */ }
       try {
-        const info = await HybridBridge.getEcuInfo();
-        ecuInfo = info;
-      } catch {}
+        await HybridBridge.getEcuInfo();
+      } catch { /* transient polling errors are ignored */ }
     }, 2000);
     return () => clearInterval(id);
   });

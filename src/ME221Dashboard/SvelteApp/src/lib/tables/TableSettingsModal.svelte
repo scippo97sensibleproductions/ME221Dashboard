@@ -142,7 +142,7 @@
             <div>
               <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Color Scheme</p>
               <div class="grid grid-cols-2 gap-1.5">
-                {#each colorSchemes as scheme}
+                {#each colorSchemes as scheme (scheme.id)}
                   <button class="rounded px-2 py-2 text-xs font-medium transition-colors min-h-[36px]
                     {currentColorScheme === scheme.id
                       ? 'bg-cyan-600 text-white'
@@ -209,7 +209,7 @@
                 }}
               >
                 <option value="">Time</option>
-                {#each allDataLinks as link}
+                {#each allDataLinks as link (link.id)}
                   <option value={link.id}>{link.name} ({link.measureUnit})</option>
                 {/each}
               </select>
@@ -225,7 +225,7 @@
                 }}
               >
                 <option value="">RPM</option>
-                {#each allDataLinks as link}
+                {#each allDataLinks as link (link.id)}
                   <option value={link.id}>{link.name} ({link.measureUnit})</option>
                 {/each}
               </select>

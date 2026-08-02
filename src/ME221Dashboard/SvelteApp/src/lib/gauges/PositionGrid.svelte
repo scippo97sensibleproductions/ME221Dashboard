@@ -23,7 +23,7 @@
 <div>
   <p class="mb-1 text-[10px] text-gray-500">{label}</p>
   <div class="grid grid-cols-3 gap-0.5 w-fit">
-    {#each positions as pos, i}
+    {#each positions as pos, i (pos.value)}
       <button
         class="flex items-center justify-center h-8 w-8 rounded text-[10px] font-medium transition-all
           {value === pos.value

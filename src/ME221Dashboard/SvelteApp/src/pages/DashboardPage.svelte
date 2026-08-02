@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import GaugeCard from '../lib/gauges/GaugeCard.svelte';
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
@@ -53,10 +54,7 @@
   let addGaugePopupY = $state(0);
   let loaded = $state(false);
   let loadError = $state<string | null>(null);
-  let gridRows = $state(4);
-  let gridColumns = $state(7);
   let backgroundImageDataUrl = $state<string | null>(null);
-  let warningSettings = $state<DataLinkWarningSetting[] | null>(null);
   let warningMap = $state<Map<number, DataLinkWarningSetting> | null>(null);
   let useLambdaMode = $state(false);
   let stoichAfr = $state(14.7);
@@ -175,15 +173,14 @@
 
   // Settings modal state
   let settingsOpen = $state(false);
-  let settingsTargetId = $state(-1);
   let settingsDef = $state<GaugeConfigEntry | null>(null);
 
   // Debounced save timer
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let layoutDirty = false;
 
-  const defaultGaugeName = (id: number) => `Entity ${id}`;
-  const defaultGaugeUnit = (id: number) => '';
+  const defaultGaugeName = (_id: number) => `Entity ${_id}`;
+  const defaultGaugeUnit = (_id: number) => '';
 
   // ── Static config — only rebuilds when gaugeDefs or entityLookup change ──
   // This is the expensive part (35-field mapping per gauge). By splitting it
@@ -260,9 +257,9 @@
   let _gaugeIndexByEntityId = new Map<number, number>();
 
   // Per-gauge smoothed values for EMA (exponential moving average)
-  let _smoothedValues = new Map<number, number>();
+  let _smoothedValues = new SvelteMap<number, number>();
   // Per-gauge previous raw values for spike gate
-  let _prevRawValues = new Map<number, number>();
+  let _prevRawValues = new SvelteMap<number, number>();
   // Last frame timestamp for frame-rate independent smoothing
   let _lastFrameTime = 0;
 
@@ -272,13 +269,13 @@
 
   function rebuildGaugeStates() {
     const next: GaugeDefinition[] = [];
-    const idxMap = new Map<number, number>();
+    const idxMap = new SvelteMap<number, number>();
     // Reset smoothed values on config change
-    _smoothedValues = new Map<number, number>();
-    _prevRawValues = new Map<number, number>();
+    _smoothedValues = new SvelteMap<number, number>();
+    _prevRawValues = new SvelteMap<number, number>();
     _lastFrameTime = 0;
     // Reset history buffers
-    const newHistory = new Map<number, number[]>();
+    const newHistory = new SvelteMap<number, number[]>();
     for (let i = 0; i < staticGaugeConfigs.length; i++) {
       const sc = staticGaugeConfigs[i];
       const rawValue = entityValues[sc.entityIdStr];
@@ -378,8 +375,9 @@
   // untrack(rebuildGaugeStates) prevents Svelte from tracking entityValues reads inside
   // rebuildGaugeStates as dependencies — value updates are handled by updateGaugeValue() instead.
   $effect(() => {
-    staticGaugeConfigs;
-    _gaugeDefCache;
+    // Dependency reads: re-run the rebuild whenever the static config or def cache is replaced.
+    void staticGaugeConfigs;
+    void _gaugeDefCache;
     untrack(rebuildGaugeStates);
   });
 
@@ -390,8 +388,8 @@
   // Written every frame for every entityId referenced by any gauge's chartOverlays;
   // keyed by String(entityId), null/absent values are skipped (no zero baseline).
   let overlayHistories = $state<Record<string, ChartSample[]>>({});
-  const _overlayIdScratch = new Set<number>();
-  const _overlayWindowScratch = new Map<number, number>();
+  const _overlayIdScratch = new SvelteSet<number>();
+  const _overlayWindowScratch = new SvelteMap<number, number>();
 
   $effect(() => {
     // Only track the frame tick. The loop below mutates gaugeStates in place, so tracking
@@ -467,7 +465,7 @@
 
       // Filter out individual gauges absorbed into Multi-Ring gauges
       // (keep the entries in config for isSelected tracking, just don't render them)
-      const absorbedIds = new Set<number>();
+      const absorbedIds = new SvelteSet<number>();
       for (const g of gaugeDefs) {
         if (g.shapeCategory === GaugeShapeCategory.MultiRing && g.linkedEntities) {
           for (const le of g.linkedEntities) absorbedIds.add(le.entityId);
@@ -487,8 +485,6 @@
           tableNames = names;
         }).catch(() => {});
       }
-      gridRows = result.gridRows;
-      gridColumns = result.gridColumns;
       layoutLocked = result.layoutLocked ?? false;
       if (result.entities) {
         entityLookup = result.entities;
@@ -743,7 +739,6 @@
     e.preventDefault();
     const def = gaugeDefs.find(d => d.entityId === entityId);
     if (!def) return;
-    settingsTargetId = entityId;
     settingsDef = { ...def };
     settingsOpen = true;
   }
@@ -843,7 +838,6 @@
 
   function handleSettingsClose() {
     settingsOpen = false;
-    settingsTargetId = -1;
     settingsDef = null;
   }
 
@@ -897,7 +891,6 @@
     const od = liveDataStore.odometer;
     if (od != null) entityValues[String(ODOMETER)] = od;
     HybridBridge.getWarningSettings().then(s => {
-      warningSettings = s;
       warningMap = s ? buildWarningMap(s) : null;
     }).catch(() => {});
     HybridBridge.getLambdaSettings().then(s => {

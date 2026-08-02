@@ -118,7 +118,7 @@
       <rect x={hBarX + gauge.barRedlineStart * hBarW} y={hBarY} width={Math.max(4, (1 - gauge.barRedlineStart) * hBarW)} height={hBarH} rx="4" fill={gauge.barRedlineColor} />
     {/if}
     {#if barTicks.length}
-      {#each barTicks as t}
+      {#each barTicks as t (t.fraction)}
         <line x1={hBarX + t.fraction * hBarW} y1={hBarY} x2={hBarX + t.fraction * hBarW} y2={hBarY + hBarH} stroke="#868e96" stroke-width="1.5" stroke-linecap="round" />
       {/each}
     {/if}
@@ -139,7 +139,7 @@
       <rect x={vBarX} y={vBarY + vBarH * (1 - gauge.barRedlineStart)} width={vBarW} height={Math.max(4, gauge.barRedlineStart * vBarH)} rx="4" fill={gauge.barRedlineColor} />
     {/if}
     {#if barTicks.length}
-      {#each barTicks as t}
+      {#each barTicks as t (t.fraction)}
         <line x1={vBarX} y1={vBarY + vBarH * (1 - t.fraction)} x2={vBarX + vBarW} y2={vBarY + vBarH * (1 - t.fraction)} stroke="#868e96" stroke-width="1.5" stroke-linecap="round" />
       {/each}
     {/if}

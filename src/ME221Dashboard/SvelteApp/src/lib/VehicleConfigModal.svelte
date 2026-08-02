@@ -5,7 +5,7 @@
   import type { VehicleConfig } from './derived/types';
   import { loadDerivedConfig, saveDerivedConfig } from './derived/vehicleConfig';
   import { autoDetectMapping } from './derived/autoDetect';
-  import { DERIVED_ENTITIES, DerivedEntityId } from './derived/types';
+  import { DERIVED_ENTITIES } from './derived/types';
 
   let { open = $bindable(true), sensors, onclose }: {
     open: boolean;
@@ -44,12 +44,6 @@
       if (detected.baroEntityId !== null) config.baroEntityId = detected.baroEntityId;
     }
   });
-
-  function sensorLabel(id: number | null): string {
-    if (id === null) return 'None';
-    const s = sensors.find(s => s.id === id);
-    return s ? `${s.name} (ID ${s.id})` : `Entity ${id}`;
-  }
 
   async function handleSave() {
     const tire = parseFloat(tireStr);
@@ -103,7 +97,7 @@
       <div class="space-y-1">
         <span class="text-xs text-gray-400">Gear Ratios</span>
         <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {#each gearStrs as _, i}
+          {#each gearStrs as gear, i (gear)}
             <label class="space-y-0.5">
               <span class="text-xs text-gray-500">{i + 1}</span>
               <input type="number" step="0.01" bind:value={gearStrs[i]} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
@@ -125,12 +119,12 @@
           { label: 'MAP', key: 'mapEntityId' as const },
           { label: 'Barometric Pressure', key: 'baroEntityId' as const },
           { label: 'ECU Gear', key: 'gearEntityId' as const },
-        ] as item}
+        ] as item (item.key)}
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm text-gray-300">{item.label}</span>
             <select class="w-64 rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none" value={config[item.key] ?? ''} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; config[item.key] = v ? Number(v) : null; }}>
               <option value="">Auto-detect / Disabled</option>
-              {#each sensors as s}
+              {#each sensors as s (s.id)}
                 <option value={s.id}>{s.name} (ID {s.id})</option>
               {/each}
             </select>
@@ -145,7 +139,7 @@
       <div class="space-y-2">
         <p class="text-sm text-gray-300">The following derived values are computed and available as gauges (add them from Configure):</p>
         <div class="space-y-1.5">
-          {#each Object.entries(DERIVED_ENTITIES) as [idStr, info]}
+          {#each Object.entries(DERIVED_ENTITIES) as [idStr, info] (idStr)}
             <div class="flex items-center justify-between rounded-lg bg-gray-800/50 px-3 py-2">
               <span class="text-sm text-gray-200">{info.name}</span>
               <span class="text-xs text-gray-500">{info.unit || '—'}</span>

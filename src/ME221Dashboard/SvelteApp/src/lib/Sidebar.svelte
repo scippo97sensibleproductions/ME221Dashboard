@@ -132,7 +132,7 @@
             <IconPlus size={14} />
           </button>
         </div>
-        {#each dashboardNames as name}
+        {#each dashboardNames as name (name)}
           <DropdownItem onclick={() => onSwitchDashboard(name)} class="flex items-center gap-2 text-[13px]">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             <span class="truncate">{name}</span>

@@ -3,6 +3,7 @@
   import { SessionRecorder, type RecordingState } from './SessionRecorder';
   import type { DataLinkDefinition } from '../HybridBridgeTypes';
   import { IconPlayerPlay, IconPlayerStop, IconCamera } from '@tabler/icons-svelte';
+  import { SvelteMap } from 'svelte/reactivity';
 
   let {
     selectedSensorIds = [],
@@ -50,7 +51,7 @@
       SessionRecorder.stop();
       stopTimer();
     } else {
-      const nameMap = new Map<number, string>();
+      const nameMap = new SvelteMap<number, string>();
       for (const dl of dataLinks) {
         nameMap.set(dl.id, dl.name);
       }

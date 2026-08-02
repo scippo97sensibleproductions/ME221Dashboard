@@ -81,7 +81,7 @@
       <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Position</p>
       <div class="relative" style="width: {WHEEL_C * 2}px; height: {WHEEL_C * 2}px;">
         <div class="absolute inset-2 rounded-full border border-gray-600/60"></div>
-        {#each positionAngles as angle, i}
+        {#each positionAngles as angle, i (angle)}
           {@const rad = angle * Math.PI / 180}
           {@const x = WHEEL_C + WHEEL_R * Math.sin(rad) - 10}
           {@const y = WHEEL_C - WHEEL_R * Math.cos(rad) - 10}
@@ -104,7 +104,7 @@
     <div class="flex-1 min-w-0">
       <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Sweep</p>
       <div class="grid grid-cols-2 gap-1.5">
-        {#each sweepOptions as opt}
+        {#each sweepOptions as opt (opt.angle)}
           <button
             class="flex flex-col items-center justify-center rounded-lg border px-2 py-2.5 text-xs font-medium transition-all min-h-[44px]
               {gaugeDef.sweepAngle === opt.angle

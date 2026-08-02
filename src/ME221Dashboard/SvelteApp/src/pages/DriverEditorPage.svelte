@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { IconChevronLeft, IconDeviceFloppy } from '@tabler/icons-svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import type { DriverDefinition, DriverParamDefinition, DataLinkDefinition } from '../lib/HybridBridgeTypes';
@@ -39,7 +40,7 @@
 
   let sections = $derived.by(() => {
     if (!driverDef) return [];
-    const map = new Map<string, DriverParamDefinition[]>();
+    const map = new SvelteMap<string, DriverParamDefinition[]>();
     for (const cfg of driverDef.configs) {
       const key = cfg.sectionName || 'General';
       if (!map.has(key)) map.set(key, []);
@@ -160,7 +161,7 @@
       } else {
         toast(result.error || 'Failed to save driver', 'error');
       }
-    } catch (e) {
+    } catch {
       toast('Failed to save driver', 'error');
     } finally {
       saving = false;
@@ -291,11 +292,11 @@
           This driver has no configurable parameters.
         </div>
       {:else}
-        {#each sections as [sectionName, params]}
+        {#each sections as [sectionName, params] (sectionName)}
           <div class="mb-4">
             <h3 class="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-400 px-3">{sectionName}</h3>
             <div class="rounded-lg border border-gray-700/50 bg-gray-800/30 divide-y divide-gray-700/30">
-              {#each params as param}
+              {#each params as param (param.name)}
                 {@const paramIndex = driverDef.configs.indexOf(param)}
                 {@const configValue = configs[paramIndex] ?? param.value}
                 {@const enabled = isParamEnabled(param)}

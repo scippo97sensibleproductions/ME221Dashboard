@@ -17,7 +17,7 @@
       <span class="text-xs font-mono text-cyan-400">{segmentCount}</span>
     </div>
     <div class="flex gap-1">
-      {#each presets as p}
+      {#each presets as p (p)}
         <button
           class="flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
             {segmentCount === p

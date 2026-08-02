@@ -152,7 +152,7 @@
       <path d={describeArc(cx, cy, r - arcThickness / 2, arcStartAngle + gauge.redlineStart * gauge.sweepAngle, arcEndAngle)}
             fill="none" stroke={gauge.redlineColor} stroke-width={redlineStrokeWidth} stroke-linecap="round" />
     {/if}
-    {#each ticks as tick}
+    {#each ticks as tick (tick.fraction)}
       {@const tickAngleRad = (arcStartAngle + tick.fraction * gauge.sweepAngle) * Math.PI / 180}
       {@const tickX1 = cx + tickOuterR * Math.cos(tickAngleRad)}
       {@const tickY1 = cy + tickOuterR * Math.sin(tickAngleRad)}

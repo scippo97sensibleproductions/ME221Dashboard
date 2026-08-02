@@ -37,7 +37,7 @@
   <div class="border-t border-gray-700/30 pt-4">
     <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Sweep</p>
     <div class="grid grid-cols-2 gap-1.5">
-      {#each sweepPresets as opt}
+      {#each sweepPresets as opt (opt.angle)}
         <button
           class="flex flex-col items-center justify-center rounded-lg border px-2 py-2.5 text-xs font-medium transition-all min-h-[44px]
             {gaugeDef.ringSweepAngle === opt.angle

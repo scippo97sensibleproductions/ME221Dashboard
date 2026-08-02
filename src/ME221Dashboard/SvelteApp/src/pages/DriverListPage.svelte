@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { IconSearch, IconChevronLeft, IconStar, IconArrowsSort, IconAdjustments } from '@tabler/icons-svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import type { DriverDefinition } from '../lib/HybridBridgeTypes';
@@ -12,7 +13,7 @@
   let searchQuery = $state('');
   let selectedCategory = $state<string | null>(null);
   let sortBy = $state<'name' | 'category' | 'recent'>('name');
-  let favorites = $state<Set<number>>(new Set());
+  let favorites = new SvelteSet<number>();
   let recentIds = $state<number[]>([]);
   let loading = $state(true);
   let mounted = false;
@@ -20,8 +21,11 @@
   async function loadFavorites() {
     try {
       const stored = await HybridBridge.getFavoriteDrivers();
-      if (Array.isArray(stored)) favorites = new Set(stored);
-    } catch {}
+      if (Array.isArray(stored)) {
+        favorites.clear();
+        for (const id of stored) favorites.add(id);
+      }
+    } catch { /* favorites are best-effort */ }
   }
 
   function saveFavorites() {
@@ -29,10 +33,8 @@
   }
 
   function toggleFavorite(id: number) {
-    const newFavs = new Set(favorites);
-    if (newFavs.has(id)) newFavs.delete(id);
-    else newFavs.add(id);
-    favorites = newFavs;
+    if (favorites.has(id)) favorites.delete(id);
+    else favorites.add(id);
     saveFavorites();
   }
 
@@ -40,7 +42,7 @@
     try {
       const stored = await HybridBridge.getRecentDrivers();
       if (Array.isArray(stored)) recentIds = stored;
-    } catch {}
+    } catch { /* recent list is best-effort */ }
   }
 
   function trackRecent(id: number) {
@@ -50,7 +52,7 @@
   }
 
   let categories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const d of drivers) {
       if (d.category) cats.add(d.category);
     }
@@ -138,7 +140,7 @@
       </select>
       <IconArrowsSort size={12} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-500" />
     </div>
-    {#each categories as cat}
+    {#each categories as cat (cat)}
       <button
         class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
         onclick={() => { selectedCategory = selectedCategory === cat ? null : cat; }}
@@ -181,7 +183,6 @@
               <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
                 {driver.category}
               </span>
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <span
                 class="shrink-0 p-1 text-amber-400 hover:text-amber-300 cursor-pointer"
                 onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}
@@ -216,7 +217,6 @@
           <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
             {driver.category}
           </span>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="shrink-0 p-1 transition-colors cursor-pointer {favorites.has(driver.id) ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-gray-400'}"
             onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}

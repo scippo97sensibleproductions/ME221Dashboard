@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type AvailableSensor, type SensorCustomization } from '../lib/HybridBridge';
+  import { type AvailableSensor } from '../lib/HybridBridge';
   import { IconCheck } from '@tabler/icons-svelte';
 
   let { sensors, expandCustomizationId, edits, toggleSensor, toggleCustomization, saveCustomization, clearCustomization }: {

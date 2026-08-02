@@ -685,8 +685,8 @@ export function estimateVisualSize(
     const nameSize = Math.max(7, dim * 0.04 * fs);
     const gap = 2;
 
-    let contentW = 0;
-    let contentH = 0;
+    let contentW: number;
+    let contentH: number;
 
     const style = opts.digitalStyle ?? DigitalStyle.Odometer;
 

@@ -1,13 +1,14 @@
 <script lang="ts">
   import { ValueTransformOperation, applyTransform, stepError, isTransformable } from './transformUtils';
   import type { ValueTransformStep } from './transformUtils';
+  import type { GaugeConfigEntry } from '../HybridBridge';
   import { IconX, IconPlus, IconChevronUp, IconChevronDown } from '@tabler/icons-svelte';
 
   let { gaugeDef, entityInfo, customUnitLabel = null, onchange }: {
-    gaugeDef: { entityId: number; transformSteps?: ValueTransformStep[] };
+    gaugeDef: GaugeConfigEntry;
     entityInfo: { name: string; unit: string; minValue?: number; maxValue?: number } | null;
     customUnitLabel?: string | null;
-    onchange: (def: any) => void;
+    onchange: (def: GaugeConfigEntry) => void;
   } = $props();
 
   // Intentional: copy initial value for local editing state
@@ -108,7 +109,7 @@
           onchange={(e) => updateOp(i, parseInt((e.target as HTMLSelectElement).value))}
           class="rounded bg-gray-700/80 px-2 py-1.5 text-xs text-gray-200 outline-none focus:ring-1 focus:ring-cyan-500/50 min-w-0"
         >
-          {#each operations as op}
+          {#each operations as op (op.value)}
             <option value={op.value}>{op.label}</option>
           {/each}
         </select>

@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
-  import type { TableDefinition, TableData, OperatingPoint, InterpolationRange } from '../lib/tables/types';
-  import { is1DTable, cellKey, getOutputValue, heatColor, getDataRange, findNearestIndex, findInterpolationRange, fromRaw, MeasurementUnitType } from '../lib/tables/types';
+  import type { TableDefinition, TableData, OperatingPoint } from '../lib/tables/types';
+  import { is1DTable, cellKey, getOutputValue, getDataRange, findNearestIndex, findInterpolationRange, fromRaw } from '../lib/tables/types';
   import type { ColorScheme } from '../lib/tables/types';
   import TableGrid from '../lib/tables/TableGrid.svelte';
   import CurveEditor from '../lib/tables/CurveEditor.svelte';
@@ -18,7 +18,7 @@
   import TableNotesSheet from '../lib/TableNotesSheet.svelte';
   import { handleSelectionComplete as calcSelectionComplete } from '../lib/tables/tableSelection';
   import { selBounds as calcSelBounds, applyTransform } from '../lib/tables/tableTransforms';
-  import { recalculateDirty as calcDirty, loadSessionCache, saveSessionCache, clearSessionCache } from '../lib/tables/tableUndoRedo';
+  import { recalculateDirty as calcDirty, loadSessionCache, saveSessionCache } from '../lib/tables/tableUndoRedo';
   import type { Bookmark } from '../lib/tables/tableUndoRedo';
   import HistoryViewer from '../lib/tables/HistoryViewer.svelte';
   import LiveSidePanel from '../lib/tables/LiveSidePanel.svelte';
@@ -103,7 +103,7 @@
     try {
       const stored = localStorage.getItem('table-color-scheme');
       if (stored === 'thermal' || stored === 'viridis' || stored === 'grayscale' || stored === 'ember') return stored;
-    } catch {}
+    } catch { /* localStorage unavailable */ }
     return 'thermal';
   }
 
@@ -111,7 +111,7 @@
 
   function handleColorSchemeChange(scheme: string) {
     colorScheme = scheme as ColorScheme;
-    try { localStorage.setItem('table-color-scheme', colorScheme); } catch {}
+    try { localStorage.setItem('table-color-scheme', colorScheme); } catch { /* localStorage unavailable */ }
   }
 
   let showContours = $state(false);
@@ -237,7 +237,6 @@
 
   // 3D view
   let view3D = $state(false);
-  let graph3dRef = $state<any>(null);
 
   function loadTracePanelState() {
     try {
@@ -248,7 +247,7 @@
         traceXLinkId = parsed.xLinkId ?? null;
         traceYLinkId = parsed.yLinkId ?? null;
       }
-    } catch {}
+    } catch { /* localStorage unavailable */ }
     updateTraceLabels();
   }
 
@@ -259,7 +258,7 @@
         xLinkId: traceXLinkId,
         yLinkId: traceYLinkId,
       }));
-    } catch {}
+    } catch { /* localStorage unavailable */ }
   }
 
   function updateTraceLabels() {
@@ -285,7 +284,7 @@
         livePanelOpen = parsed.visible ?? false;
         livePanelSensorIds = parsed.sensorIds ?? [];
       }
-    } catch {}
+    } catch { /* localStorage unavailable */ }
   }
 
   function saveLivePanelState() {
@@ -294,7 +293,7 @@
         visible: livePanelOpen,
         sensorIds: livePanelSensorIds,
       }));
-    } catch {}
+    } catch { /* localStorage unavailable */ }
   }
 
   function handleAddLiveSensor(id: number) {
@@ -341,8 +340,6 @@
   });
 
   // Live values for side panel and cell overlay
-  let liveInput0Value = $derived(operatingPoint.rpm);
-  let liveInput1Value = $derived(is1D ? null : operatingPoint.map);
   let liveOutputValue = $derived(operatingPoint.output);
 
   // Undo/redo helpers
@@ -648,24 +645,6 @@
 
   // ─── Copy/Paste ──────────────────────────────────────────────────────
 
-  function getHeaderValue(type: 'input0' | 'input1', idx: number): number {
-    if (!tableData) return 0;
-    return type === 'input0' ? tableData.input0[idx] : tableData.input1[idx];
-  }
-
-  function setHeaderValue(type: 'input0' | 'input1', idx: number, val: number) {
-    if (!tableData) return;
-    if (type === 'input0') {
-      const newInput0 = [...tableData.input0];
-      newInput0[idx] = val;
-      tableData = { ...tableData, input0: newInput0 };
-    } else {
-      const newInput1 = [...tableData.input1];
-      newInput1[idx] = val;
-      tableData = { ...tableData, input1: newInput1 };
-    }
-  }
-
   function handleCopy() {
     if (!selection || !tableData || !tableDef) return;
     const b = selBounds();
@@ -678,7 +657,7 @@
       }
       const tsv = vals.join('\t');
       clipboard = tsv;
-      try { navigator.clipboard?.writeText(tsv); } catch {}
+      try { navigator.clipboard?.writeText(tsv); } catch { /* clipboard unavailable */ }
       toast('Copied header values', 'info');
       return;
     }
@@ -689,7 +668,7 @@
       }
       const tsv = vals.join('\t');
       clipboard = tsv;
-      try { navigator.clipboard?.writeText(tsv); } catch {}
+      try { navigator.clipboard?.writeText(tsv); } catch { /* clipboard unavailable */ }
       toast('Copied header values', 'info');
       return;
     }
@@ -704,7 +683,7 @@
     }
     const tsv = rows.join('\n');
     clipboard = tsv;
-    try { navigator.clipboard?.writeText(tsv); } catch {}
+    try { navigator.clipboard?.writeText(tsv); } catch { /* clipboard unavailable */ }
     toast('Copied to clipboard', 'info');
   }
 
@@ -1120,7 +1099,7 @@
       const defs = await HybridBridge.getTableDefinitions();
       if (!mounted) return;
       allTables = (defs.tables as TableDefinition[]).map(t => ({ id: t.id, name: t.name, category: t.category }));
-    } catch {}
+    } catch { /* table list load failure is non-critical */ }
   }
 
   function handleQuickJump(tableId: number) {
@@ -1579,7 +1558,6 @@
 />
 
 {#if quickJumpOpen}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-[80]" style="background-color: rgba(0,0,0,0.8);" role="button" tabindex="-1" onclick={() => { quickJumpOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') quickJumpOpen = false; }}></div>
   <div class="fixed inset-x-0 bottom-0 z-[81] border-t max-h-[60vh] overflow-auto" style="background-color: var(--metro-card); border-color: var(--metro-border);">
     <div class="mx-auto max-w-lg p-4">

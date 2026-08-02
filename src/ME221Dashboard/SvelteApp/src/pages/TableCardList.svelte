@@ -2,7 +2,7 @@
   import type { TableDefinition } from '../lib/tables/types';
   import { IconCheck } from '@tabler/icons-svelte';
 
-  let { tables, selectedTableIds, toggleTable }: {
+  let { tables, toggleTable }: {
     tables: { def: TableDefinition; isSelected: boolean }[];
     selectedTableIds: Set<number>;
     toggleTable: (id: number) => void;

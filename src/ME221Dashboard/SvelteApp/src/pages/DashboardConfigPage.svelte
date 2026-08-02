@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { HybridBridge, type AvailableSensor, type AvailableSensorsResult, type SensorCustomization } from '../lib/HybridBridge';
   import type { TableDefinition } from '../lib/tables/types';
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
@@ -8,7 +9,7 @@
   import SensorCardList from './SensorCardList.svelte';
   import TableCardList from './TableCardList.svelte';
 
-  let { onNavigate, dashboardName = 'default', onDashboardCreated }: {
+  let { onNavigate, dashboardName = 'default' }: {
     onNavigate: (page: string) => void;
     dashboardName?: string;
     onDashboardCreated?: (name: string) => void;
@@ -51,7 +52,7 @@
 
   // Categories derived from sensors — no manual rebuild on toggle
   let categories = $derived.by(() => {
-    const catMap = new Map<string, { total: number; selected: number }>();
+    const catMap = new SvelteMap<string, { total: number; selected: number }>();
     for (const s of sensors) {
       const cat = catMap.get(s.category) || { total: 0, selected: 0 };
       cat.total++;
@@ -93,7 +94,7 @@
 
   // ─── Tables-tab filtering ───────────────────────────────────────────────
   let tableCategories = $derived.by(() => {
-    const catMap = new Map<string, { total: number; selected: number }>();
+    const catMap = new SvelteMap<string, { total: number; selected: number }>();
     for (const t of availableTables) {
       const c = catMap.get(t.category) || { total: 0, selected: 0 };
       c.total++;
@@ -287,7 +288,7 @@
   // ─── Table selection ──────────────────────────────────────────────────────
 
   function toggleTable(id: number) {
-    const next = new Set(selectedTableIds);
+    const next = new SvelteSet(selectedTableIds);
     if (next.has(id)) {
       next.delete(id);
     } else {
@@ -319,7 +320,7 @@
         return;
       }
       // Save table selections — preserve existing positions, only default new ones.
-      const existingTableMap = new Map<number, DashboardTableEntry>();
+      const existingTableMap = new SvelteMap<number, DashboardTableEntry>();
       const existingConfig = await HybridBridge.getDashboardConfig(dashboardName);
       if (existingConfig.tables) {
         for (const t of existingConfig.tables) existingTableMap.set(t.tableId, t);

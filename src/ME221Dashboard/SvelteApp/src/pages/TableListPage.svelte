@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { IconTable, IconSearch, IconChevronLeft, IconStar, IconArrowsSort } from '@tabler/icons-svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import type { TableDefinition } from '../lib/tables/types';
   import { getDataRange } from '../lib/tables/types';
   import TableMiniMap from '../lib/tables/TableMiniMap.svelte';
-  import { toast } from '../lib/toasts.svelte';
 
   let { onNavigate }: {
     onNavigate: (page: string, params?: Record<string, unknown>) => void;
@@ -26,7 +26,7 @@
     try {
       const stored = await HybridBridge.getFavoriteTables();
       if (Array.isArray(stored)) favorites = new Set(stored);
-    } catch {}
+    } catch { /* favorites unavailable */ }
   }
 
   function saveFavorites() {
@@ -34,7 +34,7 @@
   }
 
   function toggleFavorite(id: number) {
-    const newFavs = new Set(favorites);
+    const newFavs = new SvelteSet(favorites);
     if (newFavs.has(id)) {
       newFavs.delete(id);
     } else {
@@ -49,7 +49,7 @@
     try {
       const stored = await HybridBridge.getRecentTables();
       if (Array.isArray(stored)) recentIds = stored;
-    } catch {}
+    } catch { /* recents unavailable */ }
   }
 
   function trackRecent(id: number) {
@@ -59,7 +59,7 @@
   }
 
   let categories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const t of tables) {
       if (t.category) cats.add(t.category);
     }
@@ -131,7 +131,7 @@
           }
           tableDataCache = newCache;
         }
-      } catch {}
+      } catch { /* thumbnail batch load failure is non-critical */ }
     }
   }
 
@@ -191,7 +191,7 @@
       <IconArrowsSort size={12} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-500" />
     </div>
     <!-- Category chips -->
-    {#each categories as cat}
+    {#each categories as cat (cat)}
       <button
         class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
         onclick={() => { selectedCategory = selectedCategory === cat ? null : cat; }}
@@ -243,7 +243,6 @@
                    {formatDimensions(table)} · {table.input0Name}{!is1D(table) ? ` × ${table.input1Name}` : ''}
                 </div>
               </div>
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <span
                 class="shrink-0 p-1 text-amber-400 hover:text-amber-300 cursor-pointer"
                 onclick={(e) => { e.stopPropagation(); toggleFavorite(table.id); }}
@@ -289,7 +288,6 @@
           <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium {is1D(table) ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-500/15 text-amber-300'}">
             {is1D(table) ? '1D' : '2D'}
           </span>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span
             class="shrink-0 p-1 transition-colors cursor-pointer {favorites.has(table.id) ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-gray-400'}"
             onclick={(e) => { e.stopPropagation(); toggleFavorite(table.id); }}

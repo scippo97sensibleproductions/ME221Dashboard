@@ -38,6 +38,8 @@
   // Stats overlay
   let showStats = $state(true);
   let liveStats = $state<Map<number, RangeStats>>(new Map());
+  // Plain Map on purpose: the accumulator is read AND written inside the
+  // stats $effect, so it must not be reactive (SvelteMap would loop).
   const _statsAccum = new Map<number, RangeStats>();
 
   // ── Derived ────────────────────────────────────────────────────────────
@@ -58,7 +60,7 @@
     try {
       const v = localStorage.getItem('monitor_timeWindow');
       if (v) timeWindowSec = Number(v);
-    } catch {}
+    } catch { /* localStorage unavailable */ }
   });
   $effect(() => {
     localStorage.setItem('monitor_timeWindow', String(timeWindowSec));
@@ -67,7 +69,7 @@
     try {
       const stored = localStorage.getItem('monitor_selectedIds');
       if (stored) selectedIds = new Set(JSON.parse(stored));
-    } catch {}
+    } catch { /* localStorage unavailable */ }
   });
   $effect(() => {
     localStorage.setItem('monitor_selectedIds', JSON.stringify([...selectedIds]));
@@ -87,7 +89,7 @@
 
   // Compute live stats
   $effect(() => {
-    const frameCount = liveDataStore.frameCount;
+    void liveDataStore.frameCount;
     for (const id of selectedIds) {
       const val = liveDataStore.values[id];
       if (val != null) {
@@ -248,7 +250,7 @@
               />
               {#if showStats}
                 <div class="absolute top-1 right-1 flex flex-col gap-0.5 z-10">
-                  {#each chartSeries as s}
+                  {#each chartSeries as s (s.id)}
                     {@const stats = liveStats.get(Number(s.id))}
                     {#if stats}
                       <div class="bg-metro-card/90 px-1.5 py-0.5 text-[9px] font-mono flex items-center gap-1.5 border border-metro-border">
@@ -319,7 +321,7 @@
             />
             {#if showStats}
               <div class="absolute top-1 right-1 flex flex-col gap-0.5 z-10">
-                {#each chartSeries as s}
+                {#each chartSeries as s (s.id)}
                   {@const stats = liveStats.get(Number(s.id))}
                   {#if stats}
                     <div class="bg-metro-card/90 px-2 py-0.5 text-[10px] font-mono flex items-center gap-2 border border-metro-border">

@@ -2,6 +2,7 @@
   import type { DataLinkDefinition } from '../HybridBridgeTypes';
   import { liveDataStore } from '../stores/LiveDataStore.svelte';
   import { getSensorColor } from './sensorColors';
+  import { SvelteSet } from 'svelte/reactivity';
 
   let {
     dataLinks = [],
@@ -15,7 +16,7 @@
   let activeCategory = $state('All');
 
   const categories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const dl of dataLinks) {
       if (dl.category) cats.add(dl.category);
     }
@@ -43,7 +44,7 @@
   });
 
   function toggle(id: number) {
-    const next = new Set(selectedIds);
+    const next = new SvelteSet(selectedIds);
     if (next.has(id)) {
       next.delete(id);
     } else {
@@ -79,7 +80,7 @@
   </div>
 
   <div class="flex gap-1 px-2 py-1.5 overflow-x-auto border-b border-[#333] scrollbar-thin">
-    {#each categories as cat}
+    {#each categories as cat (cat)}
       <button
         class="px-2 py-0.5 text-[10px] rounded whitespace-nowrap transition-colors
           {activeCategory === cat

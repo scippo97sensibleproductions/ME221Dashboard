@@ -1,6 +1,7 @@
 <script lang="ts">
   import { IconX, IconBookmark, IconBookmarkFilled, IconRotate2, IconClock } from '@tabler/icons-svelte';
   import type { UndoEntry, Bookmark } from './tableUndoRedo';
+  import { SvelteMap } from 'svelte/reactivity';
 
   let { open, undoStack, redoStack, bookmarks, onJumpToGroup, onBookmark, onRemoveBookmark, onClose }: {
     open: boolean;
@@ -29,7 +30,7 @@
     const result: HistoryEntry[] = [];
 
     // Undo stack (most recent first)
-    const undoGroups = new Map<string, { entries: UndoEntry[]; label?: string; timestamp?: number }>();
+    const undoGroups = new SvelteMap<string, { entries: UndoEntry[]; label?: string; timestamp?: number }>();
     for (const e of undoStack) {
       if (!undoGroups.has(e.groupId)) {
         undoGroups.set(e.groupId, { entries: [], label: e.label, timestamp: e.timestamp });
@@ -51,7 +52,7 @@
     }
 
     // Redo stack (oldest first)
-    const redoGroups = new Map<string, { entries: UndoEntry[]; label?: string; timestamp?: number }>();
+    const redoGroups = new SvelteMap<string, { entries: UndoEntry[]; label?: string; timestamp?: number }>();
     for (const e of redoStack) {
       if (!redoGroups.has(e.groupId)) {
         redoGroups.set(e.groupId, { entries: [], label: e.label, timestamp: e.timestamp });
@@ -109,7 +110,7 @@
         <p class="py-6 text-center text-[13px]" style="color: var(--metro-text-muted);">No history yet</p>
       {:else}
         <div class="space-y-1">
-          {#each entries as entry}
+          {#each entries as entry (entry.groupId)}
             <div
               class="group flex items-center gap-2 rounded px-3 py-2 transition-colors duration-150"
               style="background-color: {entry.bookmarked ? 'rgba(216,59,1,0.1)' : 'transparent'};"

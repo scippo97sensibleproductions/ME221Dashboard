@@ -2,6 +2,7 @@
   import type { GaugeDefinition } from './types';
   import { buildColorLuts, gaugeValueColor } from './types';
   import { lineDashFor, type ChartSample } from './chartDataUtils';
+  import { SvelteMap } from 'svelte/reactivity';
 
   let { gauge, pixelWidth, pixelHeight, overlayHistories = {} }: {
     gauge: GaugeDefinition;
@@ -10,9 +11,8 @@
     overlayHistories?: Record<string, ChartSample[]>;
   } = $props();
 
-  const MAX_POINTS = 6000;
   interface Pt { t: number; v: number }
-  const buffers = new Map<number, Pt[]>();
+  const buffers = new SvelteMap<number, Pt[]>();
   function getBuf(eid: number): Pt[] {
     let b = buffers.get(eid);
     if (!b) { b = []; buffers.set(eid, b); }
@@ -20,7 +20,11 @@
   }
   function bisect(buf: Pt[] | ChartSample[], cutoff: number): number {
     let lo = 0, hi = buf.length;
-    while (lo < hi) { const m = (lo + hi) >> 1; buf[m].t < cutoff ? lo = m + 1 : hi = m; }
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (buf[m].t < cutoff) lo = m + 1;
+      else hi = m;
+    }
     return lo;
   }
 

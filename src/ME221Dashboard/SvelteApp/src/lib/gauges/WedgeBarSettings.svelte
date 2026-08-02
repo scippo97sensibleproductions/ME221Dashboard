@@ -26,7 +26,7 @@
 	<div>
 		<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Wedge Style</p>
 		<div class="grid grid-cols-3 gap-1.5">
-			{#each styles as s}
+			{#each styles as s (s.value)}
 				<button
 					class="flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all min-h-[52px]
 						{(gaugeDef.wedgeStyle ?? 0) === s.value

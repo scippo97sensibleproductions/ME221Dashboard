@@ -83,7 +83,7 @@
       <span class="text-xs font-mono text-cyan-400">{gaugeDef.chartTimeWindowSec}s</span>
     </div>
     <div class="flex gap-1">
-      {#each timeWindowOptions as tw}
+      {#each timeWindowOptions as tw (tw)}
         <button
           class="flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
             {gaugeDef.chartTimeWindowSec === tw
@@ -103,7 +103,7 @@
     </div>
     <p class="text-[9px] text-gray-600 mb-1.5">Lower = fewer points, faster rendering</p>
     <div class="flex gap-1">
-      {#each [0, 1, 2, 3] as dp}
+      {#each [0, 1, 2, 3] as dp (dp)}
         <button
           class="flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
             {gaugeDef.chartPrecision === dp
@@ -223,7 +223,7 @@
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Line Style</p>
     <div class="flex gap-1">
-      {#each LINE_STYLE_LABELS as label, i}
+      {#each LINE_STYLE_LABELS as label, i (label)}
         <button
           class="flex-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
             {(gaugeDef.chartLineStyle ?? 0) === i
@@ -257,7 +257,7 @@
   <div>
     <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Readout Position</p>
     <div class="grid grid-cols-4 gap-1">
-      {#each pillPositions as pos}
+      {#each pillPositions as pos (pos.value)}
         <button
           title={pos.title}
           class="rounded px-2 py-1.5 text-sm font-medium transition-colors min-h-[32px]
@@ -315,7 +315,7 @@
                 class="w-6 h-6 rounded border border-gray-600 cursor-pointer bg-transparent shrink-0"
               />
               <div class="flex gap-0.5">
-                {#each LINE_STYLE_LABELS as label, s}
+                {#each LINE_STYLE_LABELS as label, s (label)}
                   <button
                     class="rounded px-1.5 py-0.5 text-[8px] font-medium transition-colors
                       {ov.lineStyle === s
@@ -384,7 +384,7 @@
         {#if filteredSensors.length === 0}
           <div class="py-6 text-center text-xs text-gray-500">No sensors found</div>
         {:else}
-          {#each filteredSensors as s}
+          {#each filteredSensors as s (s.id)}
             {@const used = overlays.some(o => o.entityId === s.id)}
             {@const atMax = overlays.length >= MAX_OVERLAYS}
             {@const disabled = used || atMax}

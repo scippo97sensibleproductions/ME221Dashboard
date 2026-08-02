@@ -61,7 +61,6 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[80]"
     style="background-color: rgba(0,0,0,0.8);"

@@ -3,15 +3,14 @@
   import { presetStore } from './PresetStore.svelte';
   import type { MonitoringPreset } from '../HybridBridge';
   import { IconX, IconPlus, IconTrash } from '@tabler/icons-svelte';
+  import { SvelteSet } from 'svelte/reactivity';
 
   let {
     open = $bindable(false),
     dataLinks = [],
-    selectedIds = $bindable(new Set<number>()),
   }: {
     open: boolean;
     dataLinks: DataLinkDefinition[];
-    selectedIds?: Set<number>;
   } = $props();
 
   type View = 'list' | 'edit' | 'create';
@@ -28,7 +27,7 @@
 
   // Categories for datalink selection
   const categories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const dl of dataLinks) {
       if (dl.category) cats.add(dl.category);
     }
@@ -81,7 +80,7 @@
   }
 
   function toggleFormDatalink(id: number) {
-    const next = new Set(formDatalinkIds);
+    const next = new SvelteSet(formDatalinkIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     formDatalinkIds = next;
@@ -177,7 +176,7 @@
               <div class="text-center text-gray-500 text-[11px] py-6">No presets saved yet</div>
             {:else}
               <div class="space-y-1">
-                {#each sortedPresets as preset}
+                {#each sortedPresets as preset (preset.id)}
                   {@const isActive = preset.id === presetStore.activePresetId}
                   {#if deleteConfirmId === preset.id}
                     <div class="p-2 bg-red-900/10 border border-red-500/30 rounded">
@@ -268,7 +267,7 @@
                 class="w-full px-2 py-1 text-[10px] bg-[#222] border border-[#444] rounded text-white placeholder-gray-500 focus:outline-none focus:border-sky-500 mb-1.5"
               />
               <div class="flex gap-1 overflow-x-auto mb-1.5 scrollbar-thin">
-                {#each categories as cat}
+                {#each categories as cat (cat)}
                   <button
                     class="px-2 py-0.5 text-[9px] rounded whitespace-nowrap transition-colors
                       {activeCategory === cat ? 'bg-sky-600 text-white' : 'bg-[#2a2a2a] text-gray-400 hover:bg-[#333]'}"
@@ -285,7 +284,7 @@
               {#if filteredFormLinks.length === 0}
                 <div class="p-3 text-center text-gray-500 text-[10px]">No sensors found</div>
               {:else}
-                {#each filteredFormLinks as dl}
+                {#each filteredFormLinks as dl (dl.id)}
                   <button
                     class="w-full flex items-center gap-2 px-2 py-1 text-left text-[10px] border-b border-[#2a2a2a] transition-colors
                       {formDatalinkIds.has(dl.id) ? 'bg-sky-600/10' : 'hover:bg-[#222]'}"

@@ -57,7 +57,7 @@
 <div class="flex flex-col h-full bg-gray-800/20">
   <!-- Tab selector -->
   <div class="flex border-b border-gray-700/30 shrink-0 overflow-x-auto gap-0.5 px-1">
-    {#each tabs as tab}
+    {#each tabs as tab (tab.id)}
       <button
         class="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-medium transition-colors border-b-2 whitespace-nowrap
           {activeTab === tab.id
@@ -82,7 +82,7 @@
   <div class="flex-1 min-h-0 {activeTab === 'tables' ? 'overflow-hidden' : 'overflow-y-auto'} p-3 space-y-1">
     {#if activeTab === 'inputs'}
       {#if hasInputs}
-        {#each inputLinkIds as linkId, i}
+        {#each inputLinkIds as linkId, i (linkId)}
           <DataLinkRow
             slotType="input"
             slotIndex={i}
@@ -100,7 +100,7 @@
       {/if}
     {:else if activeTab === 'outputs'}
       {#if hasOutputs}
-        {#each outputLinkIds as linkId, i}
+        {#each outputLinkIds as linkId, i (linkId)}
           <DataLinkRow
             slotType="output"
             slotIndex={i}

@@ -37,7 +37,7 @@
       <span class="text-xs font-mono text-cyan-400">{ringCount}/5</span>
     </div>
     <div class="flex gap-1">
-      {#each [1, 2, 3, 4, 5] as n}
+      {#each [1, 2, 3, 4, 5] as n (n)}
         <button
           class="flex-1 rounded px-2 py-2 text-xs font-medium transition-colors min-h-[36px]
             {ringCount === n
@@ -93,7 +93,7 @@
       <span class="text-xs font-mono text-cyan-400">{sweepAngle}°</span>
     </div>
     <div class="grid grid-cols-3 gap-1">
-      {#each SWEEP_PRESETS as opt}
+      {#each SWEEP_PRESETS as opt (opt.value)}
         <button
           class="flex flex-col items-center justify-center rounded-lg border px-2 py-2 text-xs font-medium transition-all min-h-[44px]
             {sweepAngle === opt.value

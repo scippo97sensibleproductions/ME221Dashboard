@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { NeedleCurvePoint } from './types';
   import { interpolateNeedleAngle, positionToCenterAngle } from './types';
-  import { IconPlus, IconTrash, IconTarget } from '@tabler/icons-svelte';
+  import { IconTrash, IconTarget } from '@tabler/icons-svelte';
   import NumberInput from '../NumberInput.svelte';
 
   let { curve, unit = '', minRaw = 0, maxRaw = 10000, sweepAngle = 270, arcPosition = 0, previewValue, onchange }: {

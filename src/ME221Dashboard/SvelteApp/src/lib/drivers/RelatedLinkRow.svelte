@@ -33,7 +33,6 @@
 </button>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-50" onclick={handleClose} onkeydown={(e) => { if (e.key === 'Escape') open = false; }} role="presentation">
     <!-- Popover positioned near-center for now; full positioning deferred -->
     <div class="absolute left-1/2 top-1/4 -translate-x-1/2 w-72 rounded-xl border border-gray-600 bg-gray-800 p-4 shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">

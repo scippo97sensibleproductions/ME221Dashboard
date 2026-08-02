@@ -141,7 +141,7 @@
 	{#if style === WedgeStyle.Classic}
 		<rect x={pad.l - 1} y={pad.t + barAreaH * 0.06} width={barAreaW + 2} height={maxH + 2} rx="1"
 			fill="#0d0d0d" stroke="#1a1a1a" stroke-width="0.5"/>
-		{#each Array(total) as _, i}
+		{#each Array(total) as _, i (i)}
 			{@const f = i / total}
 			{@const h = segHeight(i)}
 			{@const active = i < activeCount}
@@ -155,7 +155,7 @@
 	{:else if style === WedgeStyle.Stacked}
 		<rect x={pad.l - 2} y={baselineY - maxH - 3} width={barAreaW + 4} height={maxH + 6} rx="2"
 			fill="#0b0b12" stroke="#191924" stroke-width="0.5"/>
-		{#each Array(total) as _, i}
+		{#each Array(total) as _, i (i)}
 			{@const f = (i + 0.5) / total}
 			{@const h = segHeight(i)}
 			{@const x = pad.l + i * (stW + stGap)}
@@ -180,7 +180,7 @@
 			<path d={`M ${pad.l} ${baselineY} L ${pad.l} ${baselineY - minH} L ${needle.x} ${needle.y} L ${needle.x} ${baselineY} Z`}
 				fill={barColor} opacity="0.14"/>
 		{/if}
-		{#each Array(17) as _, j}
+		{#each Array(17) as _, j (j)}
 			{@const f = j / 16}
 			{@const major = j % 4 === 0}
 			{@const px = pad.l + f * barAreaW}
@@ -199,7 +199,7 @@
 	{:else if style === WedgeStyle.Thermal}
 		<rect x={pad.l - 1} y={pad.t + barAreaH * 0.06} width={barAreaW + 2} height={maxH + 2} rx="1"
 			fill="#0d0d0d" stroke="#1a1a1a" stroke-width="0.5"/>
-		{#each Array(total) as _, i}
+		{#each Array(total) as _, i (i)}
 			{@const h = segHeight(i)}
 			{@const active = i < activeCount}
 			<rect x={segX(i)} y={baselineY - h} width={segW} height={h} rx="1"
@@ -217,13 +217,13 @@
 
 	<!-- ═══ WIRE — blueprint outline ═══ -->
 	{:else if style === WedgeStyle.Wire}
-		{#each [0.25, 0.5, 0.75] as gf}
+		{#each [0.25, 0.5, 0.75] as gf (gf)}
 			<line x1={pad.l} y1={baselineY - maxH * gf} x2={pad.l + barAreaW} y2={baselineY - maxH * gf}
 				stroke="#ffffff" stroke-width="0.4" opacity="0.05"/>
 		{/each}
 		<path d={wedgeSilhouette} fill="rgba(255,255,255,0.02)" stroke="#3a3a48" stroke-width="1"/>
 		<g clip-path={`url(#wedgeClip-${gauge.entityId})`}>
-			{#each Array(24) as _, i}
+			{#each Array(24) as _, i (i)}
 				{@const x = pad.l + ((i + 0.5) / 24) * barAreaW}
 				<line x1={x} y1={baselineY - maxH} x2={x} y2={baselineY}
 					stroke="#ffffff" stroke-width="0.5" opacity="0.04"/>
@@ -242,7 +242,7 @@
 
 	<!-- ═══ CHEVRON — arrow cascade ═══ -->
 	{:else if style === WedgeStyle.Chevron}
-		{#each Array(total) as _, i}
+		{#each Array(total) as _, i (i)}
 			{@const f = (i + 0.5) / total}
 			{@const active = i < activeCount}
 			<path d={chevronPath(i)}
@@ -254,7 +254,7 @@
 	{/if}
 
 	<!-- ── Shared: baseline scale ticks ── -->
-	{#each scaleTicks as tick}
+	{#each scaleTicks as tick (tick.frac)}
 		{@const x = pad.l + tick.frac * barAreaW}
 		{@const displayVal = scaleDecimals > 0 ? tick.val.toFixed(scaleDecimals) : Math.round(tick.val)}
 		{@const isRed = tick.frac >= redlineStart}

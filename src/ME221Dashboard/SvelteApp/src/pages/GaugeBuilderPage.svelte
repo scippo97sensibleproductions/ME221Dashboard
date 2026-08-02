@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { HybridBridge } from '../lib/HybridBridge';
-  import type { AvailableSensor, GaugeConfigEntry, DashboardConfigResult } from '../lib/HybridBridgeTypes';
+  import type { AvailableSensor, GaugeConfigEntry } from '../lib/HybridBridgeTypes';
   import { GaugeShapeCategory } from '../lib/gauges/gaugeTypes';
-  import { IconPlus, IconX, IconChevronRight, IconChevronLeft, IconTrash } from '@tabler/icons-svelte';
+  import { IconPlus, IconX } from '@tabler/icons-svelte';
 
   let { onNavigate, dashboardName = 'default' }: {
     onNavigate: (page: string, params?: Record<string, unknown>) => void;
@@ -54,7 +55,7 @@
 
   // Visible gauges: hide individual entries absorbed into Multi-Ring
   const visibleGauges = $derived.by(() => {
-    const absorbed = new Set<number>();
+    const absorbed = new SvelteSet<number>();
     for (const g of gauges) {
       if (g.shapeCategory === GaugeShapeCategory.MultiRing) {
         for (const le of g.linkedEntities) absorbed.add(le.entityId);
@@ -78,7 +79,7 @@
       // Import existing gauges from dashboard config
       if (dashConfig.gauges && dashConfig.gauges.length > 0) {
         // Collect entity IDs absorbed into Multi-Ring gauges
-        const absorbedIds = new Set<number>();
+        const absorbedIds = new SvelteSet<number>();
         for (const g of dashConfig.gauges) {
           if (g.shapeCategory === GaugeShapeCategory.MultiRing && g.linkedEntities) {
             for (const le of g.linkedEntities) absorbedIds.add(le.entityId);
@@ -86,7 +87,7 @@
         }
         // Filter out individual entries absorbed into Multi-Ring (but keep the Multi-Ring itself)
         const relevant = dashConfig.gauges.filter(g => g.shapeCategory === GaugeShapeCategory.MultiRing || !absorbedIds.has(g.entityId));
-        const existing: BuilderGauge[] = relevant.map((g, i) => ({
+        const existing: BuilderGauge[] = relevant.map((g) => ({
           uid: nextUid++,
           shapeCategory: g.shapeCategory as GaugeShapeCategory,
           primaryEntityId: g.entityId,
@@ -173,13 +174,13 @@
     try {
       // Read existing config to preserve positions/sizes
       const existingConfig = await HybridBridge.getDashboardConfig(dashboardName);
-      const existingMap = new Map<number, GaugeConfigEntry>();
+      const existingMap = new SvelteMap<number, GaugeConfigEntry>();
       if (existingConfig.gauges) {
         for (const g of existingConfig.gauges) existingMap.set(g.entityId, g);
       }
 
       // Collect all entity IDs absorbed into Multi-Ring gauges
-      const absorbedIds = new Set<number>();
+      const absorbedIds = new SvelteSet<number>();
       for (const g of gauges) {
         if (g.shapeCategory === GaugeShapeCategory.MultiRing) {
           for (const le of g.linkedEntities) absorbedIds.add(le.entityId);
@@ -334,7 +335,7 @@
           </div>
           <!-- Multi-ring sub-rows -->
           {#if g.shapeCategory === GaugeShapeCategory.MultiRing && g.linkedEntities.length > 0}
-            {#each g.linkedEntities as le}
+            {#each g.linkedEntities as le (le.entityId)}
               <div class="flex items-center gap-1.5 pl-9 pr-3 py-0.5 border-b border-gray-800/50 text-[9px]">
                 <div class="w-1 h-1 rounded-full shrink-0" style="background: {le.color}"></div>
                 <span class="flex-1 text-gray-400 truncate">{getEntityName(le.entityId)}</span>
@@ -374,7 +375,7 @@
               <span class="flex-1 text-gray-400 truncate">
                 {#if g.shapeCategory === GaugeShapeCategory.MultiRing}
                   {#if g.linkedEntities.length > 0}
-                    {#each g.linkedEntities as le, i}
+                    {#each g.linkedEntities as le, i (le.entityId)}
                       <span style="color: {le.color}">●</span> {getEntityName(le.entityId)}
                       {#if i < g.linkedEntities.length - 1} · {/if}
                     {/each}
@@ -417,7 +418,7 @@
         </button>
       </div>
       <div class="flex-1 overflow-y-auto p-2">
-        {#each TYPE_DEFS as t}
+        {#each TYPE_DEFS as t (t.type)}
           <button class="flex items-center gap-2 w-full p-2 border border-gray-700 bg-gray-800/50 hover:bg-gray-800 transition-colors mb-1 text-left"
                   onclick={() => addGauge(t.type)}>
             <div class="w-7 h-7 flex items-center justify-center text-sm border border-gray-700 shrink-0"
@@ -456,7 +457,7 @@
       <div class="flex-1 overflow-y-auto p-2">
         <input class="w-full px-2 py-1 border border-gray-600 bg-gray-900 text-white text-[11px] mb-2 outline-none focus:border-blue-500"
                placeholder="Search..." bind:value={searchFilter}>
-        {#each filteredSensors as s}
+        {#each filteredSensors as s (s.id)}
           {@const isUsed = editingGauge.primaryEntityId === s.id || editingGauge.linkedEntities.some(l => l.entityId === s.id)}
           <button class="flex items-center gap-2 w-full p-1.5 border border-gray-700 bg-gray-800/50 hover:bg-gray-800 transition-colors mb-0.5 text-left"
                   class:opacity-30={isUsed}
@@ -499,7 +500,7 @@
         <div class="text-[9px] font-bold uppercase tracking-wider text-gray-500 mb-1.5">ASSIGNED ENTITIES</div>
         {#if editingGauge.shapeCategory === GaugeShapeCategory.MultiRing}
           {#if editingGauge.linkedEntities.length > 0}
-            {#each editingGauge.linkedEntities as le}
+            {#each editingGauge.linkedEntities as le (le.entityId)}
               <div class="flex items-center gap-1.5 py-1 border-b border-gray-800">
                 <div class="w-1.5 h-1.5 rounded-full shrink-0" style="background: {le.color}"></div>
                 <span class="flex-1 text-[10px] font-semibold">{getEntityName(le.entityId)}</span>
@@ -512,11 +513,11 @@
             {/each}
             <!-- Ring colors -->
             <div class="text-[9px] font-bold uppercase tracking-wider text-gray-500 mt-3 mb-1.5">RING COLORS</div>
-            {#each editingGauge.linkedEntities as le}
+            {#each editingGauge.linkedEntities as le (le.entityId)}
               <div class="flex items-center gap-1.5 py-1 border-b border-gray-800">
                 <span class="flex-1 text-[9px] text-gray-400">{getEntityName(le.entityId)}</span>
                 <div class="flex gap-0.5">
-                  {#each RING_COLORS as c}
+                  {#each RING_COLORS as c (c)}
                     <button class="w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-all"
                             aria-label={`Select color ${c}`}
                             title={c}

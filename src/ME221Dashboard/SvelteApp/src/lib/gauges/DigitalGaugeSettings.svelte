@@ -58,7 +58,7 @@
   <div>
     <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Display Style</p>
     <div class="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
-      {#each styles as style}
+      {#each styles as style (style.value)}
         <button
           class="flex flex-col items-center justify-center rounded-lg border px-2 py-3 text-center transition-all min-h-[52px]
             {gaugeDef.digitalStyle === style.value
@@ -143,7 +143,7 @@
           <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Decimals</p>
         </div>
         <div class="flex gap-1">
-          {#each [{ v: -1, label: 'Auto' }, { v: 0, label: '0' }, { v: 1, label: '1' }, { v: 2, label: '2' }, { v: 3, label: '3' }] as opt}
+          {#each [{ v: -1, label: 'Auto' }, { v: 0, label: '0' }, { v: 1, label: '1' }, { v: 2, label: '2' }, { v: 3, label: '3' }] as opt (opt.v)}
             <button
               disabled={!formatApplicable}
               class="flex-1 rounded px-1.5 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]

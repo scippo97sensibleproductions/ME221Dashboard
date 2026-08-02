@@ -2,11 +2,11 @@
   import { onMount } from 'svelte';
   import { HybridBridge, type ConnectionStateInfo } from '../lib/HybridBridge';
   import {
-    IconPlugConnected, IconRefresh, IconWifi, IconUsb, IconConnection,
+    IconPlugConnected, IconRefresh, IconWifi, IconUsb,
     IconNetwork, IconDeviceLaptop, IconCpu, IconCircleCheck,
     IconCircleX, IconLoader, IconPlug, IconArrowRight
   } from '@tabler/icons-svelte';
-  import { fly, scale } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
 
   let { connectionState, onConnectionChange }: {
     connectionState: ConnectionStateInfo;
@@ -74,7 +74,7 @@
   async function disconnect() {
     try {
       await HybridBridge.disconnect();
-    } catch {}
+    } catch { /* disconnect failure is ignored; state updates below */ }
     onConnectionChange({ state: 'Disconnected' });
   }
 
@@ -94,7 +94,7 @@
         if (last.type) connectionType = last.type as ConnType;
         if (last.serialPort) selectedPort = last.serialPort;
       }
-    } catch {}
+    } catch { /* no saved connection */ }
   });
 </script>
 
@@ -252,7 +252,7 @@
                     {#if serialPorts.length === 0}
                       <option value="">No ports found</option>
                     {/if}
-                    {#each serialPorts as port}
+                    {#each serialPorts as port (port.name)}
                       <option value={port.name}>{port.description || port.name}</option>
                     {/each}
                   </select>

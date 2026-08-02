@@ -184,9 +184,9 @@
             <div>
               <div class="mb-1 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--metro-text-muted)]">Before</div>
               <div class="overflow-hidden border" style="border-color: var(--metro-border);">
-                {#each beforeTable.values as row}
+                {#each beforeTable.values as row, ri (ri)}
                   <div class="flex">
-                    {#each row as val}
+                    {#each row as val, vi (vi)}
                       {@const t = beforeTable.mx === beforeTable.mn ? 0.5 : (val - beforeTable.mn) / (beforeTable.mx - beforeTable.mn)}
                       <div
                         class="flex h-8 flex-1 items-center justify-center border-r border-b text-[9px] font-mono font-medium"
@@ -204,9 +204,9 @@
             <div>
               <div class="mb-1 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--metro-text-muted)]">After</div>
               <div class="overflow-hidden border" style="border-color: var(--metro-border);">
-                {#each afterTable.values as row}
+                {#each afterTable.values as row, ri (ri)}
                   <div class="flex">
-                    {#each row as val}
+                    {#each row as val, vi (vi)}
                       {@const t = afterTable.mx === afterTable.mn ? 0.5 : (val - afterTable.mn) / (afterTable.mx - afterTable.mn)}
                       <div
                         class="flex h-8 flex-1 items-center justify-center border-r border-b text-[9px] font-mono font-medium"

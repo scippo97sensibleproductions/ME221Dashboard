@@ -1,6 +1,6 @@
 <script lang="ts">
   import { IconAlertTriangle, IconX, IconTrash, IconClock } from '@tabler/icons-svelte';
-  import { warningStore, type ActiveWarning, type WarningHistoryEntry } from './stores/warningStore.svelte';
+  import { warningStore } from './stores/warningStore.svelte';
 
   let activeList = $derived(
     Array.from(warningStore.activeWarnings.values())
@@ -11,7 +11,8 @@
   let isOpen = $derived(warningStore.isPanelOpen);
   let showHistory = $state(false);
 
-  function formatTimeAgo(ts: number): string {
+  // `_tick` is passed in so relative timestamps re-evaluate every 5s while the panel is open.
+  function formatTimeAgo(ts: number, _tick: number): string {
     const sec = Math.floor((Date.now() - ts) / 1000);
     if (sec < 5) return 'just now';
     if (sec < 60) return `${sec}s ago`;
@@ -53,7 +54,6 @@
 
 <!-- Backdrop + slide-in panel -->
 {#if isOpen}
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="fixed inset-0 z-40 bg-black/40 transition-opacity"
     onclick={() => warningStore.closePanel()}
@@ -126,7 +126,6 @@
           </div>
         {:else}
           {#each activeList as w (w.dataId)}
-            {@const time = _tick}
             <div
               class="flex items-start gap-3 border-b px-4 py-3 transition-colors hover:bg-gray-800/30"
               style="border-color: var(--metro-border); border-left: 3px solid {w.severity === 'critical' ? '#ef4444' : '#f59e0b'};"
@@ -152,7 +151,7 @@
                 </div>
                 <div class="mt-1 flex items-center gap-1 text-[10px]" style="color: var(--metro-text-muted);">
                   <IconClock size={10} />
-                  {formatTimeAgo(w.triggeredAt)}
+                  {formatTimeAgo(w.triggeredAt, _tick)}
                   {#if w.category}
                     <span class="ml-1 rounded bg-gray-800 px-1 py-0.5">{w.category}</span>
                   {/if}

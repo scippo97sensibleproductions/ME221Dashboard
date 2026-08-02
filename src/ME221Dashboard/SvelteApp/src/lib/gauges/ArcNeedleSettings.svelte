@@ -77,7 +77,7 @@
   <div>
     <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Needle Shape</p>
     <div class="grid grid-cols-2 gap-1">
-      {#each shapePresets as preset}
+      {#each shapePresets as preset (preset.value)}
         <button
           class="flex-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
             {(gaugeDef.needleShape ?? 0) === preset.value

@@ -190,7 +190,7 @@
               {presetStore.presets.length === 0 ? 'No presets saved yet' : 'No matching presets'}
             </div>
           {/if}
-          {#each filteredPresets as preset}
+          {#each filteredPresets as preset (preset.id)}
             {@const isActive = preset.id === presetStore.activePresetId}
             <button
               class="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors
@@ -284,6 +284,6 @@
 
 {#if showEditor}
   {#await import('./PresetEditorModal.svelte') then { default: PresetEditorModal }}
-    <PresetEditorModal bind:open={showEditor} {dataLinks} bind:selectedIds />
+    <PresetEditorModal bind:open={showEditor} {dataLinks} />
   {/await}
 {/if}

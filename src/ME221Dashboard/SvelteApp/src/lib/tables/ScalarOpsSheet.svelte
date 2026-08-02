@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { Modal, Button } from 'flowbite-svelte';
-
   let { open, onApply, onClose }: {
     open: boolean;
     onApply: (operation: string, params: Record<string, number>) => void;
@@ -26,7 +24,6 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[80]"
     style="background-color: rgba(0,0,0,0.8);"

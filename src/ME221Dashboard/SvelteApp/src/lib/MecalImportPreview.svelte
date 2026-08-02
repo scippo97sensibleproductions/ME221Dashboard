@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { IconX, IconSearch, IconTable, IconAdjustments, IconCheck, IconArrowLeft, IconPackage, IconChevronDown, IconChevronRight } from '@tabler/icons-svelte';
+  import { IconSearch, IconTable, IconAdjustments, IconCheck, IconArrowLeft, IconPackage, IconChevronDown, IconChevronRight } from '@tabler/icons-svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { HybridBridge } from './HybridBridge';
   import type { TableDefinition, TableData } from './tables/types';
-  import { is1DTable } from './tables/types';
   import ReadOnlyTable from './tables/ReadOnlyTable.svelte';
 
   let {
@@ -37,8 +37,8 @@
   let drivers = $state<DriverPreview[]>([]);
   let dataLinkCount = $state(0);
 
-  let selectedTableIds = $state(new Set<number>());
-  let selectedDriverIds = $state(new Set<number>());
+  let selectedTableIds = new SvelteSet<number>();
+  let selectedDriverIds = new SvelteSet<number>();
 
   type TableOverride = {
     blend: number;
@@ -48,7 +48,7 @@
     clampMin: number | null;
     clampMax: number | null;
   };
-  let tableOverrides = $state<Map<number, TableOverride>>(new Map());
+  let tableOverrides = new SvelteMap<number, TableOverride>();
   const defaultOverride: TableOverride = { blend: 1, axisMode: 'import', scale: 1, offset: 0, clampMin: null, clampMax: null };
 
   function getOverride(id: number): TableOverride {
@@ -57,9 +57,7 @@
 
   function setOverride(id: number, patch: Partial<TableOverride>) {
     const existing = getOverride(id);
-    const next = new Map(tableOverrides);
-    next.set(id, { ...existing, ...patch });
-    tableOverrides = next;
+    tableOverrides.set(id, { ...existing, ...patch });
   }
 
   let activeTab = $state<'tables' | 'drivers'>('tables');
@@ -70,13 +68,13 @@
   let applyResult = $state<{ success: boolean; message: string } | null>(null);
 
   const tableCategories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const t of tables) cats.add(t.category);
     return ['All', ...Array.from(cats).sort()];
   });
 
   const driverCategories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const d of drivers) cats.add(d.category);
     return ['All', ...Array.from(cats).sort()];
   });
@@ -161,11 +159,13 @@
       drivers = (result.drivers as DriverPreview[]) ?? [];
       dataLinkCount = result.dataLinkCount ?? 0;
 
-      selectedTableIds = new Set(tables.filter((t) => t.existsInEcu).map((t) => t.id));
-      selectedDriverIds = new Set(drivers.filter((d) => d.existsInEcu).map((d) => d.id));
-      tableOverrides = new Map();
-    } catch (e: any) {
-      error = e.message;
+      selectedTableIds.clear();
+      for (const t of tables) if (t.existsInEcu) selectedTableIds.add(t.id);
+      selectedDriverIds.clear();
+      for (const d of drivers) if (d.existsInEcu) selectedDriverIds.add(d.id);
+      tableOverrides.clear();
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     } finally {
       loading = false;
     }
@@ -176,25 +176,28 @@
   });
 
   function toggleTable(id: number) {
-    const next = new Set(selectedTableIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    selectedTableIds = next;
+    if (selectedTableIds.has(id)) selectedTableIds.delete(id);
+    else selectedTableIds.add(id);
   }
 
   function toggleDriver(id: number) {
-    const next = new Set(selectedDriverIds);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    selectedDriverIds = next;
+    if (selectedDriverIds.has(id)) selectedDriverIds.delete(id);
+    else selectedDriverIds.add(id);
   }
 
   function selectAll() {
-    if (activeTab === 'tables') selectedTableIds = new Set(filteredTables.map((t) => t.id));
-    else selectedDriverIds = new Set(filteredDrivers.map((d) => d.id));
+    if (activeTab === 'tables') {
+      selectedTableIds.clear();
+      for (const t of filteredTables) selectedTableIds.add(t.id);
+    } else {
+      selectedDriverIds.clear();
+      for (const d of filteredDrivers) selectedDriverIds.add(d.id);
+    }
   }
 
   function deselectAll() {
-    if (activeTab === 'tables') selectedTableIds = new Set();
-    else selectedDriverIds = new Set();
+    if (activeTab === 'tables') selectedTableIds.clear();
+    else selectedDriverIds.clear();
   }
 
   function expandTable(id: number) {
@@ -213,7 +216,6 @@
         if (!table.current) continue;
 
         const ov = getOverride(table.id);
-        const is1D = is1DTable({ tableType: table.tableType } as any);
 
         // Determine output values based on blend
         let output: number[];
@@ -298,8 +300,8 @@
         applyResult = { success: true, message: parts.length > 0 ? `Imported: ${parts.join(', ')}` : 'Import complete' };
         setTimeout(() => onApply(), 1500);
       }
-    } catch (e: any) {
-      applyResult = { success: false, message: e.message };
+    } catch (e: unknown) {
+      applyResult = { success: false, message: e instanceof Error ? e.message : String(e) };
     } finally {
       applying = false;
     }
@@ -394,7 +396,7 @@
         </div>
         {#if categories.length > 1}
           <div class="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
-            {#each categories as cat}
+            {#each categories as cat (cat)}
               <button class="px-2 py-0.5 text-[10px] rounded-full whitespace-nowrap transition-colors shrink-0" style="background-color: {categoryFilter === cat ? 'var(--metro-blue, #0078D7)' : 'var(--metro-bg-hover, #2a2a4a)'}; color: {categoryFilter === cat ? '#fff' : 'var(--metro-text-secondary, #A0A0A0)'};" onclick={() => (categoryFilter = cat)}>{cat}</button>
             {/each}
           </div>
@@ -481,11 +483,11 @@
                       <div class="space-y-1">
                         <div class="text-[10px] font-medium" style="color: var(--metro-text-secondary, #A0A0A0);">Axis Handling</div>
                         <div class="flex gap-1">
-                          {#each [{ value: 'import', label: 'Import axes' }, { value: 'current', label: 'ECU axes' }] as opt}
+                          {#each [{ value: 'import' as const, label: 'Import axes' }, { value: 'current' as const, label: 'ECU axes' }] as opt (opt.value)}
                             <button
                               class="rounded px-2 py-1 text-[10px] transition-colors flex-1"
                               style="background-color: {override.axisMode === opt.value ? 'var(--metro-blue, #0078D7)' : 'var(--metro-bg-hover, #2a2a4a)'}; color: {override.axisMode === opt.value ? '#fff' : 'var(--metro-text-secondary, #A0A0A0)'};"
-                              onclick={() => setOverride(table.id, { axisMode: opt.value as any })}
+                              onclick={() => setOverride(table.id, { axisMode: opt.value })}
                             >{opt.label}</button>
                           {/each}
                         </div>

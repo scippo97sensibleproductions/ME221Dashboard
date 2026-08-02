@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { HybridBridge, type ConnectionStateInfo } from '../lib/HybridBridge';
   import { Card, Button, Alert, Badge } from 'flowbite-svelte';
   import { IconCircleCheck, IconAlertTriangle, IconUpload, IconFileSearch, IconCircleX, IconArrowsLeftRight, IconArrowLeft, IconDeviceDesktopAnalytics } from '@tabler/icons-svelte';
 
-  let { connectionState, onNavigate }: {
+  let { connectionState: _connectionState, onNavigate }: {
     connectionState: ConnectionStateInfo;
     onNavigate: (page: string) => void;
   } = $props();
@@ -32,12 +32,10 @@
   let ecuInfo = $state(null as EcuData | null);
   let savedMeta = $state(null as SavedMeta | null);
   let errorMessage = $state(null as string | null);
-  let parsingProgress = $state(0);
   let parsedMeta = $state(null as SavedMeta | null);
 
   // ─── Derived ───────────────────────────────────────────────────────────────
 
-  let isEcuConnected = $derived(connectionState.state === 'Connected');
   let stepValue = $derived(
     pageState === 'matched' ? 100 :
     pageState === 'mismatch' || pageState === 'no_calibration' || pageState === 'parsing' ? 66 :
@@ -129,7 +127,6 @@
 
   async function handleBrowse() {
     pageState = 'parsing';
-    parsingProgress = 30;
     statusMessage = 'Opening file picker...';
 
     const result = await HybridBridge.pickAndLoadCalibration();
@@ -153,9 +150,7 @@
       return;
     }
 
-    parsingProgress = 70;
     statusMessage = 'Verifying calibration...';
-
     const loadedMeta = result.metadata;
     if (!loadedMeta) {
       pageState = 'error';
@@ -324,7 +319,7 @@
             { label: 'Product', ecu: ecuInfo?.product, saved: savedMeta?.productName },
             { label: 'Model', ecu: ecuInfo?.model, saved: savedMeta?.modelName },
             { label: 'Version', ecu: ecuInfo?.version, saved: savedMeta?.version }
-          ] as row}
+          ] as row (row.label)}
             {@const match = fieldMatch(row.ecu, row.saved)}
             <div class="flex items-center border-b border-gray-700/50 px-4 py-3 last:border-0">
               <span class="w-20 text-xs font-medium uppercase tracking-wider text-gray-300">{row.label}</span>

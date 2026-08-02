@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
-  import { cellKey, heatColor, formatValueAdaptive, DataType, rangeOpacity } from './types';
+  import { cellKey, heatColor, formatValueAdaptive, rangeOpacity } from './types';
   import { IconDownload } from '@tabler/icons-svelte';
   import { HybridBridge } from '../HybridBridge';
   import { deviceMode } from '../stores/deviceMode.svelte';
@@ -176,7 +176,6 @@
     const metroTextMuted = cs.getPropertyValue('--metro-text-muted').trim() || '#666666';
     const metroOrange = cs.getPropertyValue('--metro-orange').trim() || '#D83B01';
     const metroYellow = cs.getPropertyValue('--metro-yellow').trim() || '#E5A100';
-    const metroCard = cs.getPropertyValue('--metro-card').trim() || '#1A1A1A';
 
     // Background
     ctx.fillStyle = metroBg;
@@ -497,12 +496,23 @@
           {@const opOpacity = opColRange ? rangeOpacity(opColRange, c) : 0}
           {@const isInRange = opOpacity > 0}
           {@const borderAlpha = (0.15 + 0.7 * opOpacity).toFixed(2)}
+          {@const selOutline = isInRange
+            ? `2px solid rgba(255,255,255,${borderAlpha})`
+            : inSel && !isAnc
+              ? '2px inset var(--metro-orange)'
+              : isDirty && !inSel
+                ? '2px solid var(--metro-yellow)'
+                : isCurrent && !inSel
+                  ? '2px solid var(--metro-orange)'
+                  : undefined}
           <div
             class="relative flex cursor-pointer items-center justify-center text-center font-medium transition-colors duration-150
                    {isAnc ? 'z-[2]' : ''}
                    {isCurrent && !inSel ? 'z-[2]' : ''}
                    {isInRange ? 'border-t-2 border-t-white/20' : ''}"
-            style="border: 1px solid var(--metro-border); background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : color}; {isCurrent && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !inSel ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''} {isInRange ? `outline: 2px solid rgba(255,255,255,${borderAlpha}); outline-offset: -2px; z-index: 1;` : ''}"
+            style="border: 1px solid var(--metro-border); background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : color}; {isInRange ? 'z-index: 1;' : ''}"
+            style:outline={selOutline}
+            style:outline-offset={selOutline ? '-2px' : undefined}
             role="gridcell"
             tabindex="-1"
             onclick={() => handleCellTap(c, 'output')}
@@ -547,7 +557,7 @@
         Export PNG
       </button>
       <svg bind:this={svgEl} width={w} height={h} viewBox="0 0 {w} {h}" class="block">
-        {#each yTicks as tick}
+        {#each yTicks as tick (tick.val)}
           <line x1={pad.left} y1={tick.px} x2={w - pad.right} y2={tick.px}
                 stroke="var(--metro-border)" stroke-width="0.5" />
           <text x={pad.left - 8} y={tick.px + 4} text-anchor="end"
@@ -583,7 +593,7 @@
                 stroke-linejoin="round" stroke-linecap="round" />
         {/if}
 
-        {#each values as point, i}
+        {#each values as point, i (point.x)}
           {@const isCurrent = i === selectedCol}
           {@const opOpacity = opColRange ? rangeOpacity(opColRange, i) : 0}
           {@const isInRange = opOpacity > 0}

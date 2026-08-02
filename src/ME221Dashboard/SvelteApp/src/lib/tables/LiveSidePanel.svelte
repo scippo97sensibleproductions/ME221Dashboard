@@ -2,8 +2,9 @@
   import { IconX, IconPlus, IconActivity } from '@tabler/icons-svelte';
   import LiveSensorReadout from './LiveSensorReadout.svelte';
   import type { DataLinkDefinition } from '../HybridBridgeTypes';
+  import { SvelteSet } from 'svelte/reactivity';
 
-  let { open, tableDef, liveValues, dataLinks, sensorIds, onAddSensor, onRemoveSensor, onClose }: {
+  let { open, tableDef, liveValues, dataLinks, sensorIds, onAddSensor, onClose }: {
     open: boolean;
     tableDef: { input0LinkId: number; input1LinkId: number; outputLinkId: number; input0Name: string; input1Name: string; outputName: string } | null;
     liveValues: Record<string, number | null>;
@@ -23,7 +24,7 @@
     const result: { id: number; name: string; unit: string; isNative: boolean }[] = [];
 
     // Native table links first
-    const nativeIds = new Set<number>();
+    const nativeIds = new SvelteSet<number>();
     if (tableDef.input0LinkId) {
       nativeIds.add(tableDef.input0LinkId);
       const link = dataLinks.find(d => d.id === tableDef.input0LinkId);

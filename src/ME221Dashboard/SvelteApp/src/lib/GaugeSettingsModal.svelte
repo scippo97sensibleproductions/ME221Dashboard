@@ -1,6 +1,6 @@
 <script lang="ts">
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo } from './HybridBridge';
-  import { GaugeShapeCategory, toGaugeDefinition, formatValue } from './gauges/types';
+  import { GaugeShapeCategory } from './gauges/types';
   import ArcLayoutSettings from './gauges/ArcLayoutSettings.svelte';
   import ArcNeedleSettings from './gauges/ArcNeedleSettings.svelte';
   import BarGaugeSettings from './gauges/BarGaugeSettings.svelte';
@@ -64,9 +64,7 @@
   const maxValue = $derived(entityInfo?.maxValue ?? 10000);
   const liveValue = $derived(entityInfo ? ((entityInfo.minValue ?? 0) + (entityInfo.maxValue ?? 10000)) / 2 : 5000);
 
-  const useTestValue = $derived(testValue !== null);
   const previewValue = $derived(testValue ?? liveValue);
-
   function setCategory(cat: GaugeShapeCategory) {
     let wf = gaugeDef.widthFraction;
     let hf = gaugeDef.heightFraction;
@@ -86,8 +84,6 @@
   function toggleLabel(key: 'showName' | 'showUnit' | 'showValue') {
     onchange({ ...gaugeDef, [key]: !gaugeDef[key] });
   }
-
-  function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape') onclose(); }
 
   const isOdometer = $derived(gaugeDef.entityId === -2001);
   let odometerValue = $state<number | null>(null);
@@ -122,10 +118,7 @@
   const isMultiRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.MultiRing);
   const hasNeedle = $derived(isArc);
 
-  let customUnitDraft = $state('');
-  $effect(() => {
-    customUnitDraft = gaugeDef.customUnitLabel ?? '';
-  });
+  let customUnitDraft = $derived(gaugeDef.customUnitLabel ?? '');
 
   function emitCustomUnit() {
     onchange({ ...gaugeDef, customUnitLabel: customUnitDraft || null });
@@ -173,7 +166,7 @@
             <TabItem key="shape" title="Shape">
               <div class="space-y-4 pt-3">
                 <div class="flex gap-1">
-                  {#each categories as cat}
+                  {#each categories as cat (cat.value)}
                     <button
                       class="flex-1 rounded px-2 py-2 text-xs font-medium transition-colors min-h-[36px]
                         {gaugeDef.shapeCategory === cat.value
@@ -288,7 +281,7 @@
                     { key: 'showValue' as const, label: 'Value' },
                     { key: 'showUnit' as const, label: 'Unit' },
                     { key: 'showName' as const, label: 'Name' },
-                  ] as lbl}
+                  ] as lbl (lbl.key)}
                     <button
                       class="flex items-center justify-center gap-1.5 rounded px-2 py-2 text-xs font-medium transition-colors min-h-[36px]
                         {gaugeDef[lbl.key]
@@ -336,7 +329,7 @@
                       oninput={(e) => onchange({ ...gaugeDef, textColor: (e.target as HTMLInputElement).value })}
                       class="w-10 h-10 rounded-lg border border-gray-600 bg-gray-800 cursor-pointer p-0.5 min-h-[40px]" />
                     <div class="flex gap-1 flex-wrap">
-                      {#each ['#ffffff', '#e0e0e0', '#fbbf24', '#22d3ee', '#a78bfa', '#f87171', '#4ade80'] as color}
+                      {#each ['#ffffff', '#e0e0e0', '#fbbf24', '#22d3ee', '#a78bfa', '#f87171', '#4ade80'] as color (color)}
                         <button
                           class="w-7 h-7 rounded-md border-2 transition-colors min-h-[28px] min-w-[28px]
                             {(gaugeDef.textColor ?? '#ffffff') === color
@@ -476,7 +469,7 @@
                           { value: 1, label: 'Pill' },
                           { value: 2, label: 'Glass' },
                           { value: 3, label: 'Card' },
-                        ] as p}
+                        ] as p (p.value)}
                           <button
                             class="flex-1 rounded px-2 py-2 text-xs font-medium transition-colors min-h-[32px]
                               {(gaugeDef.panelStyle ?? 0) === p.value
@@ -650,7 +643,7 @@
                               >
                                 <option value="">Select entity...</option>
                                 {#if entityLookup}
-                                  {#each Object.entries(entityLookup).filter(([id]) => parseInt(id) > 0).sort(([, a], [, b]) => a.name.localeCompare(b.name)) as [id, info]}
+                                  {#each Object.entries(entityLookup).filter(([id]) => parseInt(id) > 0).sort(([, a], [, b]) => a.name.localeCompare(b.name)) as [id, info] (id)}
                                     <option value={id} selected={odometerSpeedEntityId === parseInt(id)}>
                                       {info.name} ({id}) {info.unit ? `— ${info.unit}` : ''}
                                     </option>
@@ -661,7 +654,7 @@
                             <div>
                               <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Speed Unit</p>
                               <div class="flex gap-1">
-                                {#each ['km/h', 'mph', 'm/s', 'knots'] as unit}
+                                {#each ['km/h', 'mph', 'm/s', 'knots'] as unit (unit)}
                                   <button
                                     class="flex-1 rounded px-2 py-1.5 text-[10px] font-medium transition-colors min-h-[28px]
                                       {odometerSpeedUnit === unit ? 'bg-cyan-600 text-white' : 'bg-gray-700/80 text-gray-400 hover:bg-gray-600'}"

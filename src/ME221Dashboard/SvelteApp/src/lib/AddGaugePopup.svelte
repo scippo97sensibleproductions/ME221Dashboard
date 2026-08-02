@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { HybridBridge, type AvailableSensor } from '../lib/HybridBridge';
   import { IconSearch, IconX, IconPlus } from '@tabler/icons-svelte';
 

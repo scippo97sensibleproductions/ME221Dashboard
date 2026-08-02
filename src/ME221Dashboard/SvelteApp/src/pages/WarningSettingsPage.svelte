@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { IconAlertTriangle, IconChevronLeft, IconFilter, IconBookmark, IconBookmarkOff, IconRefresh } from '@tabler/icons-svelte';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { IconChevronLeft, IconBookmark, IconBookmarkOff } from '@tabler/icons-svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import type { DataLinkWarningSetting } from '../lib/HybridBridgeTypes';
 
@@ -17,7 +18,7 @@
   let mounted = false;
 
   let categories = $derived.by(() => {
-    const cats = new Set<string>();
+    const cats = new SvelteSet<string>();
     for (const s of settings) {
       if (s.category) cats.add(s.category);
     }
@@ -102,15 +103,6 @@
     });
   }
 
-  function getStatusBadge(status: string): { label: string; class: string } {
-    switch (status) {
-      case 'Typical': return { label: 'Typical', class: 'bg-blue-500/20 text-blue-300' };
-      case 'Custom': return { label: 'Custom', class: 'bg-amber-500/20 text-amber-300' };
-      case 'Disabled': return { label: 'Off', class: 'bg-gray-700 text-gray-400' };
-      default: return { label: status, class: 'bg-gray-700 text-gray-400' };
-    }
-  }
-
   async function loadSettings() {
     try {
       const result = await HybridBridge.getWarningSettings();
@@ -168,9 +160,9 @@
   // Auto-save on changes
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
-    // Track dependencies
-    const _s = settings;
-    const _d = delayMs;
+    // Dependency reads — re-run the debounced save when settings change.
+    void settings;
+    void delayMs;
     if (!mounted) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -260,7 +252,7 @@
       bind:value={searchQuery}
       class="w-full rounded-lg border border-gray-700 bg-gray-800 py-2 px-3 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 sm:w-64"
     />
-    {#each categories as cat}
+    {#each categories as cat (cat)}
       <button
         class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
         onclick={() => { selectedCategory = selectedCategory === cat ? null : cat; }}
@@ -297,7 +289,6 @@
         <tbody>
           {#each filteredSettings as setting (setting.dataId)}
             <tr class="border-b border-gray-700/50 transition-colors hover:bg-gray-800/30">
-              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <td
                 class="sticky left-0 z-10 bg-gray-900/95 px-3 py-2 backdrop-blur-sm"
                 onclick={() => toggleEnabled(setting.dataId)}

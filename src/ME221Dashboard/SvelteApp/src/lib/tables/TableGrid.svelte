@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { TableDefinition, TableData, ColorScheme, InterpolationRange } from './types';
   import type { OperatingPointSample } from '../stores/LiveDataStore.svelte';
-  import { cellKey, getOutputValue, heatColor, formatValueAdaptive, DataType, rangeOpacity, fromRaw, findInterpolationRange } from './types';
+  import { cellKey, getOutputValue, heatColor, formatValueAdaptive, rangeOpacity, fromRaw, findInterpolationRange } from './types';
   import { deviceMode } from '../stores/deviceMode.svelte';
 
   let { tableDef, tableData, selectedRow, selectedCol, editMode, opRowRange, opColRange, dirtyCells, dirtyInput0, dirtyInput1, minVal, maxVal, anchor, selection, selectionType = 'output', diffMode = false, originalData = null, colorScheme = 'thermal', showContours = false, liveOutputValue = null, opHistory = [], onCellClick, onAxis0Click, onAxis1Click, onAnchorSet, onSelectionComplete, onSelectionClear, onContextMenu }: {
@@ -302,14 +302,14 @@
             width={contourSvgW}
             height={contourSvgH}
           >
-            {#each contourPaths as d}
+            {#each contourPaths as d (d)}
               <path {d} fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="4,3" />
             {/each}
           </svg>
         {/if}
         {#if ghostTrailDots.length > 0}
           <div class="pointer-events-none absolute" style="z-index: 6; left: 0; top: 0; width: {contourSvgW}px; height: {contourSvgH}px;">
-            {#each ghostTrailDots as dot}
+            {#each ghostTrailDots as dot, i (i)}
               <div
                 class="absolute rounded-full"
                 style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
@@ -407,11 +407,22 @@
             {@const tintAlpha = (0.1 * Math.max(opRowOp, opColOp)).toFixed(2)}
             {@const isAnc = selectionType === 'output' && anchor?.row === r && anchor?.col === c}
             {@const inSel = highlightOutput(r, c)}
+            {@const selOutline = inSel && !isAnc
+              ? '2px inset var(--metro-orange)'
+              : isDirty && !diffMode && !inSel && !isInRange
+                ? '2px solid var(--metro-yellow)'
+                : isCurrentCell && !inSel
+                  ? '2px solid var(--metro-orange)'
+                  : isInRange
+                    ? `2px solid rgba(255,255,255,${outlineAlpha})`
+                    : undefined}
             <div
               class="relative flex cursor-pointer items-center justify-center text-center font-medium transition-colors duration-150
                      {isAnc ? 'z-[2]' : ''}
                      {isCurrentCell && !inSel ? 'z-[2]' : ''}"
-              style="border: 1px solid {isInRange ? `rgba(255,255,255,${borderAlpha})` : isRowInRange || isColInRange ? 'rgba(255,255,255,0.12)' : 'var(--metro-border)'}; background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : isRowInRange || isColInRange ? `color-mix(in srgb, ${color} ${Math.round((1 - parseFloat(tintAlpha)) * 100)}%, rgba(255,255,255,${tintAlpha}))` : color}; {isInRange ? `outline: 2px solid rgba(255,255,255,${outlineAlpha}); outline-offset: -2px; z-index: 3;` : ''} {isCurrentCell && !inSel ? 'outline: 2px solid var(--metro-orange); outline-offset: -2px;' : ''} {isDirty && !diffMode && !inSel && !isInRange ? 'outline: 2px solid var(--metro-yellow); outline-offset: -2px;' : ''} {inSel && !isAnc ? 'outline: 2px inset var(--metro-orange); outline-offset: -2px;' : ''}"
+              style="border: 1px solid {isInRange ? `rgba(255,255,255,${borderAlpha})` : isRowInRange || isColInRange ? 'rgba(255,255,255,0.12)' : 'var(--metro-border)'}; background: {isAnc ? 'rgba(216,59,1,0.3)' : inSel ? 'rgba(216,59,1,0.18)' : isRowInRange || isColInRange ? `color-mix(in srgb, ${color} ${Math.round((1 - parseFloat(tintAlpha)) * 100)}%, rgba(255,255,255,${tintAlpha}))` : color}; {isInRange ? 'z-index: 3;' : ''}"
+              style:outline={selOutline}
+              style:outline-offset={selOutline ? '-2px' : undefined}
               role="gridcell"
               tabindex="-1"
               onclick={(e) => handleCellClick(r, c, 'output', e)}

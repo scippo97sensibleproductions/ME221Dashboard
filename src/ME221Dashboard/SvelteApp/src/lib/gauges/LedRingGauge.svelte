@@ -59,7 +59,7 @@
   </defs>
 
   <!-- Segments -->
-  {#each Array(segmentCount) as _, i}
+  {#each Array(segmentCount) as _, i (i)}
     {@const f = i / segmentCount}
     {@const angle = startAngle + f * sweep}
     {@const active = i < activeCount}

@@ -34,9 +34,6 @@
     markerB?: number | null;
   } = $props();
 
-  const MIN_WINDOW_MS = 2000;
-  const MAX_WINDOW_MS = 30 * 60 * 1000;
-
   let container: HTMLDivElement;
   let tooltipEl: HTMLDivElement;
   let u: import('uplot').default | null = null;
@@ -55,8 +52,8 @@
     return [yMin ?? min, yMax ?? max];
   }
 
-  function seriesOpts(): any[] {
-    const opts: any[] = [{}];
+  function seriesOpts(): Array<Record<string, unknown>> {
+    const opts: Array<Record<string, unknown>> = [{}];
     for (const s of series) {
       opts.push({
         label: s.name,
@@ -140,6 +137,12 @@
     );
   }
 
+  // The uPlot tooltip is imperative DOM — render its content through a helper
+  // that owns the innerHTML write.
+  function setTooltipContent(node: HTMLElement, html: string): void {
+    node.innerHTML = html;
+  }
+
   function onSetCursor(c: import('uplot').default) {
     if (!tooltipEl) return;
     const dataIdx = c.cursor.idx ?? null;
@@ -148,16 +151,19 @@
       return;
     }
     const rows = buildTooltipRows(series, c.data, dataIdx, overlaySessions);
-    tooltipEl.innerHTML = rows
-      .map(
-        (r) =>
-          `<div class="flex items-center gap-1.5 whitespace-nowrap">
-            <span class="w-2 h-2 rounded-full shrink-0" style="background:${r.color}"></span>
-            <span class="text-gray-400">${r.name}</span>
-            <span class="text-white font-mono font-bold">${r.value}</span>
-          </div>`,
-      )
-      .join('');
+    setTooltipContent(
+      tooltipEl,
+      rows
+        .map(
+          (r) =>
+            `<div class="flex items-center gap-1.5 whitespace-nowrap">
+              <span class="w-2 h-2 rounded-full shrink-0" style="background:${r.color}"></span>
+              <span class="text-gray-400">${r.name}</span>
+              <span class="text-white font-mono font-bold">${r.value}</span>
+            </div>`,
+        )
+        .join(''),
+    );
     const pad = 12;
     let left = c.cursor.left + pad;
     let top = c.cursor.top + pad;
@@ -218,7 +224,7 @@
 
   $effect(() => {
     if (mode !== 'live') return;
-    const frameCount = liveDataStore.frameCount;
+    void liveDataStore.frameCount;
     columns.push(
       Date.now(),
       series.map((s) => liveDataStore.values[s.id] ?? null),

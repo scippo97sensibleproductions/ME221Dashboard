@@ -3,7 +3,6 @@
   import { HybridBridge } from '../HybridBridge';
   import { liveDataStore } from '../stores/LiveDataStore.svelte';
   import {
-    cellKey,
     getOutputValue,
     heatColor,
     getDataRange,
@@ -58,7 +57,7 @@
         return;
       }
 
-      const def = defsResult.tables?.find((t: any) => t.id === tableId) as TableDefinition | undefined;
+      const def = defsResult.tables?.find((t) => t.id === tableId) as TableDefinition | undefined;
       if (!def) {
         error = `Table definition for #${tableId} not found`;
         loading = false;
@@ -72,8 +71,8 @@
         input1: dataResult.input1 ?? [],
         output: dataResult.output,
       };
-    } catch (err: any) {
-      error = err?.message ?? String(err);
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err);
     } finally {
       loading = false;
     }
@@ -211,7 +210,7 @@
   let axisFontSize = $derived(Math.max(8, Math.floor(Math.min(layout.cellW * 0.7, 11))));
   let showAxisLabelsThreshold = $derived(widgetW >= 60);
 
-  function formatVal(v: number, cols: number): string {
+  function formatVal(v: number): string {
     if (!isFinite(v)) return '—';
     const abs = Math.abs(v);
     if (abs >= 100) return v.toFixed(0);
@@ -249,7 +248,7 @@
     if (dx > CLICK_SLOP || dy > CLICK_SLOP) movedDuringPress = true;
   }
 
-  function handleClick(e?: MouseEvent) {
+  function handleClick() {
     // If buttons (settings, retry) were the click target, the parent DashboardPage wrapper
     // has its own pointer capture; we only fire onTap when no movement happened on our own surface.
     if (movedDuringPress) return;
@@ -347,7 +346,7 @@
         >
           <tbody>
             <tr style="height: {layout.gridH}px;">
-              {#each tableData.output as val, c}
+              {#each tableData.output as val, c (c)}
                 {@const color = heatColor(val, range.min, range.max, colorScheme)}
                 {@const opOpacity = opColRange ? rangeOpacity(opColRange, c) : 0}
                 {@const isInRange = opOpacity > 0}
@@ -362,7 +361,7 @@
                   {#if showLabels && showCellLabels1D}
                     <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none whitespace-nowrap"
                           style="left: 2px; right: 2px; color: #000; font-size: {cellFont1D}px;">
-                      {formatVal(val, layout.cols)}
+                      {formatVal(val)}
                     </span>
                   {/if}
                 </td>
@@ -372,7 +371,7 @@
         </table>
         {#if ghostTrailDots.length > 0}
           <div class="pointer-events-none absolute" style="z-index: 10; left: 0; top: {layout.labelH}px; width: {layout.cellW * layout.cols}px; height: {layout.gridH}px;">
-            {#each ghostTrailDots as dot}
+            {#each ghostTrailDots as dot, i (i)}
               <div
                 class="absolute rounded-full"
                 style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
@@ -413,9 +412,9 @@
           style="border: 1px solid var(--metro-border); table-layout: fixed; width: {layout.gridW}px; height: {layout.gridH}px;"
         >
           <tbody>
-            {#each Array.from({ length: layout.rows }, (_, r) => r) as r}
+            {#each Array.from({ length: layout.rows }, (_, r) => r) as r (r)}
               <tr style="height: {layout.cellH}px;">
-                {#each Array.from({ length: layout.cols }, (_, c) => c) as c}
+                {#each Array.from({ length: layout.cols }, (_, c) => c) as c (c)}
                   {@const val = getOutputValue(tableData, r, c, layout.cols)}
                   {@const color = heatColor(val, range.min, range.max, colorScheme)}
                   {@const opRowOp = opRowRange ? rangeOpacity(opRowRange, r) : 0}
@@ -437,7 +436,7 @@
                     {#if showLabels && showCellLabels2D}
                       <span class="absolute inset-0 flex items-center justify-center font-mono tabular-nums leading-none"
                             style="font-size: {cellFont2D}px; color: #000;">
-                        {formatVal(val, layout.cols)}
+                        {formatVal(val)}
                       </span>
                     {/if}
                   </td>
@@ -448,7 +447,7 @@
         </table>
         {#if ghostTrailDots.length > 0}
           <div class="pointer-events-none absolute" style="z-index: 10; left: 0; top: 0; width: {layout.gridW}px; height: {layout.gridH}px;">
-            {#each ghostTrailDots as dot}
+            {#each ghostTrailDots as dot, i (i)}
               <div
                 class="absolute rounded-full"
                 style="left: {dot.x - 2}px; top: {dot.y - 2}px; width: 4px; height: 4px; background: rgba(255, 255, 255, {dot.opacity.toFixed(2)});"
@@ -468,7 +467,7 @@
       {#if showAxisLabelsThreshold && tableData.input0.length > 0}
         <div class="absolute" style="left: {layout.labelW}px; top: 0; width: {layout.gridW}px; height: {layout.labelH}px;">
           <div class="flex" style="width: {layout.gridW}px; height: {layout.labelH}px;">
-            {#each Array.from({ length: Math.min(layout.cols, 5) }, (_, i) => i) as ti}
+            {#each Array.from({ length: Math.min(layout.cols, 5) }, (_, i) => i) as ti (ti)}
               {@const colIdx = Math.round((ti / Math.max(1, Math.min(layout.cols, 5) - 1)) * (layout.cols - 1))}
               <div class="flex-1 text-center text-[9px] font-mono tabular-nums truncate"
                    style="color: var(--metro-text-primary); font-size: 9px; line-height: {layout.labelH}px;">
@@ -483,7 +482,7 @@
       {#if showAxisLabelsThreshold && tableData.input1.length > 1}
         <div class="absolute" style="left: 0; top: {layout.labelH}px; width: {layout.labelW}px; height: {layout.gridH}px;">
           <div class="flex flex-col" style="width: {layout.labelW}px; height: {layout.gridH}px;">
-            {#each Array.from({ length: Math.min(layout.rows, 5) }, (_, i) => i) as ti}
+            {#each Array.from({ length: Math.min(layout.rows, 5) }, (_, i) => i) as ti (ti)}
               {@const rowIdx = Math.round((ti / Math.max(1, Math.min(layout.rows, 5) - 1)) * (layout.rows - 1))}
               <div class="flex-1 text-right text-[9px] font-mono tabular-nums truncate pr-1"
                    style="color: var(--metro-text-primary); font-size: 9px; line-height: {layout.cellH}px;">

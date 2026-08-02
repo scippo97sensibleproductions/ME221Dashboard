@@ -1,6 +1,7 @@
 import type { DataLinkWarningSetting, WarningHistoryEntry } from '../HybridBridgeTypes';
 export type { WarningHistoryEntry } from '../HybridBridgeTypes';
 import { HybridBridge } from '../HybridBridge';
+import { SvelteMap } from 'svelte/reactivity';
 
 export type WarningSeverity = 'warning' | 'critical';
 
@@ -23,7 +24,7 @@ let activeWarnings = $state<Map<number, ActiveWarning>>(new Map());
 let warningHistory = $state<WarningHistoryEntry[]>([]);
 let historyCounter = 0;
 let panelOpen = $state(false);
-let previousStates = new Map<number, 'none' | 'warning' | 'critical'>();
+const previousStates = new SvelteMap<number, 'none' | 'warning' | 'critical'>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let loaded = false;
 
@@ -140,7 +141,7 @@ class WarningStore {
 
   clearAllWarnings() {
     const now = Date.now();
-    for (const [dataId, w] of activeWarnings) {
+    for (const [, w] of activeWarnings) {
       this.#addToHistory(w, now);
     }
     activeWarnings = new Map();
@@ -169,14 +170,14 @@ class WarningStore {
       dataId, name, unit, category, value, severity, threshold, thresholdType,
       triggeredAt: Date.now(),
     };
-    activeWarnings = new Map(activeWarnings).set(dataId, warning);
+    activeWarnings = new SvelteMap(activeWarnings).set(dataId, warning);
   }
 
   #clearWarning(dataId: number) {
     const existing = activeWarnings.get(dataId);
     if (existing) {
       this.#addToHistory(existing, Date.now());
-      const next = new Map(activeWarnings);
+      const next = new SvelteMap(activeWarnings);
       next.delete(dataId);
       activeWarnings = next;
       scheduleSave();

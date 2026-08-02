@@ -36,6 +36,10 @@
   let vehicleSaving = $state(false);
   let vehicleResult = $state<{ success: boolean; message: string } | null>(null);
 
+  function getErrorMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
+  }
+
   onMount(async () => {
     try {
       const connInfo = await HybridBridge.getConnectionState();
@@ -68,8 +72,8 @@
       } else {
         calResult = { success: false, message: result.error || 'Export failed' };
       }
-    } catch (e: any) {
-      calResult = { success: false, message: e.message };
+    } catch (e) {
+      calResult = { success: false, message: getErrorMessage(e) };
     } finally {
       calExporting = false;
     }
@@ -88,8 +92,8 @@
         mecalFileContent = result.content;
         mecalPreviewOpen = true;
       }
-    } catch (e: any) {
-      calResult = { success: false, message: e.message };
+    } catch (e) {
+      calResult = { success: false, message: getErrorMessage(e) };
     } finally {
       calImporting = false;
     }
@@ -117,8 +121,8 @@
       } else {
         dashResult = { success: false, message: result.error || 'Export failed' };
       }
-    } catch (e: any) {
-      dashResult = { success: false, message: e.message };
+    } catch (e) {
+      dashResult = { success: false, message: getErrorMessage(e) };
     } finally {
       dashExporting = false;
     }
@@ -135,8 +139,8 @@
       } else if (result.picked && !result.success) {
         dashResult = { success: false, message: result.error || 'Import failed' };
       }
-    } catch (e: any) {
-      dashResult = { success: false, message: e.message };
+    } catch (e) {
+      dashResult = { success: false, message: getErrorMessage(e) };
     } finally {
       dashImporting = false;
     }
@@ -149,8 +153,8 @@
     try {
       await HybridBridge.setVehicleConfig(vehicleConfig);
       vehicleResult = { success: true, message: 'Vehicle config saved' };
-    } catch (e: any) {
-      vehicleResult = { success: false, message: e.message };
+    } catch (e) {
+      vehicleResult = { success: false, message: getErrorMessage(e) };
     } finally {
       vehicleSaving = false;
     }
@@ -251,7 +255,7 @@
             style="border-color: var(--metro-border, #333); background-color: var(--metro-bg, #1a1a2e); color: var(--metro-text, #fff);"
             bind:value={selectedDashName}
           >
-            {#each dashNames as name}
+            {#each dashNames as name (name)}
               <option value={name}>{name}</option>
             {/each}
           </select>
@@ -357,7 +361,7 @@
           >+ Add Gear</button>
         </div>
         <div class="flex flex-wrap gap-2">
-          {#each vehicleConfig.gearRatios as ratio, i}
+          {#each vehicleConfig.gearRatios as _, i (i)}
             <div class="flex items-center gap-1">
               <span class="text-[10px]" style="color: var(--metro-text-muted, #666);">G{i + 1}</span>
               <input

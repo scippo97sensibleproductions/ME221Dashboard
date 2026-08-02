@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DataLinkDefinition } from '../HybridBridgeTypes';
 
-  let { slotType, slotIndex, slotName, currentLinkId, editable = true, dataLinks, onAssign }: {
+  let { slotName, currentLinkId, editable = true, dataLinks, onAssign }: {
     slotType: 'output' | 'input';
     slotIndex: number;
     slotName: string;

@@ -13,7 +13,6 @@ import type {
   PickCalibrationResult,
   DashboardConfigResult,
   VehicleConfig,
-  AvailableSensor,
   SensorCustomization,
   AvailableSensorsResult,
   BridgeEvent,
@@ -31,7 +30,6 @@ import type {
   MonitoringPreset,
   DashboardViewState,
   DeviceProfile,
-  UiMode,
 } from './HybridBridgeTypes';
 import type { RecordedSession, SessionSummary } from './monitor/SessionStore';
 import type { TableDefinition } from './tables/types';
@@ -87,7 +85,7 @@ const _activeCalls = new Map<string, { method: string; start: number }>();
 // Serial queue for ALL bridge calls — the WebView2 InvokeDotNet handler
 // processes one HTTP request at a time. Concurrent calls cause
 // ERR_ADDRESS_UNREACHABLE and permanently kill the bridge.
-let _bridgeQueue: Promise<any> = Promise.resolve();
+let _bridgeQueue: Promise<unknown> = Promise.resolve();
 
 function isWebViewAvailable(): boolean {
   return typeof window !== 'undefined' && 'HybridWebView' in window;
@@ -100,7 +98,7 @@ function queuedInvoke<T>(fn: () => Promise<T>): Promise<T> {
   return p;
 }
 
-async function invokeDotNetLogged(method: string, params?: any[]): Promise<any> {
+async function invokeDotNetLogged(method: string, params?: unknown[]): Promise<string> {
   return queuedInvoke(async () => {
     const callId = `${method}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const start = performance.now();
@@ -117,8 +115,8 @@ async function invokeDotNetLogged(method: string, params?: any[]): Promise<any> 
     try {
       const result = await window.HybridWebView.InvokeDotNet(method, params);
       return result;
-    } catch (err: any) {
-      const msg = err?.message ?? String(err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
 
       if (msg.includes('ERR_ADDRESS_UNREACHABLE') || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Maximum call stack size exceeded')) {
         console.error(`[Bridge] ${method} FAILED — BRIDGE DIED: ${msg}`);
@@ -521,7 +519,7 @@ export const HybridBridge = {
     return JSON.parse(result);
   },
 
-  getMecalSummary: async (fileContent: string): Promise<{ success: boolean; metadata?: { productName: string; modelName: string; version: string }; tableCount?: number; driverCount?: number; dataLinkCount?: number; tables?: any[]; drivers?: any[]; error?: string }> => {
+  getMecalSummary: async (fileContent: string): Promise<{ success: boolean; metadata?: { productName: string; modelName: string; version: string }; tableCount?: number; driverCount?: number; dataLinkCount?: number; tables?: Array<Record<string, unknown>>; drivers?: Array<Record<string, unknown>>; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const b64 = btoa(unescape(encodeURIComponent(fileContent)));
     const result = await invokeDotNetLogged('GetMecalSummary', [b64]);

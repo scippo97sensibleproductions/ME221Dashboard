@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type GpsLocation, type UpdateCheckResult } from './lib/HybridBridge';
+  import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type UpdateCheckResult } from './lib/HybridBridge';
   import type { DataLinkWarningSetting } from './lib/HybridBridgeTypes';
   import { computeWarningState, buildWarningMap } from './lib/gauges/types';
   import WelcomePage from './pages/WelcomePage.svelte';
@@ -40,7 +40,6 @@
     message: string;
   }>({ show: false, type: 'error', title: '', message: '' });
   let isConnected = $derived(connectionState.state === 'Connected');
-  let initializing = $state(true);
   let hasCalibratedThisSession = $state(false);
 
   // ─── Auto-reconnect state ─────────────────────────────────────────────
@@ -134,16 +133,6 @@
     HybridBridge.saveDashboardViewState(activeDashboard, { headerVisible, sidebarVisible }).catch(() => {});
   }
 
-  async function openVehicleConfig() {
-    if (allSensors.length === 0 && isConnected) {
-      try {
-        const result = await HybridBridge.getAvailableSensors(activeDashboard);
-        allSensors = result.sensors.map(s => ({ id: s.id, name: s.name }));
-      } catch { }
-    }
-    vehicleConfigOpen = true;
-  }
-
   let tick = () => new Promise(r => requestAnimationFrame(r));
 
   async function loadDashboardNames() {
@@ -218,56 +207,11 @@
     cancelReconnect();
     try {
       await HybridBridge.disconnect();
-    } catch {}
+    } catch { /* proceed with local state reset */ }
     connectionState = { state: 'Disconnected' };
     currentPage = 'connection';
     isManualDisconnect = false;
     warningStore.reset();
-  }
-
-  async function exportDashboard() {
-    try {
-      const result = await HybridBridge.exportDashboard(activeDashboard);
-      if (!result.success) {
-        notification = {
-          show: true,
-          type: 'error',
-          title: 'Export Failed',
-          message: result.error || 'Unknown error',
-        };
-      } else if (result.message) {
-        notification = {
-          show: true,
-          type: 'success',
-          title: 'Dashboard Exported',
-          message: result.message,
-        };
-      }
-    } catch (err) {
-      notification = { show: true, type: 'error', title: 'Export Failed', message: String(err) };
-    }
-  }
-
-  async function importDashboard() {
-    try {
-      const result = await HybridBridge.importDashboard();
-      if (result.picked && result.success && result.dashboardName) {
-        await loadDashboardNames();
-        if (result.dashboardName) {
-          activeDashboard = result.dashboardName;
-        }
-        navigateTo('config');
-      } else if (result.picked && !result.success) {
-        notification = {
-          show: true,
-          type: 'error',
-          title: 'Import Failed',
-          message: result.error || 'Unknown error',
-        };
-      }
-    } catch (err) {
-      notification = { show: true, type: 'error', title: 'Import Failed', message: String(err) };
-    }
   }
 
   function navigateTo(page: string, params?: Record<string, unknown>) {
@@ -290,10 +234,6 @@
     const target = pageSource ?? 'dashboard';
     pageSource = null;
     navigateTo(target);
-  }
-
-  function navigateToWithSource(page: string, params?: Record<string, unknown>) {
-    navigateTo(page, params);
   }
 
   const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor', 'warnings', 'gaugeBuilder'];
@@ -396,7 +336,7 @@
     try {
       const last = await HybridBridge.getLastConnection();
       if (last) params = last;
-    } catch {}
+    } catch { /* fall back to manual connection */ }
 
     if (!params.type) {
       cancelReconnect();
@@ -456,7 +396,6 @@
 
   async function startup() {
     document.documentElement.classList.add('dark');
-    initializing = true;
 
     // Determine UI mode (mobile/desktop) from the native platform BEFORE
     // any page is shown — never guessed from CSS/viewport width.
@@ -474,10 +413,9 @@
         await loadDashboardNames();
         await liveDataStore.enableReporting();
         navigateTo('dashboard');
-        initializing = false;
         return;
       }
-    } catch {}
+    } catch { /* fall through to platform checks */ }
 
     try {
       const platform = await HybridBridge.getPlatform();
@@ -494,8 +432,6 @@
     } catch {
       navigateTo('connection');
     }
-
-    initializing = false;
   }
 
   onMount(() => {
