@@ -1357,18 +1357,18 @@
   export function getCamera() { return camera; }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   bind:this={containerEl}
   class="relative h-full w-full outline-none"
   style="background-color: #0a0a0a; touch-action: none;"
+  tabindex="0"
   onmousedown={onMouseDown}
   onmousemove={onMouseMove}
   onmouseup={onMouseUp}
   onwheel={onWheel}
   oncontextmenu={onContextMenu}
   onkeydown={handleKeyDown}
-  role="application"
+  role="toolbar"
   aria-label="3D table surface"
 >
   <!-- ─── Top Bar ────────────────────────────────────────────────────── -->

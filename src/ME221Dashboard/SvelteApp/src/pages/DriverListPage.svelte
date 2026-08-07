@@ -109,22 +109,25 @@
 <div class="mx-auto max-w-4xl">
   <div class="mb-4 flex items-center gap-3">
     <button
-      class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-200"
+      class="flex h-8 w-8 items-center justify-center text-metro-text-secondary transition-colors hover:bg-metro-card-hover hover:text-metro-text"
       onclick={() => onNavigate('dashboard')}
+      aria-label="Back to dashboard"
     >
       <IconChevronLeft size={18} />
     </button>
-    <IconAdjustments size={20} class="text-emerald-400" />
-    <h1 class="text-xl font-bold text-gray-100">ECU Drivers</h1>
+    <div class="flex h-8 w-8 shrink-0 items-center justify-center bg-emerald-500">
+      <IconAdjustments size={18} class="text-white" />
+    </div>
+    <h1 class="text-lg font-extrabold uppercase tracking-wider text-metro-text">ECU Drivers</h1>
   </div>
 
   <div class="relative mb-3">
-    <IconSearch size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+    <IconSearch size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-metro-text-muted" />
     <input
       type="text"
       placeholder="Search drivers..."
       bind:value={searchQuery}
-      class="w-full rounded-lg border border-gray-700 bg-gray-800 py-2.5 pl-10 pr-4 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+      class="w-full rounded-sm border border-metro-input-border bg-metro-input-bg py-2.5 pl-10 pr-4 text-sm text-metro-text outline-none placeholder:text-metro-text-muted focus:border-emerald-500"
     />
   </div>
 
@@ -132,17 +135,17 @@
     <div class="relative">
       <select
         bind:value={sortBy}
-        class="appearance-none rounded-lg border border-gray-700 bg-gray-800 py-1.5 pl-2 pr-7 text-xs text-gray-300 outline-none hover:border-gray-600"
+        class="appearance-none rounded-sm border border-metro-input-border bg-metro-input-bg py-1.5 pl-2 pr-7 text-xs text-metro-text outline-none hover:border-[#555]"
       >
         <option value="name">Name A-Z</option>
         <option value="category">Category</option>
         <option value="recent">Recently Edited</option>
       </select>
-      <IconArrowsSort size={12} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-500" />
+      <IconArrowsSort size={12} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-metro-text-muted" />
     </div>
     {#each categories as cat (cat)}
       <button
-        class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}"
+        class="rounded-sm px-2.5 py-0.5 text-xs font-medium transition-colors {selectedCategory === cat ? 'bg-emerald-500 text-white' : 'bg-metro-card text-metro-text-muted hover:bg-metro-card-hover hover:text-metro-text'}"
         onclick={() => { selectedCategory = selectedCategory === cat ? null : cat; }}
       >
         {cat}
@@ -155,7 +158,7 @@
       <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-emerald-400"></span>
     </div>
   {:else if filteredDrivers.length === 0}
-    <div class="py-12 text-center text-sm text-gray-500">
+    <div class="py-12 text-center text-sm text-metro-text-muted">
       {drivers.length === 0 ? 'No drivers found in calibration.' : 'No drivers match your search.'}
     </div>
   {:else}
@@ -168,23 +171,21 @@
         <div class="space-y-1">
           {#each favoriteDrivers as driver (driver.id)}
             <button
-              class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 text-left transition-colors hover:border-gray-600 hover:bg-gray-800 overflow-hidden"
+              class="flex w-full items-center gap-3 overflow-hidden rounded-sm border border-metro-border bg-metro-card text-left transition-colors hover:border-emerald-500/60 hover:bg-metro-card-hover"
               onclick={() => handleSelectDriver(driver)}
             >
-              <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center rounded-l border-r border-gray-700/30 bg-emerald-500/5">
-                <IconAdjustments size={18} class="text-emerald-500/50" />
+              <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center border-r border-emerald-600 bg-emerald-500">
+                <IconAdjustments size={18} class="text-white" />
               </div>
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-gray-100 truncate">{driver.name}</div>
-                <div class="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
-                  <span>{driver.numberOfConfigs} params</span>
-                </div>
+                <div class="truncate text-sm font-medium text-metro-text">{driver.name}</div>
+                <div class="mt-0.5 text-[11px] uppercase tracking-wider text-metro-text-muted">{driver.numberOfConfigs} configs</div>
               </div>
-              <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
+              <span class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-400">
                 {driver.category}
               </span>
               <span
-                class="shrink-0 p-1 text-amber-400 hover:text-amber-300 cursor-pointer"
+                class="shrink-0 p-1 text-amber-400 hover:text-amber-300"
                 onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}
                 role="button"
                 tabindex="-1"
@@ -202,23 +203,21 @@
     <div class="space-y-1">
       {#each (favoriteDrivers.length > 0 && !searchQuery && !selectedCategory ? nonFavoriteDrivers : filteredDrivers) as driver (driver.id)}
         <button
-          class="flex w-full items-center gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 text-left transition-colors hover:border-gray-600 hover:bg-gray-800 overflow-hidden"
+          class="flex w-full items-center gap-3 overflow-hidden rounded-sm border border-metro-border bg-metro-card text-left transition-colors hover:border-emerald-500/60 hover:bg-metro-card-hover"
           onclick={() => handleSelectDriver(driver)}
         >
-          <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center rounded-l border-r border-gray-700/30 bg-emerald-500/5">
-            <IconAdjustments size={18} class="text-emerald-500/40" />
+          <div class="flex h-[50px] w-[80px] shrink-0 items-center justify-center border-r border-emerald-600 bg-emerald-500">
+            <IconAdjustments size={18} class="text-white" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium text-gray-100 truncate">{driver.name}</div>
-            <div class="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
-              <span>{driver.numberOfConfigs} params</span>
-            </div>
+            <div class="truncate text-sm font-medium text-metro-text">{driver.name}</div>
+            <div class="mt-0.5 text-[11px] uppercase tracking-wider text-metro-text-muted">{driver.numberOfConfigs} configs</div>
           </div>
-          <span class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-400">
+          <span class="shrink-0 rounded-sm bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-400">
             {driver.category}
           </span>
           <span
-            class="shrink-0 p-1 transition-colors cursor-pointer {favorites.has(driver.id) ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-gray-400'}"
+            class="shrink-0 p-1 transition-colors {favorites.has(driver.id) ? 'text-amber-400 hover:text-amber-300' : 'text-metro-text-muted hover:text-metro-text'}"
             onclick={(e) => { e.stopPropagation(); toggleFavorite(driver.id); }}
             role="button"
             tabindex="-1"

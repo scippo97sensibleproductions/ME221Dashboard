@@ -42,6 +42,7 @@ public partial class HybridBridgeService
                         max = c.Max,
                         checkRange = c.CheckRange,
                         toolTipText = c.ToolTipText,
+                        measurementUnitTypes = c.MeasurementUnitTypes,
                         options = c.Options?.Select(o => new { id = o.Id, name = o.Name }).ToList(),
                         viewConstraint = c.ViewConstraint is not null ? new
                         {

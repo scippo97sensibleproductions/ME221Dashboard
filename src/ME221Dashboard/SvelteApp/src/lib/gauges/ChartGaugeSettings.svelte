@@ -351,14 +351,11 @@
 
 <!-- Entity picker sheet (R22) -->
 {#if pickerOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[70] flex items-end justify-center" style="background: rgba(0,0,0,0.55)" onclick={() => pickerOpen = false}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-[70] flex items-end justify-center" style="background: rgba(0,0,0,0.55)" role="button" tabindex="-1" onclick={() => pickerOpen = false} onkeydown={(e) => { if (e.key === 'Escape') pickerOpen = false; }}>
     <div class="w-full max-w-md max-h-[65dvh] border border-gray-700 border-b-0 flex flex-col bg-gray-900"
          style="animation: sheetUp 0.15s ease-out"
-         onclick={(e) => e.stopPropagation()}>
+         role="dialog" tabindex="-1"
+         onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
         <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">ADD OVERLAY LINE</span>
         <button class="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white" onclick={() => pickerOpen = false}>

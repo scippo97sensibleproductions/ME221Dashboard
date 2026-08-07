@@ -498,6 +498,7 @@ export interface DriverParamDefinition {
   max: number;
   checkRange: boolean;
   toolTipText: string;
+  measurementUnitTypes: string[];
   options: ComboOption[] | null;
   viewConstraint: ViewConstraint | null;
 }

@@ -279,9 +279,18 @@ public static class DefXmlParser
             Max = maxVal,
             CheckRange = (bool?)elem.Element("CheckRange") ?? false,
             ToolTipText = (string?)elem.Element("ToolTipText") ?? "",
+            MeasurementUnitTypes = ParseMeasurementUnitTypes(elem.Element("MeasurementUnitTypes")),
             Options = [.. ParseComboOptions(elem)],
             ViewConstraint = ParseViewConstraint(elem.Element("ViewConstraint")),
         };
+    }
+
+    private static List<string> ParseMeasurementUnitTypes(XElement? element)
+    {
+        if (element is null) return [];
+
+        // MEITE format: <MeasurementUnitTypes><Volt /><KPa /></MeasurementUnitTypes>
+        return [.. element.Elements().Select(e => e.Name.LocalName)];
     }
 
     private static IEnumerable<ComboOption> ParseComboOptions(XElement parent)

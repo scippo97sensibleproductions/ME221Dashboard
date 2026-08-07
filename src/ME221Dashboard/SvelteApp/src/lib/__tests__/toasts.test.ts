@@ -49,7 +49,7 @@ describe('toasts', () => {
 
     vi.advanceTimersByTime(1000);
     vi.advanceTimersByTime(300);
-    let list = getToasts();
+    const list = getToasts();
     expect(list).toHaveLength(1);
     expect(list[0]?.message).toBe('long');
 

@@ -141,8 +141,7 @@
 </script>
 
 <div class="flex flex-col h-full bg-[#1a1a1a] border-r border-[#333]" role="navigation" aria-label="Sensor presets">
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="contents" onkeydown={handleKeyDown}>
+  <div class="contents" role="toolbar" tabindex="-1" onkeydown={handleKeyDown}>
   <div class="relative px-2 py-1.5 border-b border-[#333]" bind:this={dropdownEl}>
     <div class="flex items-center gap-1">
       <button

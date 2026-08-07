@@ -31,6 +31,7 @@ public sealed class DriverParamDefinition
     public float Max { get; init; }
     public bool CheckRange { get; init; }
     public string ToolTipText { get; init; } = "";
+    public List<string> MeasurementUnitTypes { get; init; } = [];
     public List<ComboOption>? Options { get; init; }
     public ViewConstraint? ViewConstraint { get; init; }
 }

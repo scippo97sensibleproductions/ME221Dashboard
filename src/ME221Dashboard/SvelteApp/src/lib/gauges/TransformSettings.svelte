@@ -11,11 +11,11 @@
     onchange: (def: GaugeConfigEntry) => void;
   } = $props();
 
-  // Intentional: copy initial value for local editing state
-  // svelte-ignore state_referenced_locally
-  let steps = $state<ValueTransformStep[]>(
-    gaugeDef.transformSteps?.map(s => ({ ...s })) ?? []
-  );
+  function initialSteps(): ValueTransformStep[] {
+    return gaugeDef.transformSteps?.map(s => ({ ...s })) ?? [];
+  }
+
+  let steps = $state<ValueTransformStep[]>(initialSteps());
 
   const eligible = $derived(isTransformable(gaugeDef.entityId));
   const rawPreviewValue = $derived(

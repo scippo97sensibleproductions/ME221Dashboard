@@ -38,9 +38,9 @@
   // Stats overlay
   let showStats = $state(true);
   let liveStats = $state<Map<number, RangeStats>>(new Map());
-  // Plain Map on purpose: the accumulator is read AND written inside the
+  // Non-reactive accumulator on purpose: it is read AND written inside the
   // stats $effect, so it must not be reactive (SvelteMap would loop).
-  const _statsAccum = new Map<number, RangeStats>();
+  let statsAccum: Record<number, RangeStats> = {};
 
   // ── Derived ────────────────────────────────────────────────────────────
   const chartSeries = $derived(
@@ -93,9 +93,9 @@
     for (const id of selectedIds) {
       const val = liveDataStore.values[id];
       if (val != null) {
-        const existing = _statsAccum.get(id);
+        const existing = statsAccum[id];
         if (existing) {
-          _statsAccum.set(id, {
+          statsAccum[id] = {
             min: Math.min(existing.min, val),
             max: Math.max(existing.max, val),
             avg: (existing.avg * existing.count + val) / (existing.count + 1),
@@ -103,16 +103,16 @@
             rateOfChange: existing.rateOfChange,
             count: existing.count + 1,
             durationMs: performance.now(),
-          });
+          };
         } else {
-          _statsAccum.set(id, {
+          statsAccum[id] = {
             min: val, max: val, avg: val, delta: 0,
             rateOfChange: 0, count: 1, durationMs: 0,
-          });
+          };
         }
       }
     }
-    liveStats = new Map(_statsAccum);
+    liveStats = new Map(Object.entries(statsAccum).map(([id, s]) => [Number(id), s]));
   });
 
   // ── Recording ──────────────────────────────────────────────────────────
@@ -134,10 +134,9 @@
       stopTimer();
       onNavigate('sessions');
     } else {
-      _statsAccum.clear();
+      statsAccum = {};
       liveStats = new Map();
-      const nameMap = new Map<number, string>();
-      for (const dl of allDataLinks) nameMap.set(dl.id, dl.name);
+      const nameMap = new Map(allDataLinks.map(dl => [dl.id, dl.name] as const));
       SessionRecorder.start([...selectedIds], nameMap);
       recorderState = 'recording';
       startTimer();

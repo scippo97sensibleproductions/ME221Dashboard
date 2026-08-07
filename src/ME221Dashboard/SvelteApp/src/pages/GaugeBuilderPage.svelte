@@ -403,14 +403,11 @@
 
 <!-- Type picker sheet -->
 {#if sheetOpen === 'type'}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" onclick={() => sheetOpen = null}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" role="button" tabindex="-1" onclick={() => sheetOpen = null} onkeydown={(e) => { if (e.key === 'Escape') sheetOpen = null; }}>
     <div class="w-full max-w-md max-h-[65dvh] border border-gray-700 border-b-0 flex flex-col"
          style="background: var(--metro-sidebar); animation: sheetUp 0.15s ease-out"
-         onclick={(e) => e.stopPropagation()}>
+         role="dialog" tabindex="-1"
+         onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
         <span class="text-[9px] font-bold uppercase tracking-wider text-gray-400">NEW GAUGE</span>
         <button class="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white" onclick={() => sheetOpen = null}>
@@ -437,14 +434,11 @@
 
 <!-- Entity picker sheet -->
 {#if sheetOpen === 'entity' && editingGauge}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" onclick={() => sheetOpen = null}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" role="button" tabindex="-1" onclick={() => sheetOpen = null} onkeydown={(e) => { if (e.key === 'Escape') sheetOpen = null; }}>
     <div class="w-full max-w-md max-h-[65dvh] border border-gray-700 border-b-0 flex flex-col"
          style="background: var(--metro-sidebar); animation: sheetUp 0.15s ease-out"
-         onclick={(e) => e.stopPropagation()}>
+         role="dialog" tabindex="-1"
+         onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
         <span class="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full" style="background: {editingType?.color}"></span>
@@ -478,14 +472,11 @@
 <!-- Properties sheet -->
 {#if sheetOpen === 'props' && editingGauge}
   {@const typeDef = TYPE_DEFS.find(t => t.type === editingGauge.shapeCategory)}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" onclick={() => sheetOpen = null}>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 flex items-end justify-center" style="background: rgba(0,0,0,0.55)" role="button" tabindex="-1" onclick={() => sheetOpen = null} onkeydown={(e) => { if (e.key === 'Escape') sheetOpen = null; }}>
     <div class="w-full max-w-md max-h-[65dvh] border border-gray-700 border-b-0 flex flex-col"
          style="background: var(--metro-sidebar); animation: sheetUp 0.15s ease-out"
-         onclick={(e) => e.stopPropagation()}>
+         role="dialog" tabindex="-1"
+         onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
         <span class="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full" style="background: {typeDef?.color}"></span>

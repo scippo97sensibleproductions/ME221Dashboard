@@ -134,15 +134,18 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[90] flex items-center justify-center p-4"
     style="background-color: rgba(0,0,0,0.7);"
+    role="button"
+    tabindex="-1"
     onclick={handleBackdropClick}
     onkeydown={handleKeyDown}
   >
     <div
       class="bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden"
+      role="dialog"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
     >
