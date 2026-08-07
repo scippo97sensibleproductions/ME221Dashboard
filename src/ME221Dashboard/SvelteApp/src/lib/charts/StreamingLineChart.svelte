@@ -256,15 +256,29 @@
 
   $effect(() => {
     if (!container) return;
-    const ro = new ResizeObserver(() => {
-      if (!u) return;
-      u.setSize({
-        width: container.clientWidth || u.width,
-        height: container.clientHeight || u.height,
+    let raf = 0;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!u || !entry) return;
+      const { width, height } = entry.contentRect;
+      // uPlot's setSize() rewrites layout unconditionally; calling it on
+      // every notification feeds the ResizeObserver loop and makes
+      // Chromium log "ResizeObserver loop completed with undelivered
+      // notifications". Skip no-ops and defer the write past the frame.
+      if (u.width === width && u.height === height) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!u || !container) return;
+        const w = container.clientWidth || u.width;
+        const h = container.clientHeight || u.height;
+        if (u.width !== w || u.height !== h) u.setSize({ width: w, height: h });
       });
     });
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
   });
 </script>
 

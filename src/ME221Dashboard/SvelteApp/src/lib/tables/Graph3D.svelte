@@ -1296,11 +1296,19 @@
     }
     animFrameId = requestAnimationFrame(animate);
 
-    // Resize observer
+    // Resize observer — no-op guarded: three.js setSize() rewrites the
+    // canvas style unconditionally, which feeds the ResizeObserver loop
+    // in Chromium ("ResizeObserver loop completed with undelivered
+    // notifications") when a sibling layout shift re-delivers size.
+    let lastW = 0;
+    let lastH = 0;
     const resizeObs = new ResizeObserver(() => {
       if (!containerEl || !renderer || !camera) return;
       const w = containerEl.clientWidth;
       const h = containerEl.clientHeight;
+      if (!w || !h || (w === lastW && h === lastH)) return;
+      lastW = w;
+      lastH = h;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();

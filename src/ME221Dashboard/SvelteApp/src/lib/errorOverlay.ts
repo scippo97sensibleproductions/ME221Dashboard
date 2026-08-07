@@ -8,6 +8,20 @@ const THROTTLE_MS = 2000;
 let lastShown = 0;
 let lastErrorAt = 0;
 
+// Chromium (incl. Android WebView) reports ResizeObserver feedback loops as
+// window 'error' events. They are layout diagnostics, not app crashes —
+// never surface them to the user (or the console).
+const BENIGN_ERROR_MESSAGES = [
+  'ResizeObserver loop completed with undelivered notifications',
+  'ResizeObserver loop limit exceeded',
+];
+
+function isBenignError(e: ErrorEvent | PromiseRejectionEvent): boolean {
+  const err = e instanceof ErrorEvent ? (e.error ?? e.message) : e.reason;
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return BENIGN_ERROR_MESSAGES.some((m) => msg.includes(m));
+}
+
 function throttled(): boolean {
   const now = Date.now();
   if (now - lastShown < THROTTLE_MS) return false;
@@ -95,10 +109,15 @@ export function handleDevHotUpdate(): void {
 
 export function attachDevErrorOverlay(): void {
   window.addEventListener('error', (e) => {
+    if (isBenignError(e)) {
+      e.preventDefault();
+      return;
+    }
     const err = e.error instanceof Error ? e.error : new Error(String(e.message));
     showDevError(err.message, err.stack);
   });
   window.addEventListener('unhandledrejection', (e) => {
+    if (isBenignError(e)) return;
     const reason = e.reason instanceof Error ? e.reason : new Error(String(e.reason));
     showDevError(reason.message, reason.stack);
   });
@@ -303,11 +322,16 @@ export function hideReleaseError(): void {
 
 export function attachReleaseErrorOverlay(): void {
   window.addEventListener('error', (e) => {
+    if (isBenignError(e)) {
+      e.preventDefault();
+      return;
+    }
     if (!throttled()) return;
     const err = e.error instanceof Error ? e.error : new Error(String(e.message));
     showReleaseError(err.message, err.stack);
   });
   window.addEventListener('unhandledrejection', (e) => {
+    if (isBenignError(e)) return;
     if (!throttled()) return;
     const reason = e.reason instanceof Error ? e.reason : new Error(String(e.reason));
     showReleaseError(reason.message, reason.stack);
