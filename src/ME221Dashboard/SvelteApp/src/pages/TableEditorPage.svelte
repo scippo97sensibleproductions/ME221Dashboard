@@ -1405,6 +1405,7 @@
             onUndo={handleUndo}
             onRedo={handleRedo}
             onSelectionChange={handle3DSelectionChange}
+            onExit3D={() => { view3D = false; }}
           />
         {:else}
     <TableGrid

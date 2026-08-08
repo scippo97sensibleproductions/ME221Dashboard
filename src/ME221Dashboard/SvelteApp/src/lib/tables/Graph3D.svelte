@@ -3,7 +3,7 @@
   import * as THREE from 'three';
   import type { TableDefinition, TableData, ColorScheme } from './types';
   import { getOutputValue, heatColor, getDataRange, fromRaw, findInterpolationRange } from './types';
-  import { IconRotate2, IconEye, IconGridDots, IconDownload, IconPaint, IconKeyboard, IconChevronRight, IconChevronDown, IconArrowUp, IconArrowDown, IconPlus, IconMinus, IconWaveSine } from '@tabler/icons-svelte';
+  import { IconRotate2, IconEye, IconGridDots, IconDownload, IconPaint, IconKeyboard, IconChevronRight, IconChevronDown, IconArrowUp, IconArrowDown, IconPlus, IconMinus, IconWaveSine, IconAlertTriangle } from '@tabler/icons-svelte';
   import { HybridBridge } from '../HybridBridge';
   import { SvelteSet } from 'svelte/reactivity';
 
@@ -17,6 +17,7 @@
     onEditCell,
     onBatchEdit,
     onSelectionChange,
+    onExit3D,
   }: {
     tableDef: TableDefinition;
     tableData: TableData;
@@ -30,9 +31,10 @@
     onUndo?: () => void;
     onRedo?: () => void;
     onSelectionChange?: (row: number, col: number) => void;
+    onExit3D?: () => void;
   } = $props();
 
-  let containerEl: HTMLDivElement;
+  let containerEl = $state<HTMLDivElement>() as HTMLDivElement;
   let renderer: THREE.WebGLRenderer;
   let scene: THREE.Scene;
   let camera: THREE.PerspectiveCamera;
@@ -51,6 +53,7 @@
   let brushSelection = $state<Set<string>>(new Set());
   let showHelp = $state(false);
   let viewMode = $state<'perspective' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso'>('perspective');
+  let glError = $state<string | null>(null);
 
   // Three.js objects
   let surfaceMesh: THREE.Mesh;
@@ -94,6 +97,7 @@
     pressStartPos: { x: 0, y: 0 },
     longPressTimer: 0 as ReturnType<typeof setTimeout>,
     longPressFired: false,
+    uiTouch: false,
   };
 
   const LONG_PRESS_DELAY_MS = 400;
@@ -824,7 +828,21 @@
     }
   }
 
+  // Touches that start on toolbar buttons/inputs must be left to the browser
+  // so its synthesized click event fires. preventDefault() on touchstart
+  // cancels click synthesis, and Svelte's delegated ontouchstart
+  // stopPropagation runs too late (at the app root) to stop this container's
+  // native touchstart listener from running first — so without this guard
+  // every button in the 3D view is unclickable on touch devices.
+  function isUiTarget(e: TouchEvent): boolean {
+    const t = e.target as HTMLElement | null;
+    if (!t) return false;
+    return t.closest('button, input, select, textarea') !== null;
+  }
+
   function onTouchStart(e: TouchEvent) {
+    touchState.uiTouch = isUiTarget(e);
+    if (touchState.uiTouch) return;
     e.preventDefault();
     const touches = e.touches;
     touchState.touchCount = touches.length;
@@ -850,6 +868,7 @@
   }
 
   function onTouchMove(e: TouchEvent) {
+    if (touchState.uiTouch) return;
     e.preventDefault();
     const touches = e.touches;
 
@@ -897,6 +916,10 @@
   }
 
   function onTouchEnd(e: TouchEvent) {
+    if (touchState.uiTouch) {
+      touchState.uiTouch = false;
+      return;
+    }
     const touches = e.touches;
     cancelLongPress();
 
@@ -1033,8 +1056,15 @@
     const width = containerEl.clientWidth;
     const height = containerEl.clientHeight;
 
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // Renderer — WebGL2 can be unavailable (e.g. emulator GPU translators);
+    // degrade to an explanatory panel instead of throwing out of the effect.
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (err) {
+      glError = err instanceof Error ? err.message : String(err);
+      console.warn('[Graph3D] WebGL 2 context unavailable:', err);
+      return;
+    }
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x0a0a0a, 1);
@@ -1210,15 +1240,22 @@
     vcScene.add(compassGroup);
 
     // Renderer
-    vcRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    const vcSize = getViewCubeSize();
-    vcRenderer.setSize(vcSize, vcSize);
-    vcRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    vcRenderer.setClearColor(0x000000, 0);
-    vcRenderer.domElement.id = 'viewcube-canvas';
-    vcRenderer.domElement.style.cssText = `position:absolute;top:44px;right:${Math.max(4, Math.floor(vcSize * 0.05))}px;border-radius:6px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.12);cursor:pointer;z-index:15;touch-action:none;`;
-    mountCanvas(containerEl, vcRenderer.domElement);
+    try {
+      vcRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (err) {
+      console.warn('[Graph3D] ViewCube WebGL context unavailable:', err);
+    }
+    if (vcRenderer) {
+      const vcSize = getViewCubeSize();
+      vcRenderer.setSize(vcSize, vcSize);
+      vcRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      vcRenderer.setClearColor(0x000000, 0);
+      vcRenderer.domElement.id = 'viewcube-canvas';
+      vcRenderer.domElement.style.cssText = `position:absolute;top:44px;right:${Math.max(4, Math.floor(vcSize * 0.05))}px;border-radius:6px;background:rgba(10,10,10,0.8);border:1px solid rgba(255,255,255,0.12);cursor:pointer;z-index:15;touch-action:none;`;
+      mountCanvas(containerEl, vcRenderer.domElement);
+    }
 
+    if (vcRenderer) {
     vcRenderer.domElement.addEventListener('click', (e: MouseEvent) => {
       const rect = vcRenderer.domElement.getBoundingClientRect();
       vcMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1256,6 +1293,7 @@
         }
       }
     }, { passive: false });
+    }
 
     // Animation loop
     let lastTime = performance.now();
@@ -1365,6 +1403,30 @@
   export function getCamera() { return camera; }
 </script>
 
+{#if glError}
+  <div class="flex h-full w-full items-center justify-center" style="background-color: #0a0a0a; touch-action: none;">
+    <div class="w-full max-w-sm border" style="background-color: var(--metro-surface); border-color: var(--metro-border);">
+      <div class="flex items-center gap-2 border-b px-4 py-3" style="border-color: var(--metro-border);">
+        <IconAlertTriangle size={16} style="color: var(--metro-orange);" />
+        <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-orange);">3D View Unavailable</span>
+      </div>
+      <div class="px-4 py-4">
+        <p class="text-[13px]" style="color: var(--metro-text);">WebGL 2 graphics are not available on this device.</p>
+        <p class="mt-1 text-[11px]" style="color: var(--metro-text-secondary);">The emulator's software GPU translator cannot create a WebGL context. Use the 2D grid view, or run the app on a device with hardware GPU support.</p>
+        {#if onExit3D}
+          <button
+            class="mt-4 px-4 py-2 text-[13px] font-bold uppercase tracking-wider text-white transition-colors duration-150"
+            style="background-color: var(--metro-blue);"
+            onclick={onExit3D}
+          >
+            Switch to 2D Grid
+          </button>
+        {/if}
+        <p class="mt-3 break-all font-mono text-[10px]" style="color: var(--metro-text-muted);">{glError}</p>
+      </div>
+    </div>
+  </div>
+{:else}
 <div
   bind:this={containerEl}
   class="relative h-full w-full outline-none"
@@ -1651,3 +1713,4 @@
     </div>
   </div>
 </div>
+{/if}

@@ -10,6 +10,8 @@ namespace ME221Dashboard.Services;
 
 public class TcpChannel(string host, int port, ILogger<TcpChannel>? logger = null) : IChannel
 {
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ILogger<TcpChannel> _logger = logger ?? NullLogger<TcpChannel>.Instance;
 
     private readonly Channel<MessageFrame> _incomingChannel = Channel.CreateBounded<MessageFrame>(new BoundedChannelOptions(100)
@@ -56,7 +58,16 @@ public class TcpChannel(string host, int port, ILogger<TcpChannel>? logger = nul
         try
         {
             _tcpClient = new TcpClient();
-            await _tcpClient.ConnectAsync(host, port, cancellationToken).ConfigureAwait(false);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(ConnectTimeout);
+            try
+            {
+                await _tcpClient.ConnectAsync(host, port, timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException($"Timed out connecting to {host}:{port} after {ConnectTimeout.TotalSeconds:0} seconds.");
+            }
             _status = DeviceStatus.Opened;
             _logger.LogDebug("TcpChannel: connected to {Host}:{Port}", host, port);
 

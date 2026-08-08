@@ -3,9 +3,82 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="ME221Dashboard.MainPage">
 
-    <HybridWebView x:Name="hybridWebView"
-                   RawMessageReceived="OnRawMessageReceived"
-                   HybridRoot="wwwroot"
-                   DefaultFile="index.html" />
+    <Grid>
+        <HybridWebView x:Name="hybridWebView"
+                       RawMessageReceived="OnRawMessageReceived"
+                       HybridRoot="wwwroot"
+                       DefaultFile="index.html" />
+
+        <!-- Native WebView compatibility gate — the SPA needs Chrome/WebView 100+. -->
+        <Grid x:Name="WebViewWarningPanel"
+              IsVisible="False"
+              BackgroundColor="#0A0A0A">
+            <Border HorizontalOptions="Center"
+                    VerticalOptions="Center"
+                    Margin="24"
+                    Padding="0"
+                    BackgroundColor="#222222"
+                    Stroke="#333333"
+                    StrokeThickness="1"
+                    StrokeShape="Rectangle"
+                    MaximumWidthRequest="440">
+                <VerticalStackLayout>
+                    <Grid BackgroundColor="#E81123"
+                          HeightRequest="48"
+                          ColumnDefinitions="Auto,*"
+                          ColumnSpacing="12"
+                          Padding="16,0">
+                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="1">
+                            <Label Text="WEBVIEW INCOMPATIBLE"
+                                   FontSize="13"
+                                   FontAttributes="Bold"
+                                   TextColor="#FFFFFF"
+                                   CharacterSpacing="0.1" />
+                            <Label Text="ME221 DASHBOARD CANNOT RUN"
+                                   FontSize="9"
+                                   FontAttributes="Bold"
+                                   TextColor="#FFFFFF"
+                                   Opacity="0.8"
+                                   CharacterSpacing="0.1" />
+                        </VerticalStackLayout>
+                    </Grid>
+                    <VerticalStackLayout Padding="16" Spacing="12">
+                        <Label Text="This app requires Android System WebView 100 or newer, but this device only provides an older version."
+                               FontSize="13"
+                               TextColor="#FFFFFF"
+                               LineHeight="1.4" />
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="DETECTED WEBVIEW"
+                                   FontSize="10"
+                                   FontAttributes="Bold"
+                                   TextColor="#A0A0A0"
+                                   CharacterSpacing="0.1" />
+                            <Label x:Name="WebViewVersionLabel"
+                                   FontSize="14"
+                                   FontAttributes="Bold"
+                                   TextColor="#FFFFFF"
+                                   FontFamily="monospace" />
+                        </VerticalStackLayout>
+                        <Label Text="Update Android System WebView through the Play Store, then open the app again. On an emulator, use a system image with API level 30 or higher."
+                               FontSize="12"
+                               TextColor="#A0A0A0"
+                               LineHeight="1.4" />
+                        <Button Text="CHECK AGAIN"
+                                Clicked="OnWebViewRetryClicked"
+                                BackgroundColor="#0078D7"
+                                TextColor="#FFFFFF"
+                                FontSize="13"
+                                FontAttributes="Bold"
+                                CharacterSpacing="0.1"
+                                Padding="16,10"
+                                CornerRadius="0"
+                                HeightRequest="40"
+                                HorizontalOptions="Start"
+                                Margin="0,4,0,0" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </Grid>
 
 </ContentPage>

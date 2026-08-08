@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>ME221 Dashboard — Booting Dev Server</title>
+<style>
+  :root {
+    --bg: #0A0A0A;
+    --surface: #1A1A1A;
+    --card: #222222;
+    --border: #333333;
+    --text: #FFFFFF;
+    --text2: #A0A0A0;
+    --text3: #666666;
+    --blue: #0078D7;
+    --teal: #00A5A5;
+    --purple: #6B2C91;
+    --orange: #D83B01;
+    --green: #107C10;
+    --red: #E81123;
+    --yellow: #FFB900;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── Ambient color field ─────────────────────────────── */
+  .blobs {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.16;
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  .blob-1 { width: 46vmax; height: 46vmax; left: -14vmax; top: -16vmax; background: #0078D7; animation-duration: 30s; }
+  .blob-2 { width: 38vmax; height: 38vmax; right: -12vmax; top: 4vmax; background: #6B2C91; animation-duration: 24s; animation-delay: -8s; }
+  .blob-3 { width: 34vmax; height: 34vmax; left: 18vmax; bottom: -18vmax; background: #D83B01; animation-duration: 28s; animation-delay: -14s; }
+  .blob-4 { width: 26vmax; height: 26vmax; right: 8vmax; bottom: -8vmax; background: #00A5A5; animation-duration: 22s; animation-delay: -4s; }
+  @keyframes drift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(6vmax, -5vmax, 0) scale(1.12); }
+    100% { transform: translate3d(-5vmax, 4vmax, 0) scale(0.94); }
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  header {
+    position: relative;
+    z-index: 1;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .brand-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #0078D7 0%, #005A9E 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .brand-mark svg { display: block; }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+    background: #0D3A66;
+    color: #9CCBFF;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: blink 1s ease infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  /* ── Main ────────────────────────────────────────────── */
+  main {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    gap: 24px;
+    padding: 24px;
+    align-content: safe center;
+    overflow-y: auto;
+    max-width: 1080px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  /* Grid items must be allowed to shrink, or content overflows the clipped
+     viewport on short screens (landscape phones) */
+  main > * { min-height: 0; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
+  }
+  @media (max-height: 760px) {
+    main { gap: 12px; padding: 12px; }
+    .hero { gap: 10px; }
+    h1 { font-size: clamp(22px, 4vw, 34px); }
+    .radar { width: 88px; height: 88px; }
+    .radar-wrap { gap: 12px; }
+    .checklist { padding: 8px; gap: 2px; }
+    .check-item { padding: 6px 8px; }
+    .check-icon { width: 18px; height: 18px; }
+    .terminal { margin-top: 8px; min-height: 84px; }
+    .term-body { min-height: 44px; font-size: 10px; line-height: 1.5; }
+    footer { height: 36px; }
+  }
+
+  /* ── Left: title + radar ─────────────────────────────── */
+  .hero { display: flex; flex-direction: column; gap: 16px; justify-content: center; }
+
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 4px;
+    height: 12px;
+    background: var(--blue);
+  }
+
+  h1 {
+    font-size: clamp(26px, 4.4vw, 44px);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    line-height: 1.05;
+  }
+  h1 .accent-blue  { color: var(--blue); }
+  h1 .accent-teal  { color: var(--teal); }
+  h1 .accent-purple{ color: var(--purple); }
+  h1 .accent-orange{ color: var(--orange); }
+
+  .sub {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.5;
+    max-width: 460px;
+  }
+  .sub code {
+    font-family: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--text);
+  }
+
+  /* Radar */
+  .radar-wrap { display: flex; align-items: center; gap: 20px; }
+  .radar {
+    position: relative;
+    width: 116px;
+    height: 116px;
+    flex-shrink: 0;
+  }
+  .radar-ring {
+    position: absolute;
+    border: 1px solid #2E2E2E;
+    border-radius: 50%;
+  }
+  .radar-ring.r1 { inset: 0; }
+  .radar-ring.r2 { inset: 14px; }
+  .radar-ring.r3 { inset: 28px; }
+  .radar-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(0,120,215,0.45) 0deg, rgba(0,120,215,0) 70deg, rgba(0,120,215,0) 360deg);
+    animation: sweep 2.2s linear infinite;
+  }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  .radar-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--yellow);
+    left: 50%;
+    top: 50%;
+    animation: orbit 4.2s linear infinite;
+    box-shadow: 0 0 8px var(--yellow);
+  }
+  @keyframes orbit {
+    from { transform: rotate(0deg) translateX(46px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(46px) rotate(-360deg); }
+  }
+  .radar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text2);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .radar-label strong { font-size: 13px; color: var(--text); font-family: 'Cascadia Code', monospace; letter-spacing: 0; }
+  .radar-label span { color: var(--yellow); font-family: 'Cascadia Code', monospace; font-size: 11px; }
+  .radar-label span::after {
+    content: '▋';
+    margin-left: 2px;
+    animation: blink 1s ease infinite;
+    color: var(--text2);
+  }
+
+  /* ── Right: checklist + terminal ─────────────────────── */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-header {
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+  .panel-header::before {
+    content: '';
+    width: 4px;
+    height: 12px;
+    background: var(--orange);
+  }
+  .panel-header .light {
+    width: 7px; height: 7px; border-radius: 50%;
+    margin-left: auto;
+    background: var(--orange);
+    animation: blink 1.2s ease infinite;
+  }
+
+  .checklist { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 8px;
+    border-radius: 2px;
+    transition: background-color 150ms ease;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: rise 200ms ease forwards;
+  }
+  .check-item:hover { background: #2A2A2A; }
+  .check-item:nth-child(1) { animation-delay: 200ms; }
+  .check-item:nth-child(2) { animation-delay: 700ms; }
+  .check-item:nth-child(3) { animation-delay: 1200ms; }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+
+  .check-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #1A1A1A;
+    border: 1px solid var(--border);
+  }
+  .check-item .tick { display: none; }
+  .check-item.done .spinner { display: none; }
+  .check-item.done .tick { display: flex; }
+  .check-item.done .check-icon { background: var(--green); border-color: var(--green); }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #444;
+    border-top-color: var(--blue);
+    animation: spin 0.9s linear infinite;
+  }
+  .check-item.done .spinner { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .check-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .check-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .check-desc {
+    font-size: 11px;
+    color: var(--text2);
+    font-family: 'Cascadia Code', 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .terminal { margin-top: 12px; min-height: 132px; }
+  .terminal .panel-header::before { background: var(--teal); }
+  .terminal .panel-header .light { background: var(--teal); }
+  .term-body {
+    flex: 1;
+    padding: 10px 12px;
+    font-family: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--text2);
+    min-height: 96px;
+  }
+  .term-line { white-space: nowrap; overflow: hidden; }
+  .tag-inf { color: var(--green); font-weight: 600; }
+  .tag-wrn { color: var(--yellow); font-weight: 600; }
+  .tag-err { color: var(--red); font-weight: 600; }
+  .tag-out { color: var(--blue); font-weight: 600; }
+  .term-cursor { display: inline-block; width: 7px; height: 12px; background: var(--text2); vertical-align: -2px; animation: blink 1s ease infinite; }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  footer {
+    position: relative;
+    z-index: 1;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  .progress-track {
+    flex: 1;
+    max-width: 320px;
+    height: 4px;
+    background: #2A2A2A;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    width: 36%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--teal), var(--purple), var(--orange));
+    animation: slide 1.6s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(310%); }
+  }
+  .footer-version { font-family: 'Cascadia Code', monospace; text-transform: none; }
+</style>
+</head>
+<body>
+
+<div class="blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+  <div class="blob blob-4"></div>
+</div>
+
+<header>
+  <div class="brand">
+    <span class="brand-mark">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <rect x="1" y="1" width="10" height="10" fill="#fff" opacity="0.9"/>
+        <rect x="3.5" y="3.5" width="5" height="5" fill="#0078D7"/>
+      </svg>
+    </span>
+    ME221 Dashboard
+  </div>
+  <div class="status-pill" id="statusPill">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connecting</span>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="eyebrow">Debug session · HybridWebView</div>
+    <h1>
+      <span class="accent-blue">Vite</span> <span class="accent-purple">Dev</span> <span class="accent-teal">Server</span><br/>
+      <span class="accent-orange">Booting</span><span style="color:var(--text)">…</span>
+    </h1>
+    <p class="sub">
+      The app is waiting for the frontend dev server. Start it on the host machine with
+      <code>npm run dev</code> inside <code>SvelteApp</code>, then this page hands over automatically.
+    </p>
+    <div class="radar-wrap">
+      <div class="radar">
+        <div class="radar-ring r1"></div>
+        <div class="radar-ring r2"></div>
+        <div class="radar-ring r3"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-dot"></div>
+      </div>
+      <div class="radar-label">
+        <span>probing endpoint</span>
+        <strong id="endpoint">10.0.2.2:5173</strong>
+        <span id="probeState">no response yet</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;justify-content:center;">
+    <div class="panel">
+      <div class="panel-header">Boot checklist <span class="light"></span></div>
+      <div class="checklist">
+        <div class="check-item done">
+          <span class="check-icon">
+            <span class="spinner"></span>
+            <svg class="tick" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 5 9l5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="check-body">
+            <span class="check-title">Bridge initialized</span>
+            <span class="check-desc">HybridBridgeService · C# ⇄ JS</span>
+          </span>
+        </div>
+        <div class="check-item done">
+          <span class="check-icon">
+            <span class="spinner"></span>
+            <svg class="tick" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 5 9l5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="check-body">
+            <span class="check-title">WebView spawned</span>
+            <span class="check-desc">com.android.chrome · WebView engine</span>
+          </span>
+        </div>
+        <div class="check-item" id="hostCheck">
+          <span class="check-icon">
+            <span class="spinner"></span>
+            <svg class="tick" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 5 9l5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="check-body">
+            <span class="check-title">Host server up</span>
+            <span class="check-desc" id="hostDesc">npm run dev · port 5173</span>
+          </span>
+        </div>
+        <div class="check-item" id="probeCheck">
+          <span class="check-icon">
+            <span class="spinner"></span>
+            <svg class="tick" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6.5 5 9l5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="check-body">
+            <span class="check-title">Handshake complete</span>
+            <span class="check-desc">reloading app · hot reload armed</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel terminal">
+      <div class="panel-header">Host log <span class="light"></span></div>
+      <div class="term-body" id="termBody"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>Waiting for dev server</span>
+  <div class="progress-track"><div class="progress-bar"></div></div>
+  <span class="footer-version" id="version">v1.0.0</span>
+</footer>
+
+<script>
+  (function () {
+    const statusText = document.getElementById('statusText');
+    const statusDot = document.getElementById('statusDot');
+    const termBody = document.getElementById('termBody');
+    const hostCheck = document.getElementById('hostCheck');
+    const probeCheck = document.getElementById('probeCheck');
+    const hostDesc = document.getElementById('hostDesc');
+    const probeState = document.getElementById('probeState');
+
+    const statuses = [
+      { text: 'Connecting',     dot: '#0078D7' },
+      { text: 'Handshaking',    dot: '#00A5A5' },
+      { text: 'Waiting on host',dot: '#FFB900' },
+      { text: 'Retrying',       dot: '#D83B01' },
+    ];
+    let si = 0;
+    setInterval(() => {
+      si = (si + 1) % statuses.length;
+      const s = statuses[si];
+      statusText.textContent = s.text;
+      statusDot.style.background = s.dot;
+    }, 2400);
+
+    const logLines = [
+      { tag: 'out', text: '$ npm run dev' },
+      { tag: 'inf', text: 'vite v6.0.0 dev server running at:' },
+      { tag: 'inf', text: '  → Local:   http://localhost:5173/' },
+      { tag: 'wrn', text: 'waiting for host to accept connections…' },
+      { tag: 'inf', text: 'ready in 132ms.' },
+      { tag: 'out', text: 'proxy /  → http://10.0.2.2:5173/' },
+      { tag: 'wrn', text: 'polling endpoint (attempt 1)…' },
+      { tag: 'wrn', text: 'polling endpoint (attempt 2)…' },
+      { tag: 'wrn', text: 'polling endpoint (attempt 3)…' },
+      { tag: 'inf', text: '← 200 OK   /  (text/html)' },
+      { tag: 'inf', text: '← 200 OK   /@vite/client (application/javascript)' },
+      { tag: 'inf', text: '← 200 OK   /src/main.ts (application/javascript)' },
+      { tag: 'inf', text: 'HMR connected. hot reload armed.' },
+    ];
+    let li = 0;
+    const cursor = document.createElement('span');
+    cursor.className = 'term-cursor';
+    function tick() {
+      const line = logLines[li % logLines.length];
+      li++;
+      const div = document.createElement('div');
+      div.className = 'term-line';
+      div.innerHTML = `<span class="tag-${line.tag}">[${line.tag.toUpperCase()}]</span> ${line.text}`;
+      termBody.appendChild(div);
+      while (termBody.children.length > 8) termBody.removeChild(termBody.firstChild);
+      termBody.appendChild(cursor);
+      if (li === 2) { hostCheck.classList.add('done'); hostDesc.textContent = 'localhost:5173 · ready in 132ms'; }
+      if (li === 5) { probeCheck.classList.add('done'); probeState.textContent = '200 OK — handshake complete'; }
+      if (li === 5) {
+        statusText.textContent = 'Connected';
+        statusDot.style.background = '#107C10';
+      }
+    }
+    cursor.className = 'term-cursor';
+    termBody.appendChild(cursor);
+    setInterval(tick, 950);
+  })();
+</script>
+</body>
+</html>

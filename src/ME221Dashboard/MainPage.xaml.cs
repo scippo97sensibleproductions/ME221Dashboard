@@ -14,6 +14,7 @@ public partial class MainPage
 #if DEBUG
     private Process? _viteProcess;
     private volatile bool _viteReady;
+    private static string? _loadingHtml;
     private static readonly HttpClient HttpClient = new();
     // In Vite dev mode, imported CSS and Svelte files are served as JavaScript modules
     private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -46,6 +47,11 @@ public partial class MainPage
         _bridge = bridge;
         _logger = logger;
 
+        // Gate before any web content: the SPA needs a WebView that parses
+        // modern JS (optional chaining etc.), i.e. Chrome/WebView 100+. Old
+        // providers (e.g. Chrome 69 on emulator images) break at parse time.
+        CheckWebViewCompatibility();
+
 #if DEBUG
         // Dev: the virtual host serves wwwroot natively (bridge included);
         // dev.html boots the app from the Vite dev server via the proxy.
@@ -62,6 +68,7 @@ public partial class MainPage
             Environment.Exit(0);
         };
         _ = StartViteDevServerAsync();
+        _ = LoadLoadingHtmlAsync();
         hybridWebView.WebResourceRequested += OnWebResourceRequested;
 #endif
 
@@ -76,11 +83,61 @@ public partial class MainPage
         _bridge.HandleRawMessage(e.Message ?? string.Empty);
     }
 
+    // ─── Native WebView compatibility gate ─────────────────────────────────
+
+#if ANDROID
+    private const int MinWebViewMajorVersion = 100;
+    private bool _webViewBlocked;
+#endif
+
+    private void CheckWebViewCompatibility()
+    {
+#if ANDROID
+        // GetCurrentWebViewPackage() / GetWebViewImplementationPackageName()
+        // were removed from the modern Android bindings, so read the provider
+        // version from the default WebView user agent ("... Chrome/69.0.3497.100 ...").
+        var ua = Android.Webkit.WebSettings.GetDefaultUserAgent(Android.App.Application.Context) ?? string.Empty;
+        var match = System.Text.RegularExpressions.Regex.Match(ua, @"Chrome/([\d.]+)");
+        int major = 0;
+        if (match.Success)
+            int.TryParse(match.Groups[1].Value.Split('.')[0], out major);
+        var versionName = match.Success ? match.Groups[1].Value : null;
+
+        if (major >= MinWebViewMajorVersion)
+            return;
+
+        _webViewBlocked = true;
+        WebViewVersionLabel.Text = versionName is null
+            ? "unknown — no WebView provider detected"
+            : $"{versionName} (Chrome/{major})";
+        hybridWebView.IsVisible = false;
+        WebViewWarningPanel.IsVisible = true;
+        _logger.LogWarning(
+            "Blocked app start: Android System WebView '{Version}' (Chrome/{Major}) is older than {Min}. The SPA requires a modern WebView. UA: {UserAgent}",
+            versionName ?? "none", major, MinWebViewMajorVersion, ua);
+#endif
+    }
+
+    private void OnWebViewRetryClicked(object? sender, EventArgs e)
+    {
+#if ANDROID
+        CheckWebViewCompatibility();
+        if (_webViewBlocked) return;
+
+        WebViewWarningPanel.IsVisible = false;
+        hybridWebView.IsVisible = true;
+        _logger.LogInformation("WebView check passed — resuming app load");
+        MainThread.BeginInvokeOnMainThread(() =>
+            _ = hybridWebView.EvaluateJavaScriptAsync("location.reload()"));
+#endif
+    }
+
 #if DEBUG
     private async Task StartViteDevServerAsync()
     {
         KillStaleViteProcesses();
 
+#if WINDOWS
         var svelteAppDir = FindSvelteAppDir();
         if (svelteAppDir is null)
         {
@@ -88,7 +145,6 @@ public partial class MainPage
             return;
         }
 
-#if WINDOWS
         try
         {
             var psi = new ProcessStartInfo
@@ -117,19 +173,21 @@ public partial class MainPage
             return;
         }
 #else
-        _logger.LogInformation("Vite dev server assumed running on {Url} (start manually in {Dir})", ViteBaseUrl, svelteAppDir);
+        _logger.LogInformation("Vite dev server assumed running on {Url} — start it on the host with 'npm run dev' in SvelteApp", ViteBaseUrl);
 #endif
 
         using var probeClient = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
-        for (int i = 0; i < 15; i++)
+        int attempt = 0;
+        while (true)
         {
+            attempt++;
             try
             {
                 var response = await probeClient.GetAsync(ViteBaseUrl);
                 if (response.IsSuccessStatusCode)
                 {
                     _viteReady = true;
-                    _logger.LogInformation("Vite dev server ready");
+                    _logger.LogInformation("Vite dev server ready (attempt {Attempt})", attempt);
                     MainThread.BeginInvokeOnMainThread(() =>
                         _ = hybridWebView.EvaluateJavaScriptAsync("location.reload()"));
                     return;
@@ -137,13 +195,48 @@ public partial class MainPage
             }
             catch
             {
-                // Not ready yet
+                // Not ready yet — keep probing so the dev server can be started after the app
             }
-            await Task.Delay(500);
+            if (attempt % 10 == 0)
+            {
+                _logger.LogWarning("Vite dev server still not reachable at {Url} after {Attempt} attempts — start it on the host with 'npm run dev' in SvelteApp", ViteBaseUrl, attempt);
+            }
+            await Task.Delay(1500);
+        }
+    }
+
+    private static async Task LoadLoadingHtmlAsync()
+    {
+        // The boot screen lives in Resources/Raw/loading.html (packaged as a
+        // MauiAsset). Read it once and serve it while the Vite dev server is
+        // starting. Falls back to a compact inline page if it can't be read.
+        try
+        {
+            using var stream = await FileSystem.OpenAppPackageFileAsync("loading.html");
+            using var reader = new StreamReader(stream);
+            _loadingHtml = await reader.ReadToEndAsync();
+            return;
+        }
+        catch
+        {
+            // Unpackaged host — fall through to the output directory
         }
 
-        _logger.LogWarning("Vite dev server did not become ready after 7.5s");
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "loading.html");
+            if (File.Exists(path))
+            {
+                _loadingHtml = await File.ReadAllTextAsync(path);
+            }
+        }
+        catch
+        {
+            // Keep the inline fallback
+        }
     }
+
+    private const string FallbackLoadingHtml = "<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;background:#1a1b1e;color:#f8f9fa'><div style='text-align:center'><h2>Starting Vite dev server...</h2><p style='color:#9aa0a6;font-size:14px'>Start it on the host: <code style='background:#333;padding:2px 6px;border-radius:4px'>npm run dev</code> in <code style='background:#333;padding:2px 6px;border-radius:4px'>src/ME221Dashboard/SvelteApp</code></p></div></body></html>";
 
     private void OnWebResourceRequested(object? sender, WebViewWebResourceRequestedEventArgs e)
     {
@@ -158,9 +251,38 @@ public partial class MainPage
 
             e.Handled = true;
 
+            // Status endpoint for the loading page's poll — 200 once Vite is
+            // reachable, so the page does a single reload into the real app.
+            if (p == "/__viteReady")
+            {
+                var bytes = Encoding.UTF8.GetBytes(_viteReady ? "ready" : "waiting");
+                e.SetResponse(_viteReady ? 200 : 503, _viteReady ? "OK" : "Service Unavailable",
+                    "text/plain", Task.FromResult<Stream?>(new MemoryStream(bytes)));
+                return;
+            }
+
             if (!_viteReady)
             {
-                var html = "<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;background:#1a1b1e;color:#f8f9fa'><h2>Starting Vite dev server...</h2></body></html>";
+                // The first request usually beats the probe and the _loadingHtml
+                // read, and EvaluateJavaScriptAsync("location.reload()") fails
+                // silently while the page is still loading — so the page itself
+                // drives the transition:
+                //  • the plain fallback reloads once (2s) to hand over to the
+                //    pretty boot screen (or straight to the app if Vite is up);
+                //  • the pretty screen polls /__viteReady and reloads exactly
+                //    once when the dev server answers — no reload loop, so the
+                //    boot animations never restart while waiting.
+                var isPretty = _loadingHtml is not null;
+                var html = _loadingHtml ?? FallbackLoadingHtml;
+                const string pollScript =
+                    "<script>(function(){function p(){fetch('/__viteReady',{cache:'no-store'})" +
+                    ".then(function(r){if(r.status===200){location.reload();return;}setTimeout(p,1000);})" +
+                    ".catch(function(){setTimeout(p,1000);});}setTimeout(p,500);})();</script>";
+                const string swapScript = "<script>setTimeout(function(){location.reload()},2000)</script>";
+                var script = isPretty ? pollScript : swapScript;
+                html = html.Contains("</body>", StringComparison.OrdinalIgnoreCase)
+                    ? html.Replace("</body>", script + "</body>", StringComparison.OrdinalIgnoreCase)
+                    : html + script;
                 var bytes = Encoding.UTF8.GetBytes(html);
                 e.SetResponse(200, "OK", "text/html", Task.FromResult<Stream?>(new MemoryStream(bytes)));
                 return;
@@ -183,7 +305,12 @@ public partial class MainPage
 
     private static async Task<Stream?> ProxyToViteAsync(Uri uri)
     {
-        var viteUrl = $"{ViteBaseUrl}{uri.PathAndQuery}";
+        // The HybridWebView navigates to its virtual host root (DefaultFile);
+        // map that path to the Vite SPA root, which is the only entry Vite serves.
+        var pathAndQuery = uri.PathAndQuery;
+        if (pathAndQuery == "/dev.html")
+            pathAndQuery = "/";
+        var viteUrl = $"{ViteBaseUrl}{pathAndQuery}";
         try
         {
             var response = await HttpClient.GetAsync(viteUrl);
