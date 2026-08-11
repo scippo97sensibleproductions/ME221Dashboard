@@ -97,7 +97,8 @@ public partial class HybridBridgeService : IDisposable
         IChannelFactory? channelFactory = null,
         IUpdateCheckerService? updateChecker = null,
         ApprovedDeviceStore? approvedDeviceStore = null,
-        DiscoveryResponderService? discoveryResponder = null)
+        DiscoveryResponderService? discoveryResponder = null,
+        MirrorServerService? mirrorServer = null)
     {
         _connection = connection;
         _liveData = liveData;
@@ -110,6 +111,7 @@ public partial class HybridBridgeService : IDisposable
         _updateChecker = updateChecker;
         _approvedDeviceStore = approvedDeviceStore;
         _discoveryResponder = discoveryResponder;
+        _mirrorServer = mirrorServer;
 
         _logger.LogInformation("GPS service: {GpsType}", _gps?.GetType().Name ?? "NULL (none registered)");
 

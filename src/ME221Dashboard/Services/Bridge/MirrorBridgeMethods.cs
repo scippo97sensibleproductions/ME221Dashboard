@@ -7,6 +7,7 @@ public partial class HybridBridgeService
 {
     private ApprovedDeviceStore? _approvedDeviceStore;
     private DiscoveryResponderService? _discoveryResponder;
+    private MirrorServerService? _mirrorServer;
 
     /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('GetAppVersion')</summary>
     public string GetAppVersion() =>
@@ -39,7 +40,8 @@ public partial class HybridBridgeService
             return JsonSerializer.Serialize(new { success = false, error = "Mirror store not available" });
 
         var removed = await _approvedDeviceStore.RevokeAsync(clientId).ConfigureAwait(false);
-        OnDeviceRevoked?.Invoke(clientId);
+        if (_mirrorServer is not null)
+            await _mirrorServer.RevokeDeviceAsync(clientId).ConfigureAwait(false);
         return JsonSerializer.Serialize(new { success = removed, error = removed ? null : "Device not found" });
     }
 
@@ -55,7 +57,4 @@ public partial class HybridBridgeService
         await _approvedDeviceStore.SetDisplayNameAsync(displayName.Trim()).ConfigureAwait(false);
         return JsonSerializer.Serialize(new { success = true });
     }
-
-    /// <summary>Raised when a viewer is revoked; the mirror server closes the live session (U2/U5).</summary>
-    internal event Action<string>? OnDeviceRevoked;
 }

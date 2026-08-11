@@ -41,6 +41,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<HybridBridgeService>();
         builder.Services.AddSingleton<AppLifecycleBridge>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.ApprovedDeviceStore>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorCertificateProvider>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorServerService>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
 
 #if WINDOWS
@@ -78,7 +80,8 @@ public static class MauiProgram
 
         var app = builder.Build();
 
-        // Idle discovery: A's UDP responder runs whenever the app runs (Product Contract).
+        // Idle discovery + mirror server: A responds to probes and listens for viewers
+        // whenever the app runs (Product Contract).
         try
         {
             app.Services.GetRequiredService<ME221Dashboard.Services.Mirror.DiscoveryResponderService>().Start();
@@ -87,6 +90,16 @@ public static class MauiProgram
         catch (Exception ex)
         {
             Log.Error(ex, "Discovery responder failed to start");
+        }
+
+        try
+        {
+            app.Services.GetRequiredService<ME221Dashboard.Services.Mirror.MirrorServerService>().Start();
+            Log.Information("DI: Mirror server started");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Mirror server failed to start");
         }
 
         return app;
