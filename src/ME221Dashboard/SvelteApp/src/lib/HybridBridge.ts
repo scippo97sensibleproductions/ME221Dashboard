@@ -683,6 +683,11 @@ export const HybridBridge = {
     HybridBridge._configCache = null;
   },
 
+  /** Invalidate every JS-side bridge cache so reads re-fetch after a snapshot apply (U8). */
+  invalidateConfigCaches(): void {
+    HybridBridge._configCache = null;
+  },
+
   getVehicleConfig: async (): Promise<VehicleConfig> => {
     if (HybridBridge._configCache) {
       const c = HybridBridge._configCache;

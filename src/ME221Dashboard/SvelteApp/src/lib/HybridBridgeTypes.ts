@@ -483,9 +483,38 @@ export interface GpsStatus {
   isRunning: boolean;
 }
 
+// ─── Mirror Events (U8) ──────────────────────────────────────────────────────
+
+export type MirrorSessionStateName = 'Searching' | 'NoA' | 'Incompatible' | 'AwaitingApproval' | 'Refused' | 'Connected' | 'Disconnected' | 'Revoked' | 'RePair' | 'Stopped';
+
+export interface MirrorSessionStateEvent {
+  event: 'mirrorSessionState';
+  state: MirrorSessionStateName;
+  error?: string | null;
+  token?: string | null;
+  displayName?: string | null;
+}
+
+/** Snapshot chunk relayed C#→JS (KTD-2); payload mirrors the wire snapshotChunk. */
+export interface MirrorSnapshotChunkEvent {
+  event: 'mirrorSnapshotChunk';
+  payload: { seq: number; index: number; total: number; payload: string };
+}
+
+export interface MirrorSnapshotDoneEvent {
+  event: 'mirrorSnapshotDone';
+  payload: { seq: number };
+}
+
+/** Full-cadence recording feed frame relayed to JS (R18, KTD-9). */
+export interface MirrorRecordFeedEvent {
+  event: 'mirrorRecordFeed';
+  payload: { seq: number; ts: number; values: Record<string, number | null> };
+}
+
 // ─── Union Types ─────────────────────────────────────────────────────────────
 
-export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent | AppLifecycleEvent | AndroidBackEvent;
+export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent | AppLifecycleEvent | AndroidBackEvent | MirrorSessionStateEvent | MirrorSnapshotChunkEvent | MirrorSnapshotDoneEvent | MirrorRecordFeedEvent;
 
 // ─── Update Check Types ─────────────────────────────────────────────────────
 

@@ -187,12 +187,18 @@ class LiveDataStore {
       if (this.frameCount === 0) return;
       const staleMs = performance.now() - this.lastUpdateAt;
       if (staleMs <= STALE_MS) return;
+      // Companion mode: the mirror feed has its own stale indicator (R11) and there
+      // is nothing to re-enable — the watchdog must not fight the mirror (U8).
+      if (this.mirrorModeActive) return;
       if (this.isReportingActive) {
         this.isReportingActive = false;
         this.requestReenable();
       }
     }, 1000);
   }
+
+  /** Set by the companion-mode shell (U9); disables reporting re-enable in the watchdog. */
+  mirrorModeActive = $state(false);
 
   #stopWatchdog(): void {
     if (this.#watchdogTimer) {

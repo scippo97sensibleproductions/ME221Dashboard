@@ -303,6 +303,14 @@ public sealed class MirrorClientService : IDisposable
         }
     }
 
+    /// <summary>Send a wire message to A (acks, hello).</summary>
+    public async Task SendAsync(object message)
+    {
+        if (_socket is null) return;
+        var bytes = Encoding.UTF8.GetBytes(MirrorProtocol.Serialize(message));
+        await _socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None).ConfigureAwait(false);
+    }
+
     /// <summary>Disconnect button (F3): stop auto-reconnect and exit companion mode.</summary>
     public void Disconnect()
     {

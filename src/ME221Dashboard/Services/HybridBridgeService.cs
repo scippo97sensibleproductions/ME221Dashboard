@@ -91,6 +91,13 @@ public partial class HybridBridgeService : IDisposable
     /// <summary>Fire the R19 hook after a snapshot-scoped write (KTD-6).</summary>
     internal void NotifySnapshotScopedWrite(string reason) => SnapshotScopedWrite?.Invoke(reason);
 
+    /// <summary>Relay a raw mirror event JSON (already in A's exact shape) straight to Svelte (KTD-7).</summary>
+    internal void SendRawMirrorJson(string json)
+    {
+        if (_webView is null) return;
+        MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(json));
+    }
+
     internal readonly Dictionary<int, string> _entityIdStrings = new();
     internal readonly Dictionary<string, string> _imageBase64Cache = new();
     private readonly System.Text.StringBuilder _liveDataSb = new(1024);
