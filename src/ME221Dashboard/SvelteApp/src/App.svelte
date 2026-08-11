@@ -43,6 +43,7 @@
   import DisconnectedScreen from './lib/mirror/DisconnectedScreen.svelte';
   import ConfigUpdateNotice from './lib/mirror/ConfigUpdateNotice.svelte';
   import MirrorRecordControl from './lib/mirror/MirrorRecordControl.svelte';
+  import ApprovalBanner from './lib/companion/ApprovalBanner.svelte';
 
   // Update check guards — sessionStorage-backed: Vite hot reloads remount
   // App.svelte and reset in-memory flags, which would re-fire checkForUpdate()
@@ -949,6 +950,7 @@
       else navigateTo(page);
     }}
   />
+  <ApprovalBanner />
 </div>
 
 <style>

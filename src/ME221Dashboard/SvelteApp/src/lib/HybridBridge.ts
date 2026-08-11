@@ -1059,6 +1059,56 @@ export const HybridBridge = {
     const result = await invokeDotNetLogged('MirrorForgetDevice', [instanceId]);
     return JSON.parse(result);
   },
+
+  // ─── Mirror pairing / approvals (U11) ─────────────────────────────────────
+
+  getApprovedDevices: async (): Promise<{ success: boolean; error?: string; devices: { clientId: string; deviceName: string; approvedAtUtc: string }[]; displayName: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable', devices: [], displayName: '' };
+    const result = await invokeDotNetLogged('GetApprovedDevices');
+    return JSON.parse(result);
+  },
+
+  approveDevice: async (clientId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('ApproveDevice', [clientId]);
+    return JSON.parse(result);
+  },
+
+  denyDevice: async (clientId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('DenyDevice', [clientId]);
+    return JSON.parse(result);
+  },
+
+  revokeDevice: async (clientId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('RevokeDevice', [clientId]);
+    return JSON.parse(result);
+  },
+
+  renameDevice: async (displayName: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('RenameDevice', [displayName]);
+    return JSON.parse(result);
+  },
+
+  resetPairing: async (): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('ResetPairing');
+    return JSON.parse(result);
+  },
+
+  getMirrorServerState: async (): Promise<{ success: boolean; error?: string; running: boolean; port: number; viewerCount: number; pendingCount: number }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable', running: false, port: 0, viewerCount: 0, pendingCount: 0 };
+    const result = await invokeDotNetLogged('GetMirrorServerState');
+    return JSON.parse(result);
+  },
+
+  getAppVersion: async (): Promise<{ appVersion: string }> => {
+    if (!isWebViewAvailable()) return { appVersion: '' };
+    const result = await invokeDotNetLogged('GetAppVersion');
+    return JSON.parse(result);
+  },
 };
 
 // Initialize the centralized message router at module load time,

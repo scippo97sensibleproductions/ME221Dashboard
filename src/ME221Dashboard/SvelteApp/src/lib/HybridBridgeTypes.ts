@@ -512,9 +512,16 @@ export interface MirrorRecordFeedEvent {
   payload: { seq: number; ts: number; values: Record<string, number | null> };
 }
 
+/** A-side pairing request relayed to JS (U11): a companion wants to connect. */
+export interface ApprovalRequestEvent {
+  event: 'approvalRequest';
+  clientId: string;
+  deviceName: string;
+}
+
 // ─── Union Types ─────────────────────────────────────────────────────────────
 
-export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent | AppLifecycleEvent | AndroidBackEvent | MirrorSessionStateEvent | MirrorSnapshotChunkEvent | MirrorSnapshotDoneEvent | MirrorRecordFeedEvent;
+export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent | AppLifecycleEvent | AndroidBackEvent | MirrorSessionStateEvent | MirrorSnapshotChunkEvent | MirrorSnapshotDoneEvent | MirrorRecordFeedEvent | ApprovalRequestEvent;
 
 // ─── Update Check Types ─────────────────────────────────────────────────────
 
