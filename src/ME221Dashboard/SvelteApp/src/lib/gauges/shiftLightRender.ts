@@ -238,12 +238,11 @@ export function createShiftLightRenderer(): ShiftLightRenderer {
       };
     }
 
-    return renderRamp(rpm, shiftPoint, effectiveRamp, bandStart, segCount, zoneCount);
+    return renderRamp(rpm, effectiveRamp, bandStart, segCount, zoneCount);
   }
 
   function renderRamp(
     rpm: number,
-    shiftPoint: number,
     effectiveRamp: number,
     bandStart: number,
     segCount: number,
