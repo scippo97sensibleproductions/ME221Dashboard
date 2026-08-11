@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using ME221.Data.Models;
+using ME221Dashboard.Services.Mirror;
 
 namespace ME221Dashboard.Services;
 
@@ -59,6 +60,19 @@ namespace ME221Dashboard.Services;
 [JsonSerializable(typeof(List<DataLinkFeedback>))]
 [JsonSerializable(typeof(MonitoringPreset))]
 [JsonSerializable(typeof(List<MonitoringPreset>))]
+[JsonSerializable(typeof(MirrorSnapshot))]
+[JsonSerializable(typeof(HelloMessage))]
+[JsonSerializable(typeof(HelloAckMessage))]
+[JsonSerializable(typeof(ApprovalDecisionMessage))]
+[JsonSerializable(typeof(SnapshotChunkMessage))]
+[JsonSerializable(typeof(SnapshotDoneMessage))]
+[JsonSerializable(typeof(SnapshotAckMessage))]
+[JsonSerializable(typeof(FrameMessage))]
+[JsonSerializable(typeof(RecordFeedMessage))]
+[JsonSerializable(typeof(EventMessage))]
+[JsonSerializable(typeof(ConfigUpdateMessage))]
+[JsonSerializable(typeof(RevokedMessage))]
+[JsonSerializable(typeof(CloseMessage))]
 public partial class V2JsonContext : JsonSerializerContext
 {
 }

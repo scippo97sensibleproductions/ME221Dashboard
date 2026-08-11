@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "seq": 42,
+  "appVersion": "1.2.3",
+  "ecuConnected": true,
+  "ecuInfo": {
+    "productName": "ME221",
+    "modelName": "MX5",
+    "version": "2.0"
+  },
+  "calibration": {
+    "metadata": {
+      "productName": "ME221",
+      "modelName": "MX5",
+      "version": "2.0"
+    },
+    "dataLinks": [
+      {
+        "id": 1,
+        "name": "RPM",
+        "category": "Engine",
+        "viewInTree": true,
+        "standardLogging": true,
+        "measureUnit": "rpm",
+        "measurementUnitTypes": 0,
+        "dataTypeSet": 0,
+        "minValue": 0,
+        "maxValue": 9000
+      }
+    ],
+    "tables": [
+      {
+        "id": 10,
+        "name": "Ignition",
+        "category": "Timing",
+        "viewInTree": true,
+        "enabled": true,
+        "tableType": "2D",
+        "cols": 1,
+        "rows": 4,
+        "input0LinkId": 2,
+        "input1LinkId": 0,
+        "outputLinkId": 10,
+        "input0Name": "",
+        "input1Name": "",
+        "outputName": "deg",
+        "incrementValue": 1,
+        "input0": [
+          1000,
+          2000,
+          3000,
+          4000
+        ],
+        "output": [
+          10,
+          12,
+          15,
+          18
+        ]
+      }
+    ],
+    "drivers": [
+      {
+        "id": 20,
+        "name": "Test Driver",
+        "category": "Outputs",
+        "viewInTree": true,
+        "numberOfConfigs": 1,
+        "configs": [
+          {
+            "name": "P1",
+            "displayName": "",
+            "sectionName": "",
+            "paramType": "float",
+            "readOnly": false,
+            "requiresReset": false,
+            "value": 0.5,
+            "min": 0,
+            "max": 1,
+            "checkRange": true,
+            "toolTipText": "",
+            "measurementUnitTypes": []
+          }
+        ],
+        "numberOfOutputs": 0,
+        "outputLinkIds": [],
+        "editableOutputs": false,
+        "outputNames": [],
+        "numberOfInputs": 0,
+        "inputLinkIds": [],
+        "editableInputs": false,
+        "inputNames": []
+      }
+    ]
+  },
+  "dashboardConfig": {
+    "activeDashboard": "default",
+    "gridRows": 4,
+    "gridColumns": 7,
+    "dashboards": {
+      "default": {
+        "gauges": [
+          {
+            "id": 3,
+            "gridRow": 0,
+            "gridColumn": 0,
+            "rowSpan": 2,
+            "columnSpan": 2,
+            "displayType": 0,
+            "shapeCategory": 0,
+            "sweepAngle": 220,
+            "arcPosition": 0,
+            "iconOffsetX": 0,
+            "iconOffsetY": 0,
+            "iconSize": 0.5,
+            "digitalStyle": 0,
+            "wedgeStyle": 0,
+            "needleStartAngle": 135,
+            "needleEndAngle": 405,
+            "needleOffsetX": 0,
+            "needleOffsetY": 0,
+            "needleWidth": 2.5,
+            "needleLength": 1,
+            "scale": 1,
+            "fontSizeScale": 1,
+            "colorHysteresis": 0.03,
+            "labelVerticalOffset": 0,
+            "showName": true,
+            "showUnit": true,
+            "showValue": true,
+            "smoothingEnabled": false,
+            "smoothingFactor": 0.3,
+            "smoothingResponseMs": 0,
+            "spikeGatePercent": 0,
+            "barValuePosition": 4,
+            "barUnitPosition": 7,
+            "barNamePosition": 8,
+            "width": 0,
+            "height": 0,
+            "fractionX": 0,
+            "fractionY": 0,
+            "widthFraction": 0.22,
+            "heightFraction": 0.28,
+            "chartTimeWindowSec": 30,
+            "chartLineColor": "#22c8e6",
+            "chartLineWidth": 2,
+            "chartShowGrid": true,
+            "chartFillUnder": false,
+            "chartShowLabels": true,
+            "chartPrecision": 1,
+            "textColor": "#ffffff",
+            "zIndex": 0,
+            "showHistogram": false,
+            "tickCount": 3,
+            "tickLabels": false,
+            "tickLabelEvery": 1,
+            "tickSide": 0,
+            "redlineStart": 0,
+            "redlineWidth": 2,
+            "redlineColor": "#E03131",
+            "needleShape": 0,
+            "barOrientation": 0,
+            "barThickness": 0,
+            "barTicks": false,
+            "barMinMaxLabels": false,
+            "barRedlineStart": 0,
+            "barRedlineColor": "#E03131",
+            "colorStopColoring": false,
+            "panelStyle": 0,
+            "flashThreshold": 0,
+            "ledColor": "#ff3333",
+            "digitBgColor": "#1a1a1a",
+            "glowStrength": 0,
+            "digitDecimals": -1,
+            "zeroPadding": false,
+            "minDigitCount": 0,
+            "rollAnimation": false,
+            "rollSpeedMs": 300,
+            "segmentCount": 36,
+            "segmentGap": 0,
+            "ringStartAngle": 0,
+            "ringSweepAngle": 360,
+            "amberThreshold": 0.7,
+            "redThreshold": 0.85,
+            "ringCount": 5,
+            "ringWidth": 0,
+            "ringGap": 0,
+            "peakHoldEnabled": true,
+            "peakHoldAutoResetSec": 0,
+            "wedgeSegmentCount": 32,
+            "wedgeRedlineStart": 0.8,
+            "rampWidthRpm": 1500,
+            "zoneCount": 3,
+            "overlayPillPosition": 0,
+            "overlayFontScale": 1,
+            "chartLineStyle": 0,
+            "chartBackgroundColor": ""
+          }
+        ],
+        "tables": [
+          {
+            "tableId": 10,
+            "fractionX": 0.025,
+            "fractionY": 0.075,
+            "widthFraction": 0.4,
+            "heightFraction": 0.4,
+            "zIndex": 0
+          }
+        ],
+        "customizations": {},
+        "headerVisible": true,
+        "sidebarVisible": true,
+        "layoutLocked": false,
+        "warningHistory": []
+      }
+    },
+    "preferences": {
+      "lastConnection": {
+        "type": "tcp",
+        "host": "192.168.1.5",
+        "port": 22100
+      },
+      "favoriteTableIds": [],
+      "recentTableIds": [],
+      "favoriteDriverIds": [],
+      "recentDriverIds": [],
+      "tableNotes": {},
+      "useLambdaMode": false,
+      "stoichAfr": 14.7
+    },
+    "warningSettings": [],
+    "warningDelayMs": 500,
+    "monitoringPresets": [],
+    "batchLedger": [],
+    "queuedBanners": [],
+    "queuedUndoExpiryNotices": []
+  },
+  "images": {
+    "C:\\me221\\images\\bg.png": "aGVsbG8="
+  }
+}
