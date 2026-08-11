@@ -74,6 +74,12 @@ public partial class HybridBridgeService : IDisposable
     internal AppLifecycleBridge? _lifecycleBridge;
     internal HybridWebView? _webView;
 
+    /// <summary>
+    /// Raised with the exact event JSON the bridge sends to the WebView (gpsUpdate /
+    /// odometerUpdate); the mirror relay taps this to re-emit A's event shapes (KTD-7).
+    /// </summary>
+    internal event Action<string, string>? EventEmitted;
+
     internal readonly Dictionary<int, string> _entityIdStrings = new();
     internal readonly Dictionary<string, string> _imageBase64Cache = new();
     private readonly System.Text.StringBuilder _liveDataSb = new(1024);

@@ -43,6 +43,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.ApprovedDeviceStore>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorCertificateProvider>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorServerService>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorSnapshotSerializer>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorStreamService>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
 
 #if WINDOWS

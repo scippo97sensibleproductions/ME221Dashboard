@@ -42,6 +42,9 @@ public sealed class MirrorServerService : IDisposable
     /// <summary>Raised when a session closes for any reason.</summary>
     public event Action<MirrorServerSession>? SessionClosed;
 
+    /// <summary>Raised for every parsed non-hello message (ack routing, U3).</summary>
+    public event Action<MirrorServerSession, object>? MessageReceived;
+
     public bool IsRunning => _server is not null;
     public int BoundPort { get; private set; }
     public int ViewerCount => _sessions.Values.Count(s => s.Status == MirrorSessionStatus.Approved);
@@ -177,12 +180,17 @@ public sealed class MirrorServerService : IDisposable
 
     private async Task HandleMessageAsync(MirrorServerSession session, string text)
     {
-        if (MirrorProtocol.Parse(text) is not HelloMessage hello)
+        var parsed = MirrorProtocol.Parse(text);
+
+        // Messages other than hello (snapshot ack etc.) route to the stream service.
+        if (parsed is not HelloMessage)
         {
-            await session.SendAsync(new CloseMessage { Reason = "expected hello" }).ConfigureAwait(false);
-            session.Close();
+            if (parsed is not null)
+                MessageReceived?.Invoke(session, parsed);
             return;
         }
+
+        var hello = (HelloMessage)parsed;
 
         session.ClientId = hello.ClientId;
         session.DeviceName = hello.DeviceName;

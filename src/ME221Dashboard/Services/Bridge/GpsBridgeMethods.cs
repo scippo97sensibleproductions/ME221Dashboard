@@ -239,6 +239,21 @@ public partial class HybridBridgeService
 
     internal void OnGpsLocationUpdated(object? sender, GpsLocationEventArgs e)
     {
+        // Build the exact event shape A's UI consumes and tap it for the mirror relay
+        // (KTD-7) BEFORE the webview guard — the relay must run with or without a WebView.
+        var json = JsonSerializer.Serialize(new
+        {
+            @event = "gpsUpdate",
+            latitude = e.Latitude,
+            longitude = e.Longitude,
+            altitude = e.Altitude,
+            speed = e.Speed,
+            course = e.Course,
+            accuracy = e.Accuracy,
+            timestamp = DateTime.UtcNow.ToString("o"),
+        });
+        EventEmitted?.Invoke("gps", json);
+
         if (_webView is null) return;
 
         // ── Odometer accumulation (GPS source only) ────────────────────────
@@ -266,18 +281,6 @@ public partial class HybridBridgeService
         }
 
         // Send GPS update
-        var json = JsonSerializer.Serialize(new
-        {
-            @event = "gpsUpdate",
-            latitude = e.Latitude,
-            longitude = e.Longitude,
-            altitude = e.Altitude,
-            speed = e.Speed,
-            course = e.Course,
-            accuracy = e.Accuracy,
-            timestamp = DateTime.UtcNow.ToString("o"),
-        });
-
         MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(json));
 
         // Send separate odometer update
@@ -345,6 +348,9 @@ public partial class HybridBridgeService
             odometer = state.CurrentValue,
             odometerUnit = state.UseKilometers ? "km" : "mi",
         });
+
+        EventEmitted?.Invoke("odometer", json);
+
         MainThread.BeginInvokeOnMainThread(() => _webView.SendRawMessage(json));
     }
 }

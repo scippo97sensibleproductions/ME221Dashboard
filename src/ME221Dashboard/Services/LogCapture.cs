@@ -20,6 +20,9 @@ public sealed class LogCapture : ILoggerProvider
 
     public bool IsStreaming => _streaming;
 
+    /// <summary>Raised for every captured entry; the mirror relay subscribes here (KTD-7).</summary>
+    public event Action<LogEntry>? EntryCaptured;
+
     public void SetWebViewSender(Func<string, Task>? sender)
     {
         _sendToWebView = sender;
@@ -47,6 +50,8 @@ public sealed class LogCapture : ILoggerProvider
             _entries.TryDequeue(out _);
             Interlocked.Increment(ref _totalDropped);
         }
+
+        EntryCaptured?.Invoke(entry);
 
         if (_streaming && _sendToWebView is { } send)
         {
