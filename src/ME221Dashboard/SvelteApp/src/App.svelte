@@ -35,6 +35,13 @@
   import UpdateAvailableModal from './lib/UpdateAvailableModal.svelte';
   import { warningStore } from './lib/stores/warningStore.svelte';
   import { initDeviceMode } from './lib/stores/deviceMode.svelte';
+  import { mirrorStore } from './lib/stores/MirrorStore.svelte';
+  import { sessionDashboards } from './lib/mirror/sessionDashboards.svelte';
+  import CompanionDiscoveryPage from './pages/CompanionDiscoveryPage.svelte';
+  import SnapshotLoadScreen from './lib/mirror/SnapshotLoadScreen.svelte';
+  import SnapshotErrorScreen from './lib/mirror/SnapshotErrorScreen.svelte';
+  import DisconnectedScreen from './lib/mirror/DisconnectedScreen.svelte';
+  import ConfigUpdateNotice from './lib/mirror/ConfigUpdateNotice.svelte';
 
   // Update check guards — sessionStorage-backed: Vite hot reloads remount
   // App.svelte and reset in-memory flags, which would re-fire checkForUpdate()
@@ -66,7 +73,10 @@
     title: string;
     message: string;
   }>({ show: false, type: 'error', title: '', message: '' });
-  let isConnected = $derived(connectionState.state === 'Connected');
+  let isMirrorMode = $state(false);
+  let isMirroring = $derived(mirrorStore.isMirroring);
+  let isConnected = $derived(isMirroring || connectionState.state === 'Connected');
+  let mirrorSnapshotSeeded = $state(false);
   let hasCalibratedThisSession = $state(false);
 
   // ─── Auto-reconnect state ─────────────────────────────────────────────
@@ -76,7 +86,7 @@
   let isManualDisconnect = $state(false);
   let pageBeforeDisconnect = $state<Page>('connection');
 
-  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'sessions' | 'warnings' | 'settings' | 'gaugeBuilder';
+  type Page = 'splash' | 'welcome' | 'connection' | 'calibration' | 'config' | 'dashboard' | 'tableList' | 'tableEditor' | 'driverList' | 'driverEditor' | 'logs' | 'ecuMonitor' | 'sessions' | 'warnings' | 'settings' | 'gaugeBuilder' | 'companion';
   let currentPage = $state<Page>('splash');
   let pageSource = $state<Page | null>(null);
   let selectedTableId = $state<number>(0);
@@ -180,6 +190,7 @@
   // ─── Warning evaluation (shared evaluator, raw values) ─────────────────
   // Load warning settings + delay when connected; reset on disconnect.
   $effect(() => {
+    if (isMirrorMode) return;
     if (isConnected) {
       HybridBridge.getWarningSettings().then(p => {
         warningEvaluator.refresh(p);
@@ -223,6 +234,7 @@
 
   // Load per-dashboard view state (top/side bar visibility) when the dashboard page is shown.
   $effect(() => {
+    if (isMirrorMode) return;
     if (!isConnected || currentPage !== 'dashboard') return;
     HybridBridge.getDashboardConfig(activeDashboard)
       .then(result => {
@@ -257,6 +269,12 @@
   }
 
   async function switchDashboard(name: string) {
+    // Companion mode: switch operates on the ephemeral session store (R7).
+    if (isMirrorMode) {
+      sessionDashboards.setActiveDashboard(name);
+      navigateTo('dashboard');
+      return;
+    }
     // Always set active on the C# side if the name actually changed
     if (name !== activeDashboard) {
       try {
@@ -272,6 +290,20 @@
   }
 
   async function createDashboard(name: string) {
+    // Companion mode: create operates on the ephemeral session store (R7).
+    if (isMirrorMode) {
+      newDashboardError = null;
+      const trimmed = name.trim();
+      if (!trimmed) {
+        newDashboardError = 'Name is required';
+        return;
+      }
+      sessionDashboards.createDashboard(trimmed);
+      newDashboardDialog = false;
+      newDashboardName = '';
+      currentPage = 'config';
+      return;
+    }
     // Dirty check fires at the NewDashboardDialog confirm handler (U8): the
     // creation is queued until the gate resolves.
     if (navigationGate.isReasonActive('dirty-form')) {
@@ -299,6 +331,18 @@
   }
 
   async function deleteDashboard(name: string) {
+    // Companion mode: delete operates on the ephemeral session store (R7).
+    if (isMirrorMode) {
+      if (Object.keys(sessionDashboards.dashboards).length <= 1) return;
+      sessionDashboards.deleteDashboard(name);
+      if (currentPage === 'dashboard' || currentPage === 'config') {
+        const p = currentPage;
+        currentPage = 'splash';
+        await tick();
+        currentPage = p;
+      }
+      return;
+    }
     if (dashboardNames.length <= 1) return;
     // Route through the dirty gate: queued until it resolves, then the delete
     // confirm follows (the delete path skips the save routine — U8).
@@ -327,6 +371,11 @@
   }
 
   async function disconnectEcu() {
+    // Companion mode: the disconnect button exits companion mode (F3).
+    if (isMirrorMode) {
+      exitCompanion();
+      return;
+    }
     // Route through the dirty gate: unsaved shifter edits must not be dropped
     // by a disconnect, and the gate must not stay armed on a dead page.
     if (navigationGate.isReasonActive('dirty-form')) {
@@ -349,6 +398,52 @@
     warningStore.reset();
   }
 
+  // ─── Companion mode (U9) ────────────────────────────────────────────────
+
+  function startCompanion() {
+    isMirrorMode = true;
+    mirrorSnapshotSeeded = false;
+    liveDataStore.mirrorModeActive = true;
+    mirrorStore.start();
+    navigateTo('companion');
+  }
+
+  async function exitCompanion() {
+    mirrorStore.stop();
+    sessionDashboards.reset();
+    liveDataStore.mirrorModeActive = false;
+    isMirrorMode = false;
+    try {
+      await HybridBridge.mirrorDisconnect();
+    } catch { /* best effort */ }
+    navigateTo('connection');
+  }
+
+  // Seed the ephemeral session store when a snapshot applies; re-arm after a
+  // disconnect so the next session starts from the host's dashboards again (R7).
+  $effect(() => {
+    if (!isMirrorMode) return;
+    if (mirrorStore.snapshotApplied && !mirrorSnapshotSeeded) {
+      mirrorSnapshotSeeded = true;
+      sessionDashboards.loadFromSnapshot(mirrorStore.dashboardNames, mirrorStore.activeDashboard);
+    }
+    if (mirrorStore.sessionState === 'Disconnected') {
+      mirrorSnapshotSeeded = false;
+    }
+  });
+
+  // Mirror mode: the shell's dashboard list mirrors the ephemeral session store.
+  $effect(() => {
+    if (!isMirrorMode) return;
+    const names = Object.keys(sessionDashboards.dashboards);
+    if (names.length > 0) {
+      dashboardNames = names;
+      if (activeDashboard !== sessionDashboards.activeDashboard) {
+        activeDashboard = sessionDashboards.activeDashboard;
+      }
+    }
+  });
+
   function navigateTo(page: string, params?: Record<string, unknown>) {
     // Dirty-form gate: stash the target and let the dialog resolve it
     // (Stay clears the stash; Discard/Save-and-leave execute it).
@@ -358,7 +453,7 @@
       return;
     }
     if (navigationGate.isNavigationBlocked()) return;
-    if (isConnected && page === 'connection') return;
+    if (isConnected && page === 'connection' && !isMirrorMode) return;
     if (page === 'calibration' && hasCalibratedThisSession) return;
     if (page === 'tableEditor' && params?.tableId != null) {
       selectedTableId = params.tableId as number;
@@ -564,7 +659,7 @@
     await initDeviceMode();
 
     // Start GPS early so sensors are available in config
-    HybridBridge.startGps().catch(() => {});
+    if (!isMirrorMode) HybridBridge.startGps().catch(() => {});
 
     try {
       const state = await HybridBridge.getConnectionState();
@@ -659,6 +754,7 @@
       cancelReconnect();
       unsubscribe();
       liveDataStore.stop();
+      mirrorStore.stop();
     };
   });
 </script>
@@ -712,6 +808,10 @@
         <ConnectionPage
           {connectionState}
           onConnectionChange={handleConnectionChange}
+          onNavigate={(page: string) => {
+            if (page === 'companion') startCompanion();
+            else navigateTo(page);
+          }}
         />
       {:else if currentPage === 'calibration'}
         <div class="mx-auto max-w-4xl p-4 lg:p-6 h-full">
@@ -742,6 +842,8 @@
             {gpsLocation}
             {toastDataId}
             onToastDataIdHandled={() => { toastDataId = null; }}
+            isMirror={isMirrorMode}
+            isStale={isMirrorMode ? mirrorStore.isStale : false}
           />
         {/key}
       {:else if currentPage === 'tableList'}
@@ -766,9 +868,23 @@
         {#key activeDashboard}
           <GaugeBuilderPage onNavigate={navigateTo} dashboardName={activeDashboard} />
         {/key}
+      {:else if currentPage === 'companion'}
+        <CompanionDiscoveryPage onNavigate={navigateTo} onExit={exitCompanion} />
       {/if}
     </main>
   </div>
+
+  {#if isMirrorMode}
+    {#if mirrorStore.sessionState === 'Connected' && !mirrorStore.snapshotApplied}
+      <SnapshotLoadScreen />
+    {:else if mirrorStore.sessionState === 'Disconnected' && mirrorStore.sessionError === 'update made, reconnect required'}
+      <ConfigUpdateNotice onReconnect={() => navigateTo('companion')} />
+    {:else if mirrorStore.sessionState === 'Disconnected' && mirrorStore.sessionError === 'snapshot failed to apply'}
+      <SnapshotErrorScreen onRetry={() => navigateTo('companion')} onExit={exitCompanion} />
+    {:else if mirrorStore.sessionState === 'Disconnected'}
+      <DisconnectedScreen onRetry={() => navigateTo('companion')} onExit={exitCompanion} />
+    {/if}
+  {/if}
 
   <NewDashboardDialog
     open={newDashboardDialog}

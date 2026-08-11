@@ -123,7 +123,9 @@ public partial class HybridBridgeService : IDisposable
         ApprovedDeviceStore? approvedDeviceStore = null,
         DiscoveryResponderService? discoveryResponder = null,
         MirrorServerService? mirrorServer = null,
-        MirrorCertificateProvider? mirrorCertificates = null)
+        MirrorCertificateProvider? mirrorCertificates = null,
+        MirrorClientService? mirrorClient = null,
+        MirrorPinStore? mirrorPins = null)
     {
         _connection = connection;
         _liveData = liveData;
@@ -139,6 +141,8 @@ public partial class HybridBridgeService : IDisposable
         _discoveryResponder = discoveryResponder;
         _mirrorServer = mirrorServer;
         _mirrorCertificates = mirrorCertificates;
+        _mirrorClient = mirrorClient;
+        _mirrorPinStore = mirrorPins;
 
         if (_mirrorServer is not null)
         {

@@ -115,6 +115,74 @@ public partial class HybridBridgeService
         });
     }
 
+    // ── B-side surface (U9) ─────────────────────────────────────────────────
+
+    private MirrorClientService? _mirrorClient;
+
+    internal void WireMirrorClient(MirrorClientService client) => _mirrorClient = client;
+
+    /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('MirrorScan') — UDP discovery (R1, R4).</summary>
+    public async Task<string> MirrorScan()
+    {
+        if (_mirrorClient is null)
+            return JsonSerializer.Serialize(new { success = false, error = "Mirror client not available" });
+
+        var beacons = await _mirrorClient.ScanAsync().ConfigureAwait(false);
+        return JsonSerializer.Serialize(new
+        {
+            success = true,
+            devices = beacons.Select(b => new
+            {
+                instanceId = b.InstanceId,
+                displayName = b.DisplayName,
+                appVersion = b.AppVersion,
+                ecuConnected = b.EcuConnected,
+                compatible = b.AppVersion == GetAppVersion() || _clientVersionMatches(b.AppVersion),
+                address = b.Address.ToString(),
+            }),
+        });
+    }
+
+    private bool _clientVersionMatches(string beaconVersion)
+    {
+        try { return beaconVersion == AppInfo.Current.VersionString; } catch { return false; }
+    }
+
+    /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('MirrorConnect', [instanceId]) — hello + token (R2, R16).</summary>
+    public async Task<string> MirrorConnect(string instanceId)
+    {
+        if (_mirrorClient is null)
+            return JsonSerializer.Serialize(new { success = false, error = "Mirror client not available" });
+
+        var pin = _mirrorPinStore is null ? null : await _mirrorPinStore.GetAsync(instanceId).ConfigureAwait(false);
+        var beacon = (await _mirrorClient.ScanAsync(1500).ConfigureAwait(false)).FirstOrDefault(b => b.InstanceId == instanceId);
+        if (beacon is null)
+            return JsonSerializer.Serialize(new { success = false, error = "Host not found" });
+
+        await _mirrorClient.ConnectAsync(beacon, pin?.Token, pin?.CertThumbprint).ConfigureAwait(false);
+        return JsonSerializer.Serialize(new { success = true, known = pin is not null });
+    }
+
+    /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('MirrorDisconnect') — exit companion mode (F3).</summary>
+    public string MirrorDisconnect()
+    {
+        _mirrorClient?.Disconnect();
+        return JsonSerializer.Serialize(new { success = true });
+    }
+
+    /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('MirrorForgetDevice', [instanceId]) — re-pair flow (R20): drop the stored token + pin so the next connect re-runs approval.</summary>
+    public async Task<string> MirrorForgetDevice(string instanceId)
+    {
+        if (_mirrorPinStore is null)
+            return JsonSerializer.Serialize(new { success = false, error = "Mirror pins not available" });
+
+        await _mirrorPinStore.RemoveAsync(instanceId).ConfigureAwait(false);
+        return JsonSerializer.Serialize(new { success = true });
+    }
+
+    private MirrorPinStore? _mirrorPinStore;
+    internal void WireMirrorPins(MirrorPinStore pins) => _mirrorPinStore = pins;
+
     /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('ResetPairing') — R20 pairing-reset.</summary>
     public async Task<string> ResetPairing()
     {

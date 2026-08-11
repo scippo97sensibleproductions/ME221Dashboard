@@ -20,13 +20,17 @@
   import WarningPanel from '../lib/WarningPanel.svelte';
   import { navigationGate } from '../lib/navigationGate.svelte';
   import { warningStore } from '../lib/stores/warningStore.svelte';
+  import { mirrorStore } from '../lib/stores/MirrorStore.svelte';
+  import { sessionDashboards } from '../lib/mirror/sessionDashboards.svelte';
 
-  let { dashboardName, onNavigate, gpsLocation, toastDataId = null, onToastDataIdHandled = () => {} }: {
+  let { dashboardName, onNavigate, gpsLocation, toastDataId = null, onToastDataIdHandled = () => {}, isStale = false, isMirror = false }: {
     dashboardName: string;
     onNavigate: (page: string, params?: Record<string, unknown>) => void;
     gpsLocation: GpsLocation | null;
     toastDataId?: number | null;
     onToastDataIdHandled?: () => void;
+    isStale?: boolean;
+    isMirror?: boolean;
   } = $props();
 
   const gaugeSettingsModal = navigationGate.registerModal('gaugeSettings');
@@ -548,6 +552,9 @@
   });
 
   function loadRealConfig() {
+    // Companion mode: the mirror snapshot gates the data — nothing to read until
+    // the host snapshot applied (the retry effect below re-runs this load).
+    if (isMirror && !mirrorStore.snapshotApplied) return;
     HybridBridge.getDashboardConfig(dashboardName).then(async result => {
       if (result.error) {
         loadError = result.error;
@@ -577,7 +584,7 @@
           tableNames = names;
         }).catch(() => {});
       }
-      layoutLocked = result.layoutLocked ?? false;
+      layoutLocked = isMirror ? !sessionDashboards.isEditing : (result.layoutLocked ?? false);
       if (result.entities) {
         entityLookup = result.entities;
       }
@@ -620,6 +627,15 @@
     });
   }
 
+  // Companion mode: load the dashboard once the host snapshot applies (the
+  // frame gate). Until then the page shows its plain loading state.
+  $effect(() => {
+    if (!isMirror) return;
+    if (mirrorStore.snapshotApplied && !loaded && !loadError) {
+      loadRealConfig();
+    }
+  });
+
   // ── Tables ──────────────────────────────────────────────────────
   let tableDefs = $state<DashboardTableEntry[]>([]);
   let tableNames = $state<Record<number, string>>({});
@@ -641,6 +657,8 @@
 
   const DRAG_THRESHOLD = 4;
   let layoutLocked = $state(false);
+  // Companion mode: editing is default-locked during live mirroring (R7).
+  let isEditingSession = $derived(isMirror && !layoutLocked);
 
   function tryActivateDrag(dx: number, dy: number) {
     if (!pendingDrag) return;
@@ -754,6 +772,8 @@
   function persistLayout() {
     if (!layoutDirty) return;
     layoutDirty = false;
+    // Companion mode: layout edits are session-scoped — never written to the bridge.
+    if (isMirror) return;
     const gauges = gaugeDefs.map(def => toSavePayload(def));
     const tables = tableDefs.map(t => ({
       tableId: t.tableId,
@@ -979,6 +999,9 @@
 
   onMount(() => {
     HybridBridge.getPlatform().then(p => { isAndroid = p === 'Android'; }).catch(() => {});
+    if (isMirror) {
+      layoutLocked = !sessionDashboards.isEditing;
+    }
     loadRealConfig();
     const od = liveDataStore.odometer;
     if (od != null) entityValues[String(ODOMETER)] = od;
@@ -999,6 +1022,11 @@
 </script>
 
 <div class="relative flex h-full w-full items-center justify-center select-none" role="application" aria-label="Dashboard">
+  {#if isMirror && isStale}
+    <div class="fixed top-0 left-0 right-0 z-50 flex items-center justify-center px-3 py-1.5" style="background-color: var(--metro-yellow);">
+      <span class="text-[10px] font-bold uppercase tracking-wider" style="color: #1A1A1A;">STALE DATA — HOST FEED PAUSED</span>
+    </div>
+  {/if}
   <WarningPanel {dashboardName} page="dashboard" />
   {#if loadError}
     <div class="flex h-full w-full flex-col items-center justify-center gap-2">
@@ -1017,6 +1045,11 @@
     </div>
   {:else}
     <!-- Lock/unlock toggle — floating top-right -->
+    {#if isEditingSession}
+      <div class="fixed bottom-3 left-1/2 z-40 -translate-x-1/2 px-3 py-1" style="background-color: var(--metro-card); border: 1px solid var(--metro-teal);">
+        <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-teal);">Session-Only — Not Saved</span>
+      </div>
+    {/if}
     <button
       class="absolute top-2 right-2 z-50 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors
         {layoutLocked
@@ -1025,7 +1058,11 @@
       title={layoutLocked ? 'Unlock layout (allow dragging)' : 'Lock layout (prevent dragging)'}
       onclick={() => {
         layoutLocked = !layoutLocked;
-        HybridBridge.saveDashboardViewState(dashboardName, { layoutLocked }).catch(() => {});
+        if (isMirror) {
+          sessionDashboards.setEditing(!layoutLocked);
+        } else {
+          HybridBridge.saveDashboardViewState(dashboardName, { layoutLocked }).catch(() => {});
+        }
       }}
     >
       {#if layoutLocked}

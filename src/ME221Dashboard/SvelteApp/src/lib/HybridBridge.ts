@@ -1034,6 +1034,31 @@ export const HybridBridge = {
     const result = await invokeDotNetLogged('DeleteMonitoringPreset', [id]);
     return JSON.parse(result);
   },
+
+  // ─── Mirror (companion mode) ─────────────────────────────────────────────
+
+  mirrorScan: async (): Promise<{ success: boolean; error?: string; devices: { instanceId: string; displayName: string; appVersion: string; ecuConnected: boolean; compatible: boolean; address: string }[] }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable', devices: [] };
+    const result = await invokeDotNetLogged('MirrorScan');
+    return JSON.parse(result);
+  },
+
+  mirrorConnect: async (instanceId: string): Promise<{ success: boolean; error?: string; known?: boolean }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('MirrorConnect', [instanceId]);
+    return JSON.parse(result);
+  },
+
+  mirrorDisconnect: async (): Promise<void> => {
+    if (!isWebViewAvailable()) return;
+    await invokeDotNetLogged('MirrorDisconnect');
+  },
+
+  mirrorForgetDevice: async (instanceId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'bridge unavailable' };
+    const result = await invokeDotNetLogged('MirrorForgetDevice', [instanceId]);
+    return JSON.parse(result);
+  },
 };
 
 // Initialize the centralized message router at module load time,

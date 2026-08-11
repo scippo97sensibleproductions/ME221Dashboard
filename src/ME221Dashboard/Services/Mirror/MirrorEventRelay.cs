@@ -192,14 +192,19 @@ public sealed class MirrorEventRelay : IDisposable
 
     private void OnStateChanged(MirrorSessionState state)
     {
-        RelayToSvelte("mirrorSessionState", new
+        // Flat event shape: MirrorStore.svelte.ts reads sessionState/error at the top
+        // level (KTD-7). Chunk/done events stay enveloped because the store reads
+        // them via .payload.
+        var json = JsonSerializer.Serialize(new
         {
             @event = "mirrorSessionState",
             state = state.State.ToString(),
             error = state.Error,
             token = state.Token,
             displayName = state.ServerDisplayName,
-        });
+        }, HybridBridgeService.SJsonOptions);
+        SvelteMessageEmitted?.Invoke(json);
+        _bridge.SendRawMirrorJson(json);
     }
 
     // ── Transport helpers ────────────────────────────────────────────────────

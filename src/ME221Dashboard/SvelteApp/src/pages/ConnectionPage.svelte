@@ -4,13 +4,14 @@
   import {
     IconPlugConnected, IconRefresh, IconWifi, IconUsb,
     IconNetwork, IconDeviceLaptop, IconCpu, IconCircleCheck,
-    IconCircleX, IconLoader, IconPlug, IconArrowRight
+    IconCircleX, IconLoader, IconPlug, IconArrowRight, IconDeviceMobile
   } from '@tabler/icons-svelte';
   import { fly } from 'svelte/transition';
 
-  let { connectionState, onConnectionChange }: {
+  let { connectionState, onConnectionChange, onNavigate = (_p: string) => {} }: {
     connectionState: ConnectionStateInfo;
     onConnectionChange: (state: ConnectionStateInfo) => void;
+    onNavigate?: (page: string) => void;
   } = $props();
 
   type ConnType = 'tcp' | 'serial';
@@ -302,6 +303,30 @@
           {/if}
         </div>
       </div>
+
+      <!-- Companion mode entry -->
+      {#if !isConnected}
+        <div class="mt-4" style="background-color: var(--metro-card); border: 1px solid var(--metro-border); border-left: 4px solid var(--metro-teal);">
+          <div class="flex items-start gap-3 p-4">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center" style="background-color: var(--metro-teal);">
+              <IconDeviceMobile size={20} style="color: var(--metro-text-on-accent);" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-[12px] font-bold uppercase tracking-wider text-white">Companion Mode</p>
+              <p class="mt-0.5 text-[12px]" style="color: var(--metro-text-secondary);">
+                Mirror another ME221 dashboard over your local network
+              </p>
+              <button
+                class="metro-btn-primary mt-3 flex items-center gap-2 px-4 py-2"
+                onclick={() => onNavigate('companion')}
+              >
+                <IconWifi size={16} />
+                Find Hosts
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
 
       <!-- Protocol info card -->
       {#if connectionState.protocolInfo}
