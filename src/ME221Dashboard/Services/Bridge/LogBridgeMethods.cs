@@ -33,10 +33,17 @@ public partial class HybridBridgeService
     /// </summary>
     public string GetRecentLogs(int count = 200)
     {
-        var entries = _logCapture.GetRecentEntries(count);
+        // Companion mode: the relayed log tail (R17, KTD-7), never B's local logs.
+        if (_mirrorMode && _mirrorStore is { } store)
+        {
+            var entries = store.RecentLogs.TakeLast(count).Select(ParseRelayedLog);
+            return JsonSerializer.Serialize(new { entries });
+        }
+
+        var localEntries = _logCapture.GetRecentEntries(count);
         var json = JsonSerializer.Serialize(new
         {
-            entries = entries.Select(e => new
+            entries = localEntries.Select(e => new
             {
                 timestamp = e.Timestamp.ToString("HH:mm:ss.fff"),
                 level = e.Level,
@@ -46,6 +53,21 @@ public partial class HybridBridgeService
             })
         });
         return json;
+    }
+
+    /// <summary>Relayed log entries are stored as ready JSON objects; return them as-is.</summary>
+    private static object? ParseRelayedLog(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement.Clone();
+            return root;
+        }
+        catch (JsonException)
+        {
+            return new { message = json };
+        }
     }
 
     /// <summary>

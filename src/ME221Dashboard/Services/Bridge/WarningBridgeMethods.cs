@@ -156,6 +156,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveWarningSettings(string settingsJson)
     {
+        if (GateWrite("warningSettings") is { } gated) return gated;
         try
         {
             var incoming = JsonSerializer.Deserialize<List<DataLinkWarningSetting>>(settingsJson, SJsonOptions) ?? [];
@@ -358,6 +359,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveWarningDelay(string json)
     {
+        if (GateWrite("warningSettings") is { } gated) return gated;
         try
         {
             var payload = JsonSerializer.Deserialize<WarningDelayPayload>(json, SJsonOptions);

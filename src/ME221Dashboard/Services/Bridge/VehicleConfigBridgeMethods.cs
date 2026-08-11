@@ -80,6 +80,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SetVehicleConfig(string json)
     {
+        if (GateWrite("settings") is { } gated) return gated;
         _logger.LogInformation("[VEHCFG] SetVehicleConfig: {Json}", json);
         try
         {

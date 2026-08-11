@@ -64,7 +64,8 @@ public partial class HybridBridgeService : IDisposable
 
     internal readonly IEcuConnectionService _connection;
     internal readonly ILiveDataService _liveData;
-    internal readonly ICalibrationService _calibration;
+    internal ICalibrationService _calibration;
+    internal readonly ICalibrationService _realCalibration;
     internal readonly DashboardPackageService _packageService;
     internal readonly ILogger<HybridBridgeService> _logger;
     internal readonly IGpsService? _gps;
@@ -120,6 +121,7 @@ public partial class HybridBridgeService : IDisposable
         _connection = connection;
         _liveData = liveData;
         _calibration = calibration;
+        _realCalibration = calibration;
         _packageService = packageService;
         _logCapture = logCapture;
         _logger = logger ?? NullLogger<HybridBridgeService>.Instance;

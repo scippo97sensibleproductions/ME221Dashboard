@@ -55,6 +55,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> CreateDashboard(string name)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("CreateDashboard called");
         try
         {
@@ -101,6 +102,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> DeleteDashboard(string name)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("DeleteDashboard called");
         try
         {
@@ -138,6 +140,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> RenameDashboard(string oldName, string newName)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("RenameDashboard called");
         try
         {
@@ -182,6 +185,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SetActiveDashboard(string name)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("SetActiveDashboard called");
         try
         {
@@ -982,6 +986,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveSensorSelection(string jsonPayload)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("SaveSensorSelection called");
         try
         {
@@ -1058,6 +1063,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveDashboardTables(string jsonPayload)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("SaveDashboardTables called");
         try
         {
@@ -1110,6 +1116,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> DeleteDashboardGauges(string dashboardName, string entityIdsJson)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         try
         {
             var ids = JsonSerializer.Deserialize<List<int>>(entityIdsJson);

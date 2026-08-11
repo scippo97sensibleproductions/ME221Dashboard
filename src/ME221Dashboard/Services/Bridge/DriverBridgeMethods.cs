@@ -79,6 +79,18 @@ public partial class HybridBridgeService
             var payload = System.Text.Json.Nodes.JsonNode.Parse(jsonPayload);
             var driverId = (ushort)(payload?["driverId"]?.GetValue<ushort>() ?? 0);
 
+            // Companion mode (KTD-4): answer from the snapshot's stored config.
+            if (_mirrorMode && _mirrorStore?.GetDriver(driverId) is { } snapshotDriver)
+            {
+                var values = snapshotDriver.Configs.Select(c => c.Value).ToArray();
+                return JsonSerializer.Serialize(new
+                {
+                    configs = values,
+                    outputLinkIds = snapshotDriver.OutputLinkIds,
+                    inputLinkIds = snapshotDriver.InputLinkIds,
+                }, SJsonOptions);
+            }
+
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var driverDef = calResult.Data?.Drivers?.FirstOrDefault(d => d.Id == driverId);
             if (driverDef is null)
@@ -110,6 +122,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SetDriverConfig(string jsonPayload)
     {
+        if (GateWrite("drivers") is { } gated) return gated;
         _logger.LogInformation("SetDriverConfig called");
         try
         {
@@ -147,6 +160,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> StoreDriver(string jsonPayload)
     {
+        if (GateWrite("drivers") is { } gated) return gated;
         _logger.LogInformation("StoreDriver called");
         try
         {

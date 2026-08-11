@@ -82,6 +82,7 @@ public partial class HybridBridgeService
     /// </summary>
     public string SetDebugSpeed(double? speedKmh)
     {
+        if (GateWrite("debug") is { } gated) return gated;
         if (_gps is SimulatedGpsService sim)
         {
             sim.SetFixedSpeed(speedKmh);
@@ -132,6 +133,21 @@ public partial class HybridBridgeService
     /// Called from JS: window.HybridWebView.InvokeDotNet('GetOdometer')
     public string GetOdometer()
     {
+        // Companion mode: answer from relayed values (R9, KTD-7), never B's local odometer.
+        if (_mirrorMode && _mirrorStore is { } store)
+        {
+            var (value, km) = store.Odometer;
+            return JsonSerializer.Serialize(new
+            {
+                value,
+                unit = km ? "km" : "mi",
+                useKilometers = km,
+                speedSource = "gps",
+                speedEntityId = (int?)null,
+                speedUnit = "km/h",
+            });
+        }
+
         if (_activeDashboardName == null)
             return JsonSerializer.Serialize(new { value = 0.0, unit = "km", useKilometers = true, speedSource = "gps", speedEntityId = (int?)null, speedUnit = "km/h" });
 
@@ -151,6 +167,7 @@ public partial class HybridBridgeService
     /// Called from JS: window.HybridWebView.InvokeDotNet('ResetOdometer')
     public async Task ResetOdometer()
     {
+        if (GateWrite("odometer") is { } gated) { _logger.LogDebug(gated); return; }
         if (_activeDashboardName == null) return;
         var old = LoadOdometerState(_activeDashboardName);
         _odometerByDashboard[_activeDashboardName] = new OdometerConfig
@@ -167,6 +184,7 @@ public partial class HybridBridgeService
     /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerValue', [value])
     public async Task SetOdometerValue(double value)
     {
+        if (GateWrite("odometer") is { } gated) { _logger.LogDebug(gated); return; }
         if (_activeDashboardName == null) return;
         var state = LoadOdometerState(_activeDashboardName);
         state.CurrentValue = Math.Max(0, value);
@@ -178,6 +196,7 @@ public partial class HybridBridgeService
     /// Called from JS: window.HybridWebView.InvokeDotNet('SetOdometerUnit', [useKilometers])
     public async Task SetOdometerUnit(bool useKilometers)
     {
+        if (GateWrite("odometer") is { } gated) { _logger.LogDebug(gated); return; }
         if (_activeDashboardName == null) return;
         var state = LoadOdometerState(_activeDashboardName);
         state.UseKilometers = useKilometers;
@@ -193,6 +212,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task SetOdometerSpeedSource(int source)
     {
+        if (GateWrite("odometer") is { } gated) { _logger.LogDebug(gated); return; }
         if (_activeDashboardName == null) return;
         var state = LoadOdometerState(_activeDashboardName);
 
@@ -210,6 +230,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task SetOdometerSpeedConfig(string json)
     {
+        if (GateWrite("odometer") is { } gated) { _logger.LogDebug(gated); return; }
         if (_activeDashboardName == null) return;
         var state = LoadOdometerState(_activeDashboardName);
 

@@ -92,6 +92,24 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> GetImageBase64(string path)
     {
+        // Companion mode: serve from the snapshot's embedded bytes, never B's filesystem (R9).
+        if (_mirrorMode && _mirrorStore?.GetImageBase64(path) is { } mirrored)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var mime = ext switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".bmp" => "image/bmp",
+                ".gif" => "image/gif",
+                ".webp" => "image/webp",
+                ".svg" => "image/svg+xml",
+                ".tiff" or ".tif" => "image/tiff",
+                ".ico" => "image/x-icon",
+                _ => "image/png"
+            };
+            return JsonSerializer.Serialize(new { success = true, dataUrl = $"data:{mime};base64,{mirrored}" });
+        }
+
         try
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path))

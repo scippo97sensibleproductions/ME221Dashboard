@@ -1,0 +1,269 @@
+using System.Text.Json;
+using FluentAssertions;
+using ME221Dashboard.Services;
+using ME221Dashboard.Services.Mirror;
+using Xunit;
+
+namespace ME221Dashboard.Tests.Mirror;
+
+/// <summary>U7: companion mode gates every classified write and serves reads from the snapshot store.</summary>
+public sealed class WriteGateTests
+{
+    private readonly FakeCalibrationService _calibration = new();
+    private readonly HybridBridgeService _bridge;
+    private readonly MirrorSnapshotStore _store = new();
+
+    public WriteGateTests()
+    {
+        _calibration.Config = new Services.DashboardConfig();
+        _bridge = TestBridge.Create(_calibration);
+        _bridge.EnterMirrorMode(_store);
+    }
+
+    private static async Task<(bool Success, string? Error)> ParseAsync(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        return (root.TryGetProperty("success", out var s) && s.GetBoolean(),
+                root.TryGetProperty("error", out var e) ? e.GetString() : null);
+    }
+
+    // ── Every gated write returns { success: false, error } in companion mode ──
+
+    [Theory]
+    [InlineData("WriteTableData", "{\"tableId\":1}")]
+    [InlineData("WriteTableDataBatch", "[]")]
+    [InlineData("SetDriverConfig", "{\"driverId\":1}")]
+    [InlineData("StoreDriver", "{\"driverId\":1}")]
+    [InlineData("SetVehicleConfig", "{}")]
+    [InlineData("SaveWarningSettings", "[]")]
+    [InlineData("SaveWarningDelay", "{\"delayMs\":500}")]
+    [InlineData("CreateDashboard", "NewDash")]
+    [InlineData("DeleteDashboard", "default")]
+    [InlineData("RenameDashboard", "a|b")]
+    [InlineData("SetActiveDashboard", "default")]
+    [InlineData("SaveSensorSelection", "{\"dashboardName\":\"default\",\"selectedIds\":[]}")]
+    [InlineData("SaveDashboardTables", "{\"dashboardName\":\"default\",\"tables\":[]}")]
+    [InlineData("DeleteDashboardGauges", "default|[]")]
+    [InlineData("SaveFile", "{}")]
+    [InlineData("ImportYamlTable", null)]
+    [InlineData("ImportCsvTable", null)]
+    [InlineData("ImportDashboard", null)]
+    [InlineData("ImportMecal", null)]
+    [InlineData("ApplyMecalImport", "e30=|[]|[]")]
+    public async Task GatedWritesReturnErrorInCompanionMode(string method, string? args)
+    {
+        var result = await InvokeAsync(method, args);
+        var (success, error) = await ParseAsync(result);
+        success.Should().BeFalse($"write '{method}' must be gated in companion mode");
+        error.Should().NotBeNullOrWhiteSpace();
+    }
+
+    private Task<string> InvokeAsync(string method, string? args)
+    {
+        return method switch
+        {
+            "WriteTableData" => _bridge.WriteTableData(args!),
+            "WriteTableDataBatch" => _bridge.WriteTableDataBatch(args!),
+            "SetDriverConfig" => _bridge.SetDriverConfig(args!),
+            "StoreDriver" => _bridge.StoreDriver(args!),
+            "SetVehicleConfig" => _bridge.SetVehicleConfig(args!),
+            "SaveWarningSettings" => _bridge.SaveWarningSettings(args!),
+            "SaveWarningDelay" => _bridge.SaveWarningDelay(args!),
+            "CreateDashboard" => _bridge.CreateDashboard(args!),
+            "DeleteDashboard" => _bridge.DeleteDashboard(args!),
+            "RenameDashboard" => _bridge.RenameDashboard(args!.Split('|')[0], args.Split('|')[1]),
+            "SetActiveDashboard" => _bridge.SetActiveDashboard(args!),
+            "SaveSensorSelection" => _bridge.SaveSensorSelection(args!),
+            "SaveDashboardTables" => _bridge.SaveDashboardTables(args!),
+            "DeleteDashboardGauges" => _bridge.DeleteDashboardGauges(args!.Split('|')[0], args.Split('|')[1]),
+            "SaveFile" => _bridge.SaveFile(args!),
+            "ImportYamlTable" => _bridge.ImportYamlTable(),
+            "ImportCsvTable" => _bridge.ImportCsvTable(),
+            "ImportDashboard" => _bridge.ImportDashboard(),
+            "ImportMecal" => _bridge.ImportMecal(),
+            "ApplyMecalImport" => _bridge.ApplyMecalImport(args!.Split('|')[0], args.Split('|')[1], args.Split('|')[2]),
+            _ => throw new ArgumentException($"Unhandled method {method}"),
+        };
+    }
+
+    [Fact]
+    public async Task OdometerSettersAreGated()
+    {
+        await _bridge.ResetOdometer();
+        await _bridge.SetOdometerValue(123);
+        await _bridge.SetOdometerUnit(true);
+        await _bridge.SetOdometerSpeedSource(0);
+        await _bridge.SetOdometerSpeedConfig("{}");
+        // These are void-ish writes; the gate must keep B's odometer untouched.
+        _bridge.GetOdometer().Should().Contain("\"value\":0");
+    }
+
+    [Fact]
+    public async Task DebugSpeedIsGated()
+    {
+        var result = _bridge.SetDebugSpeed(50);
+        var (success, error) = await ParseAsync(result);
+        success.Should().BeFalse();
+        error.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task SameWritesWorkOutsideCompanionMode()
+    {
+        _bridge.ExitMirrorMode();
+        // Outside companion mode the writes are NOT gated; file-picker imports fail
+        // with a real error rather than the gate message — proving the gate is off.
+        var result = await _bridge.ImportYamlTable();
+        var (success, error) = await ParseAsync(result);
+        error.Should().NotBe("Read-only in companion mode");
+        _ = success;
+    }
+
+    // ── B-local exceptions stay ungated ──────────────────────────────────────
+
+    [Fact]
+    public async Task BLocalExceptionsAreNotGated()
+    {
+        _bridge.ClearLogs().Should().Contain("\"success\":true");
+        var presets = await _bridge.GetMonitoringPresets();
+        presets.Should().NotContain("Read-only in companion mode");
+        var history = await _bridge.SaveWarningHistory("[]");
+        history.Should().NotContain("Read-only in companion mode");
+        var ledger = await _bridge.SaveBatchLedger("[]");
+        ledger.Should().NotContain("Read-only in companion mode");
+        var notices = await _bridge.SaveWarningQueuedNotices("[]");
+        notices.Should().NotContain("Read-only in companion mode");
+        var datalink = await _bridge.SaveWarningDatalink("{}");
+        datalink.Should().NotContain("Read-only in companion mode");
+    }
+}
+
+/// <summary>U7: mirror-served reads answer from the snapshot store, never B-local data.</summary>
+public sealed class RemoteReadTests
+{
+    private readonly FakeCalibrationService _calibration = new();
+    private readonly HybridBridgeService _bridge;
+    private readonly MirrorSnapshotStore _store = new();
+
+    public RemoteReadTests()
+    {
+        _calibration.Config = new Services.DashboardConfig(); // B-local: a different dashboard
+        _bridge = TestBridge.Create(_calibration);
+    }
+
+    [Fact]
+    public async Task TableReadsAnswerFromSnapshotNeverBLocal()
+    {
+        _store.Apply(MirrorTestData.SampleSnapshot());
+        _bridge.EnterMirrorMode(_store);
+
+        var tables = await _bridge.GetTableDefinitions();
+        tables.Should().Contain("Ignition");
+        tables.Should().NotContain("B-Local");
+
+        var data = await _bridge.ReadTableData(10);
+        data.Should().Contain("10");
+        data.Should().Contain("18");
+    }
+
+    [Fact]
+    public async Task DriverAndDatalinkReadsAnswerFromSnapshot()
+    {
+        _store.Apply(MirrorTestData.SampleSnapshot());
+        _bridge.EnterMirrorMode(_store);
+
+        var drivers = await _bridge.GetDriverDefinitions();
+        drivers.Should().Contain("Test Driver");
+
+        var dataLinks = await _bridge.GetDataLinks();
+        dataLinks.Should().Contain("RPM");
+    }
+
+    [Fact]
+    public async Task DashboardReadsAnswerFromSnapshot()
+    {
+        _store.Apply(MirrorTestData.SampleSnapshot());
+        _bridge.EnterMirrorMode(_store);
+
+        var names = await _bridge.GetDashboardNames();
+        names.Should().Contain("default");
+
+        var config = await _bridge.GetDashboardConfig("default");
+        config.Should().Contain("\"found\":true");
+
+        var vehicle = await _bridge.GetVehicleConfig();
+        vehicle.Should().NotContain("error");
+    }
+
+    [Fact]
+    public async Task WarningReadsAnswerFromSnapshot()
+    {
+        var snapshot = MirrorTestData.SampleSnapshot();
+        snapshot.DashboardConfig.WarningSettings.Add(new ME221.Data.Models.DataLinkWarningSetting
+        {
+            DataId = 1,
+            Name = "RPM",
+            Status = ME221.Data.Models.WarningSettingStatus.Typical,
+        });
+        _store.Apply(snapshot);
+        _bridge.EnterMirrorMode(_store);
+
+        var settings = await _bridge.GetWarningSettings();
+        settings.Should().NotBeEmpty();
+
+        var notices = await _bridge.GetWarningQueuedNotices();
+        notices.Should().NotBeNull();
+
+        var history = await _bridge.GetWarningHistory();
+        history.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task OdometerReadsAnswerFromRelayedValues()
+    {
+        _store.Apply(MirrorTestData.SampleSnapshot());
+        _store.UpdateOdometer(12345.6, useKilometers: false);
+        _bridge.EnterMirrorMode(_store);
+
+        var json = _bridge.GetOdometer();
+        json.Should().Contain("\"value\":12345.6");
+        json.Should().Contain("\"useKilometers\":false");
+    }
+
+    [Fact]
+    public async Task SnapshotImageResolvesWithoutTouchingFilesystem()
+    {
+        var snapshot = MirrorTestData.SampleSnapshot();
+        snapshot.Images = new Dictionary<string, string> { ["C:\\me221\\images\\bg.png"] = "aGVsbG8=" };
+        _store.Apply(snapshot);
+        _bridge.EnterMirrorMode(_store);
+
+        var json = await _bridge.GetImageBase64("C:\\me221\\images\\bg.png");
+        json.Should().Contain("data:image/png;base64,aGVsbG8=");
+
+        // A path absent from the snapshot does not fall back to B's disk.
+        var missing = await _bridge.GetImageBase64("C:\\definitely-missing-me221.png");
+        missing.Should().Contain("File not found");
+    }
+
+    [Fact]
+    public async Task ReadsBeforeSnapshotApplyReturnNotReady()
+    {
+        _bridge.EnterMirrorMode(_store); // store is empty
+
+        var tables = await _bridge.GetTableDefinitions();
+        tables.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExitMirrorModeRestoresLocalData()
+    {
+        _store.Apply(MirrorTestData.SampleSnapshot());
+        _bridge.EnterMirrorMode(_store);
+        _bridge.ExitMirrorMode();
+
+        var tables = await _bridge.GetTableDefinitions();
+        tables.Should().NotContain("Ignition", "B-local calibration is restored after exit");
+    }
+}

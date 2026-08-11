@@ -204,6 +204,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ImportMecal()
     {
+        if (GateWrite("imports") is { } gated) return gated;
         _logger.LogInformation("ImportMecal called");
         _connection.PauseHeartbeat();
         try
@@ -628,6 +629,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ApplyMecalImport(string fileContentB64, string selectedTableIdsJson, string selectedDriverIdsJson)
     {
+        if (GateWrite("imports") is { } gated) return gated;
         _logger.LogInformation("ApplyMecalImport called");
         _connection.PauseHeartbeat();
         try
@@ -785,6 +787,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> WriteTableDataBatch(string jsonPayload)
     {
+        if (GateWrite("tables") is { } gated) return gated;
         _logger.LogInformation("WriteTableDataBatch called");
         _connection.PauseHeartbeat();
         try

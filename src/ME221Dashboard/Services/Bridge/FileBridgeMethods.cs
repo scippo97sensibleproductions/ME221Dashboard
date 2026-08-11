@@ -91,6 +91,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ImportDashboard()
     {
+        if (GateWrite("imports") is { } gated) return gated;
         _logger.LogInformation("ImportDashboard called");
         try
         {
@@ -158,6 +159,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveFile(string jsonPayload)
     {
+        if (GateWrite("saveFile") is { } gated) return gated;
         _logger.LogInformation("SaveFile called");
         try
         {
@@ -242,6 +244,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ImportYamlTable()
     {
+        if (GateWrite("imports") is { } gated) return gated;
         _logger.LogInformation("ImportYamlTable called");
         try
         {
@@ -275,6 +278,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ImportCsvTable()
     {
+        if (GateWrite("imports") is { } gated) return gated;
         _logger.LogInformation("ImportCsvTable called");
         try
         {

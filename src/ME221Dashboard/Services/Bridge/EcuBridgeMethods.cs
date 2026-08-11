@@ -96,6 +96,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> PickAndLoadCalibration()
     {
+        if (GateWrite("calibration") is { } gated) return gated;
         _logger.LogInformation("PickAndLoadCalibration called");
         _connection.PauseHeartbeat();
         try
@@ -149,6 +150,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> ForceUseCalibration()
     {
+        if (GateWrite("calibration") is { } gated) return gated;
         _logger.LogInformation("ForceUseCalibration called");
         try
         {

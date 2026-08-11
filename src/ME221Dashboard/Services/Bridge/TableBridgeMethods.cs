@@ -79,6 +79,22 @@ public partial class HybridBridgeService
         _logger.LogInformation("ReadTableData called");
         try
         {
+            // Companion mode (KTD-4): answer from the snapshot's stored values; no ECU read.
+            if (_mirrorMode && _mirrorStore?.GetTable(tableId) is { } snapshotTable)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    enabled = snapshotTable.Enabled,
+                    rows = snapshotTable.Rows,
+                    cols = snapshotTable.Cols,
+                    tableType = snapshotTable.TableType,
+                    input0 = snapshotTable.Input0,
+                    input1 = snapshotTable.Input1,
+                    output = snapshotTable.Output,
+                }, SJsonOptions);
+            }
+
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var tableDef = calResult.Data?.Tables?.FirstOrDefault(t => t.Id == tableId);
             if (tableDef is null)
@@ -140,6 +156,26 @@ public partial class HybridBridgeService
         try
         {
             var ids = JsonSerializer.Deserialize<ushort[]>(tableIdsJson) ?? [];
+
+            // Companion mode (KTD-4): answer from snapshot values.
+            if (_mirrorMode && _mirrorStore is { } store)
+            {
+                var snapshotResults = new Dictionary<int, object>();
+                foreach (var tableId in ids)
+                {
+                    if (store.GetTable(tableId) is not { } t) continue;
+                    snapshotResults[tableId] = new
+                    {
+                        success = true,
+                        enabled = t.Enabled,
+                        input0 = t.Input0,
+                        input1 = t.Input1,
+                        output = t.Output,
+                    };
+                }
+                return JsonSerializer.Serialize(new { results = snapshotResults }, SJsonOptions);
+            }
+
             var calResult = await _calibration.GetPersistedCalibrationAsync().ConfigureAwait(false);
             var allTables = calResult.Data?.Tables ?? [];
             var links = calResult.Data?.DataLinks ?? [];
@@ -200,6 +236,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> WriteTableData(string jsonPayload)
     {
+        if (GateWrite("tables") is { } gated) return gated;
         _logger.LogInformation("WriteTableData called");
         try
         {
