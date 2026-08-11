@@ -80,6 +80,16 @@ public partial class HybridBridgeService : IDisposable
     /// </summary>
     internal event Action<string, string>? EventEmitted;
 
+    /// <summary>
+    /// Raised after a snapshot-scoped write succeeds (calibration, dashboard CRUD,
+    /// sensor selection, warning settings, vehicle config); R19 hooks end viewer
+    /// sessions with configUpdate (KTD-6). Layout saves and ECU writes never raise it.
+    /// </summary>
+    internal event Action<string>? SnapshotScopedWrite;
+
+    /// <summary>Fire the R19 hook after a snapshot-scoped write (KTD-6).</summary>
+    internal void NotifySnapshotScopedWrite(string reason) => SnapshotScopedWrite?.Invoke(reason);
+
     internal readonly Dictionary<int, string> _entityIdStrings = new();
     internal readonly Dictionary<string, string> _imageBase64Cache = new();
     private readonly System.Text.StringBuilder _liveDataSb = new(1024);
@@ -104,7 +114,8 @@ public partial class HybridBridgeService : IDisposable
         IUpdateCheckerService? updateChecker = null,
         ApprovedDeviceStore? approvedDeviceStore = null,
         DiscoveryResponderService? discoveryResponder = null,
-        MirrorServerService? mirrorServer = null)
+        MirrorServerService? mirrorServer = null,
+        MirrorCertificateProvider? mirrorCertificates = null)
     {
         _connection = connection;
         _liveData = liveData;
@@ -118,6 +129,14 @@ public partial class HybridBridgeService : IDisposable
         _approvedDeviceStore = approvedDeviceStore;
         _discoveryResponder = discoveryResponder;
         _mirrorServer = mirrorServer;
+        _mirrorCertificates = mirrorCertificates;
+
+        if (_mirrorServer is not null)
+        {
+            _mirrorServer.ApprovalRequested += OnApprovalRequested;
+            _mirrorServer.SessionApproved += _ => UpdateForegroundService();
+            _mirrorServer.SessionClosed += _ => UpdateForegroundService();
+        }
 
         _logger.LogInformation("GPS service: {GpsType}", _gps?.GetType().Name ?? "NULL (none registered)");
 
@@ -199,13 +218,7 @@ public partial class HybridBridgeService : IDisposable
 
     private void OnConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-#if ANDROID
-        var context = global::Android.App.Application.Context;
-        if (e.NewState == ConnectionState.Connected)
-            Platforms.Android.Services.EcuForegroundService.Start(context);
-        else if (e.NewState is ConnectionState.Disconnected or ConnectionState.Error)
-            Platforms.Android.Services.EcuForegroundService.Stop(context);
-#endif
+        UpdateForegroundService(e.NewState);
 
         // Force-persist odometer on disconnect/error — don't wait for the flush timer
         if (e.NewState is ConnectionState.Disconnected or ConnectionState.Error)
@@ -219,6 +232,23 @@ public partial class HybridBridgeService : IDisposable
             state = e.NewState.ToString(),
             error = e.Error
         });
+    }
+
+    /// <summary>
+    /// Foreground-service coverage: active while the ECU is connected OR at least one
+    /// mirror viewer is connected (U5), so viewer streams survive A being backgrounded.
+    /// </summary>
+    internal void UpdateForegroundService(ConnectionState? ecuState = null)
+    {
+#if ANDROID
+        var context = global::Android.App.Application.Context;
+        var ecuActive = (ecuState ?? _connection.State) == ConnectionState.Connected;
+        var viewersActive = _mirrorServer?.ViewerCount > 0;
+        if (ecuActive || viewersActive)
+            Platforms.Android.Services.EcuForegroundService.Start(context);
+        else
+            Platforms.Android.Services.EcuForegroundService.Stop(context);
+#endif
     }
 
     private void OnEntitiesUpdated(object? sender, EntitiesUpdatedEventArgs e)

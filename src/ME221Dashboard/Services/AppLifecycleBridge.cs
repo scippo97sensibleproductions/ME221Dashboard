@@ -18,6 +18,8 @@ public sealed class AppLifecycleBridge
     private readonly HybridBridgeService _bridge;
     private readonly ILogger<AppLifecycleBridge> _logger;
     private string? _lastLifecycleState;
+    /// <summary>True while the app is backgrounded (Android stopped / Windows minimized); approval requests auto-deny then (U5).</summary>
+    public bool IsBackgrounded => _lastLifecycleState == "appBackgrounded";
 #if WINDOWS
     private bool _windowsAttached;
 #endif
@@ -57,6 +59,9 @@ public sealed class AppLifecycleBridge
         _lastLifecycleState = eventName;
         _bridge.SendLifecycleEvent(eventName);
     }
+
+    /// <summary>Test seam: mark the app backgrounded without a real lifecycle transition.</summary>
+    internal void NotifyBackgrounded() => EmitLifecycle("appBackgrounded");
 
 #if WINDOWS
     private void AttachWindowsWindow(Window window)

@@ -84,6 +84,7 @@ public partial class HybridBridgeService
 
             // The created dashboard becomes active — keep the emulator feed on it (R10).
             await WriteEmulatorVehicleFileAsync(config, name).ConfigureAwait(false);
+            NotifySnapshotScopedWrite("dashboards");
 
             return JsonSerializer.Serialize(new { success = true });
         }
@@ -121,6 +122,7 @@ public partial class HybridBridgeService
             }
 
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            NotifySnapshotScopedWrite("dashboards");
             return JsonSerializer.Serialize(new { success = true, activeDashboard = config.ActiveDashboard });
         }
         catch (Exception ex)
@@ -164,6 +166,7 @@ public partial class HybridBridgeService
             }
 
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            NotifySnapshotScopedWrite("dashboards");
             return JsonSerializer.Serialize(new { success = true, activeDashboard = config.ActiveDashboard });
         }
         catch (Exception ex)
@@ -196,6 +199,7 @@ public partial class HybridBridgeService
 
             // The active dashboard changed — keep the emulator feed on it (R10).
             await WriteEmulatorVehicleFileAsync(config, name).ConfigureAwait(false);
+            NotifySnapshotScopedWrite("dashboards");
 
             return JsonSerializer.Serialize(new { success = true });
         }
@@ -1036,6 +1040,7 @@ public partial class HybridBridgeService
 
             // Enable reporting to start live data
             await EnableReporting().ConfigureAwait(false);
+            NotifySnapshotScopedWrite("dashboards");
 
             return JsonSerializer.Serialize(new { success = true });
         }

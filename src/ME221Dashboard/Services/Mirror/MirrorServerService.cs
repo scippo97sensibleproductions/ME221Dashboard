@@ -50,6 +50,31 @@ public sealed class MirrorServerService : IDisposable
     public int ViewerCount => _sessions.Values.Count(s => s.Status == MirrorSessionStatus.Approved);
     public int PendingCount => _sessions.Values.Count(s => s.Status == MirrorSessionStatus.PendingApproval);
 
+    /// <summary>All live sessions (viewer list for the bridge, U5).</summary>
+    public IReadOnlyList<MirrorServerSession> Viewers()
+    {
+        lock (_gate)
+            return _sessions.Values.ToList();
+    }
+
+    /// <summary>Close every session (pairing reset, shutdown).</summary>
+    public async Task DisconnectAllAsync(string reason)
+    {
+        List<MirrorServerSession> sessions;
+        lock (_gate)
+            sessions = _sessions.Values.ToList();
+
+        foreach (var session in sessions)
+        {
+            try
+            {
+                await session.SendAsync(new CloseMessage { Reason = reason }).ConfigureAwait(false);
+                session.Close();
+            }
+            catch { /* best effort */ }
+        }
+    }
+
     public void Start(int? port = null)
     {
         if (_server is not null)
@@ -132,7 +157,7 @@ public sealed class MirrorServerService : IDisposable
             return;
 
         await session.SendAsync(new ApprovalDecisionMessage { Approved = false }).ConfigureAwait(false);
-        session.Close();
+        await CloseGracefullyAsync(session).ConfigureAwait(false);
     }
 
     /// <summary>Revoke an approved viewer mid-session (R3, AE4).</summary>
@@ -146,7 +171,7 @@ public sealed class MirrorServerService : IDisposable
             return;
 
         await session.SendAsync(new RevokedMessage { Reason = "revoked" }).ConfigureAwait(false);
-        session.Close();
+        await CloseGracefullyAsync(session).ConfigureAwait(false);
     }
 
     /// <summary>Snapshot-scoped config changed: end every viewer session (R19, KTD-6).</summary>
@@ -159,9 +184,24 @@ public sealed class MirrorServerService : IDisposable
         foreach (var session in sessions)
         {
             await session.SendAsync(new ConfigUpdateMessage { Reason = reason }).ConfigureAwait(false);
-            session.Close();
+            await CloseGracefullyAsync(session).ConfigureAwait(false);
         }
         _logger.LogInformation("Config update '{Reason}': ended {Count} viewer sessions", reason, sessions.Count);
+    }
+
+    /// <summary>
+    /// Close after the final frame: Fleck's Close() right after SendAsync can abort the
+    /// in-flight write (RST), so the last message never reaches the viewer. A short
+    /// grace lets the frame flush before the socket closes.
+    /// </summary>
+    private static async Task CloseGracefullyAsync(MirrorServerSession session)
+    {
+        try
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            session.Close();
+        }
+        catch { /* best effort */ }
     }
 
     // ── Accept flow ──────────────────────────────────────────────────────────

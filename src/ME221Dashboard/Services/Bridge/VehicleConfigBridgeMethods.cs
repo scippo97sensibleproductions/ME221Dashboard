@@ -143,6 +143,7 @@ public partial class HybridBridgeService
 
             // Write shared file for emulator (tmp + move so a crash cannot tear it)
             await WriteEmulatorVehicleFileAsync(config, name).ConfigureAwait(false);
+            NotifySnapshotScopedWrite("vehicleConfig");
 
             return JsonSerializer.Serialize(new { success = true });
         }

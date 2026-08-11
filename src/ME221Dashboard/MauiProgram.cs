@@ -45,6 +45,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorServerService>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorSnapshotSerializer>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorStreamService>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorLifecycleHooks>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
 
 #if WINDOWS
@@ -102,6 +103,17 @@ public static class MauiProgram
         catch (Exception ex)
         {
             Log.Error(ex, "Mirror server failed to start");
+        }
+
+        // R19 hooks: snapshot-scoped writes end viewer sessions (KTD-6).
+        try
+        {
+            app.Services.GetRequiredService<ME221Dashboard.Services.Mirror.MirrorLifecycleHooks>().Wire();
+            Log.Information("DI: Mirror lifecycle hooks wired");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Mirror lifecycle hooks failed to wire");
         }
 
         return app;

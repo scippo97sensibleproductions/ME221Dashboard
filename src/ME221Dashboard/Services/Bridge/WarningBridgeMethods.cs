@@ -164,6 +164,7 @@ public partial class HybridBridgeService
             config.WarningSettings = WarningMerge.MergeSave(config.WarningSettings, incoming);
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
             _logger.LogInformation("[WARN] SaveWarningSettings: merged {Count} settings", incoming.Count);
+            NotifySnapshotScopedWrite("warningSettings");
 
             return JsonSerializer.Serialize(new { success = true });
         }
@@ -368,6 +369,7 @@ public partial class HybridBridgeService
             config.WarningDelayMs = (int)Math.Round(delayMs);
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
             _logger.LogInformation("[WARN] SaveWarningDelay: saved {DelayMs} ms", config.WarningDelayMs);
+            NotifySnapshotScopedWrite("warningSettings");
 
             return JsonSerializer.Serialize(new { success = true, delayMs = config.WarningDelayMs });
         }

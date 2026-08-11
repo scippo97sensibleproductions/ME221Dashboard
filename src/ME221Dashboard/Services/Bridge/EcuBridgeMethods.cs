@@ -119,6 +119,7 @@ public partial class HybridBridgeService
             var data = await _calibration.LoadAndParseAsync(stream).ConfigureAwait(false);
             await _calibration.SaveCalibrationAsync(data).ConfigureAwait(false);
             _lifecycleBridge?.NotifyCalibrationLoaded();
+            NotifySnapshotScopedWrite("calibration");
 
             return JsonSerializer.Serialize(new
             {
@@ -153,6 +154,7 @@ public partial class HybridBridgeService
         {
             await _connection.EnableReportingAsync().ConfigureAwait(false);
             _lifecycleBridge?.NotifyCalibrationLoaded();
+            NotifySnapshotScopedWrite("calibration");
             return JsonSerializer.Serialize(new { success = true });
         }
         catch (Exception ex)
