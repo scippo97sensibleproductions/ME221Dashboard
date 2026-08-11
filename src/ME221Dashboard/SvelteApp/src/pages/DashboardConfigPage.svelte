@@ -1,18 +1,45 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { Modal, Button } from 'flowbite-svelte';
   import { HybridBridge, type AvailableSensor, type AvailableSensorsResult, type SensorCustomization } from '../lib/HybridBridge';
   import type { TableDefinition } from '../lib/tables/types';
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
-  import { IconSearch, IconX, IconArrowRight, IconSettings, IconTable } from '@tabler/icons-svelte';
+  import { IconSearch, IconX, IconArrowRight, IconSettings, IconTable, IconCar, IconGauge } from '@tabler/icons-svelte';
   import SensorCategoryFilter from './SensorCategoryFilter.svelte';
   import SensorCardList from './SensorCardList.svelte';
   import TableCardList from './TableCardList.svelte';
+  import NumberInput from '../lib/NumberInput.svelte';
+  import ClampNotice from '../lib/gauges/ClampNotice.svelte';
+  import { navigationGate } from '../lib/navigationGate.svelte';
+  import {
+    isShiftPointValid,
+    isFloorFieldDisabled,
+    isFloorEditValid,
+    isFloorHeld,
+    isSuggestionVisible,
+    suggestedFloor,
+    isEffectivelyInactiveFloor,
+    computeClampedFloor,
+    resolveClampDip,
+    SHIFTER_COPY,
+    formatShifterCopy,
+    FLOOR_MIN,
+    type ShifterSessionValues,
+  } from '../lib/shift/shifterConfig';
 
-  let { onNavigate, dashboardName = 'default' }: {
+  let { onNavigate, dashboardName = 'default', onOpenVehicleConfig, onRegisterShifterApi, onShifterDirtyChange }: {
     onNavigate: (page: string) => void;
     dashboardName?: string;
     onDashboardCreated?: (name: string) => void;
+    onOpenVehicleConfig?: () => void;
+    /** Registers the single save/discard/dirty API with App (U8 dirty gate). */
+    onRegisterShifterApi?: (api: {
+      save: () => Promise<boolean>;
+      discard: () => Promise<void>;
+      isDirty: () => boolean;
+    }) => void;
+    onShifterDirtyChange?: (dirty: boolean) => void;
   } = $props();
 
   // ─── State ────────────────────────────────────────────────────────────────
@@ -31,6 +58,14 @@
   let loading = $state(true);
   let saving = $state(false);
   let error = $state<string | null>(null);
+  let shifterModalOpen = $state(false);
+  let shifterSaveError = $state<string | null>(null);
+  const shifterModal = navigationGate.registerModal('shifterSettings');
+
+  $effect(() => {
+    if (shifterModalOpen) shifterModal.open();
+    else shifterModal.close();
+  });
   let expandCustomizationId = $state<number | null>(null);
   let backgroundImagePath = $state<string | null>(null);
   let bgPicking = $state(false);
@@ -368,10 +403,323 @@
     backgroundImagePath = null;
   }
 
+  // ─── Shifter settings (R9, R19 lifecycle) ────────────────────────────────
+  // Form session: deep-copies the payload on load (never binds the _configCache
+  // object) so edits cannot poison the cache. The single save routine persists
+  // on the section Save button and the App dialog's "Save and leave".
+  let shifterSession = $state<ShifterSessionValues | null>(null);
+  let lastPersistedShifter = $state<ShifterSessionValues>({ shiftPointRpm: 0, downshiftFloorRpm: 0 });
+  let shiftPointError = $state<string | null>(null);
+  let floorError = $state<string | null>(null);
+  let shiftPointDraft = $state<string | null>(null);
+  let floorDraft = $state<string | null>(null);
+  // Held-state machinery (R19): the dip is frozen at establishment and never
+  // re-captured by in-hold edits.
+  let sessionDip = $state<number | null>(null);
+  // Suggestion machinery: page-mount suppression keyed by dashboard; re-offer
+  // on shift-point commit; "Suggest again" re-offers after dismissal.
+  let suggestionDismissed = $state(false);
+  let suggestionPending = $state(false);
+  // Clamped-info notices: persist until any shifter/ramp edit or the producing
+  // bound no longer holds (U8).
+  let clampedNotice = $state<string | null>(null);
+  let inactiveNotice = $state<string | null>(null);
+
+  const floorHeld = $derived(
+    shifterSession !== null && isFloorHeld(shifterSession.shiftPointRpm, shifterSession.downshiftFloorRpm)
+  );
+
+  const shifterDirty = $derived.by(() => {
+    if (shifterSession === null) return false;
+    const s = shifterSession;
+    const p = lastPersistedShifter;
+    if (s.shiftPointRpm !== p.shiftPointRpm || s.downshiftFloorRpm !== p.downshiftFloorRpm) return true;
+    // Typed-but-uncommitted text counts as dirty (R19).
+    if (shiftPointDraft !== null && shiftPointDraft !== String(s.shiftPointRpm)) return true;
+    if (floorDraft !== null && floorDraft !== String(s.downshiftFloorRpm)) return true;
+    return false;
+  });
+
+  const clampPreview = $derived.by(() => {
+    if (!shifterSession || !floorHeld) return null;
+    const dip = resolveClampDip(sessionDip, persistedSpacing());
+    return computeClampedFloor(shifterSession.shiftPointRpm, dip);
+  });
+
+  const suggestion = $derived.by(() => {
+    if (!shifterSession || suggestionDismissed || !suggestionPending) return null;
+    if (!isSuggestionVisible(shifterSession.shiftPointRpm)) return null;
+    return suggestedFloor(shifterSession.shiftPointRpm);
+  });
+
+  // Muted ▼-disabled states (R19): floor unset, or the shift point sitting in
+  // the hidden band (shift point − 1500 ≤ IDLE_FLOOR). The floor column omits
+  // the label when the field itself is disabled (its box already shows the hint).
+  const mutedLabel = $derived.by(() => {
+    if (!shifterSession) return null;
+    const s = shifterSession;
+    if (s.downshiftFloorRpm <= 0) return SHIFTER_COPY.floorUnset;
+    if (!isSuggestionVisible(s.shiftPointRpm)) return SHIFTER_COPY.adviceUnavailable;
+    return null;
+  });
+
+  const floorMutedLabel = $derived.by(() => {
+    if (!shifterSession || isFloorFieldDisabled(shifterSession.shiftPointRpm)) return null;
+    return mutedLabel;
+  });
+
+  const showSuggestAgain = $derived(
+    shifterSession !== null && suggestionDismissed && shifterSession.downshiftFloorRpm <= 0
+  );
+
+  // Compact card summary for the collapsed section (the editor lives in a modal).
+  const shifterSummary = $derived.by(() => {
+    if (!shifterSession) return 'Loading…';
+    const sp = Math.round(shifterSession.shiftPointRpm);
+    const fp = Math.round(shifterSession.downshiftFloorRpm);
+    if (sp <= 0) return 'Shift light not configured';
+    return fp > 0
+      ? `Shift at ${sp} rpm · Downshift floor ${fp} rpm`
+      : `Shift at ${sp} rpm · No downshift floor`;
+  });
+
+  // Persisted spacing (shiftPoint − floor from the loaded baseline) — the
+  // fallback dip when no session dip was established.
+  function persistedSpacing(): number | null {
+    const s = lastPersistedShifter;
+    if (s.shiftPointRpm > 0 && s.downshiftFloorRpm > 0) {
+      return s.shiftPointRpm - s.downshiftFloorRpm;
+    }
+    return null;
+  }
+
+  async function loadShifterConfig() {
+    try {
+      const vc = await HybridBridge.getVehicleConfig();
+      lastPersistedShifter = {
+        shiftPointRpm: vc.shifter?.shiftPointRpm ?? 0,
+        downshiftFloorRpm: vc.shifter?.downshiftFloorRpm ?? 0,
+      };
+      shifterSession = { ...lastPersistedShifter };
+    } catch {
+      shifterSession = { shiftPointRpm: 0, downshiftFloorRpm: 0 };
+      lastPersistedShifter = { ...shifterSession };
+    }
+    // Clamp-to-minimum (R19): any stored floor at or below IDLE_FLOOR (zero
+    // excluded) re-surfaces the effectively-inactive notice + "Clear floor".
+    if (isEffectivelyInactiveFloor(lastPersistedShifter.downshiftFloorRpm)) {
+      inactiveNotice = SHIFTER_COPY.effectivelyInactive;
+    }
+  }
+
+  async function persistShifter(session: ShifterSessionValues): Promise<boolean> {
+    try {
+      const vc = await HybridBridge.getVehicleConfig();
+      const result = await HybridBridge.setVehicleConfig({
+        ...vc,
+        shifter: { shiftPointRpm: session.shiftPointRpm, downshiftFloorRpm: session.downshiftFloorRpm },
+      });
+      if (!result?.success) {
+        shifterSaveError = result?.error ?? 'Failed to save shifter settings';
+        return false;
+      }
+      shifterSaveError = null;
+      return true;
+    } catch (err) {
+      shifterSaveError = String(err);
+      return false;
+    }
+  }
+
+  /** The single save routine (shared with the App dialog's "Save and leave").
+   *  Force-commits any in-field text first (commit-reject runs before persist),
+   *  applies the on-save clamp while held, persists, and updates the baseline.
+   *  Returns false when persistence failed — the dirty gate then stays armed
+   *  and the App keeps the user on the page instead of navigating away. */
+  async function saveShifter(): Promise<boolean> {
+    if (!shifterSession) return false;
+    commitPendingDrafts();
+    if (floorHeld) {
+      const dip = resolveClampDip(sessionDip, persistedSpacing());
+      const clamped = computeClampedFloor(shifterSession.shiftPointRpm, dip);
+      const s = { ...shifterSession, downshiftFloorRpm: clamped };
+      shifterSession = s;
+      clampedNotice = isEffectivelyInactiveFloor(clamped)
+        ? SHIFTER_COPY.effectivelyInactive
+        : formatShifterCopy(SHIFTER_COPY.floorClamped, clamped);
+    } else {
+      clampedNotice = null;
+    }
+    if (inactiveNotice && !isEffectivelyInactiveFloor(shifterSession.downshiftFloorRpm)) {
+      inactiveNotice = null;
+    }
+    const ok = await persistShifter(shifterSession);
+    if (!ok) return false;
+    lastPersistedShifter = { ...shifterSession };
+    suggestionPending = false;
+    suggestionDismissed = false;
+    return true;
+  }
+
+  /** "Discard": refetch via getVehicleConfig — invalidating _configCache first,
+   *  never merging (R19). */
+  async function discardShifter(): Promise<void> {
+    HybridBridge.invalidateVehicleConfigCache();
+    shifterSession = null;
+    shiftPointError = null;
+    floorError = null;
+    shiftPointDraft = null;
+    floorDraft = null;
+    clampedNotice = null;
+    sessionDip = null;
+    suggestionPending = false;
+    suggestionDismissed = false;
+    await loadShifterConfig();
+  }
+
+  function registerShifterApi() {
+    onRegisterShifterApi?.({
+      save: saveShifter,
+      discard: discardShifter,
+      isDirty: () => shifterDirty,
+    });
+  }
+
+  function commitPendingDrafts() {
+    if (shifterSession === null) return;
+    if (shiftPointDraft !== null && shiftPointDraft !== String(shifterSession.shiftPointRpm)) {
+      const v = parseFloat(shiftPointDraft);
+      if (!isNaN(v)) commitShiftPoint(v);
+    }
+    if (floorDraft !== null && floorDraft !== String(shifterSession.downshiftFloorRpm)) {
+      const v = parseFloat(floorDraft);
+      if (!isNaN(v)) commitFloor(v);
+    }
+    shiftPointDraft = null;
+    floorDraft = null;
+  }
+
+  function clearNoticesOnEdit() {
+    clampedNotice = null;
+    inactiveNotice = null;
+  }
+
+  function commitShiftPoint(v: number) {
+    if (!shifterSession) return;
+    if (!isShiftPointValid(v)) {
+      // Live-reject (R19): revert ONLY the edited field to the last valid
+      // value with an inline error — never the whole session, which would
+      // discard valid unsaved edits to the other field.
+      shiftPointError = SHIFTER_COPY.valueOutOfRange;
+      shifterSession = { ...shifterSession, shiftPointRpm: lastPersistedShifter.shiftPointRpm };
+      return;
+    }
+    shiftPointError = null;
+    const prev = shifterSession;
+    const next = { ...prev, shiftPointRpm: v };
+    shifterSession = next;
+    clearNoticesOnEdit();
+
+    // Held entry: a shift-point change at or below an existing floor (R19).
+    // The dip is frozen at establishment and kept for the whole session —
+    // re-raising the shift point above the floor (release) never re-captures
+    // it (R19).
+    if (isFloorHeld(v, next.downshiftFloorRpm) && sessionDip === null) {
+      // Establishment-time spacing: the PRE-edit spacing is used — the new
+      // shift point may already sit below the floor, which would make the
+      // new-minus-floor difference negative.
+      sessionDip = prev.downshiftFloorRpm > 0 && prev.shiftPointRpm > prev.downshiftFloorRpm
+        ? prev.shiftPointRpm - prev.downshiftFloorRpm
+        : null;
+    }
+
+    // Zero→nonzero transition: re-enable the floor field and fire the first
+    // re-derive suggestion in the same interaction (R19).
+    if (prev.shiftPointRpm <= 0 && v > 0 && next.downshiftFloorRpm <= 0) {
+      suggestionPending = true;
+    } else if (suggestionPending) {
+      // Re-offer on shift-point commit; the draft re-derives live.
+      suggestionDismissed = false;
+    }
+  }
+
+  function commitFloor(v: number) {
+    if (!shifterSession) return;
+    if (!isFloorEditValid(v, shifterSession.shiftPointRpm, floorHeld)) {
+      floorError = SHIFTER_COPY.valueOutOfRange;
+      shifterSession = { ...shifterSession, downshiftFloorRpm: lastPersistedShifter.downshiftFloorRpm };
+      return;
+    }
+    floorError = null;
+    clearNoticesOnEdit();
+    const next = { ...shifterSession, downshiftFloorRpm: v };
+    shifterSession = next;
+    // A manual floor entry dismisses a pending draft (R19); a valid floor edit
+    // at or below the new shift point releases the hold.
+    if (v > 0) {
+      suggestionPending = false;
+      suggestionDismissed = false;
+      // Establishment-time dip capture (manual edit or accept). While held the
+      // dip stays frozen at establishment — in-hold floor edits must not
+      // re-capture it (and a held value can sit at/above the shift point,
+      // which would freeze a non-positive spacing).
+      if (next.shiftPointRpm > 0 && !isFloorHeld(next.shiftPointRpm, v)) {
+        sessionDip = next.shiftPointRpm - v;
+      }
+    }
+  }
+
+  function acceptSuggestion() {
+    if (!shifterSession || suggestion === null) return;
+    floorError = null;
+    const next = { ...shifterSession, downshiftFloorRpm: suggestion };
+    shifterSession = next;
+    sessionDip = next.shiftPointRpm - suggestion;
+    suggestionPending = false;
+    suggestionDismissed = false;
+    clearNoticesOnEdit();
+  }
+
+  function dismissSuggestion() {
+    suggestionPending = false;
+    suggestionDismissed = true;
+  }
+
+  function clearFloor() {
+    if (!shifterSession) return;
+    clearNoticesOnEdit();
+    shifterSession = { ...shifterSession, downshiftFloorRpm: 0 };
+    // "Clear floor" re-offers the suggestion immediately in-session (the floor
+    // was never dismissed — R19).
+    suggestionDismissed = false;
+    suggestionPending = true;
+  }
+
   // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  // Dirty-state registration with the App dirty gate (U8): the gate is armed
+  // while the form session or uncommitted text diverges from the baseline.
+  $effect(() => {
+    onShifterDirtyChange?.(shifterDirty);
+  });
 
   onMount(() => {
     mounted = true;
+    void loadShifterConfig();
+    registerShifterApi();
+  });
+
+  // Reload sensors/customizations whenever the dashboard name changes. The page
+  // is keyed by activeDashboard in App.svelte, but the name may resolve AFTER
+  // the first mount (the active dashboard comes from the backend config). a
+  // stale 'default' load would show another dashboard's data and lose the
+  // per-dashboard customizations (e.g. gear range 0–6).
+  let lastLoadedDashboard: string | null = null;
+  $effect(() => {
+    if (!mounted) return;
+    const name = dashboardName;
+    if (name === lastLoadedDashboard) return;
+    lastLoadedDashboard = name;
     loadSensors();
   });
 
@@ -381,6 +729,10 @@
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
+    // Disarm the dirty gate on unmount: a destroyed page must not leave the
+    // 'dirty-form' reason armed (silently blocking all navigation) nor leave a
+    // dangling dialog behind (the App closes it when the gate disarms).
+    onShifterDirtyChange?.(false);
   });
 </script>
 
@@ -393,6 +745,38 @@
     <div>
       <h2 class="text-[20px] font-extrabold uppercase tracking-[-0.5px]" style="color: var(--metro-text);">Configure Sensors</h2>
       <p class="text-[11px]" style="color: var(--metro-text-secondary);">Dashboard: {dashboardName} — Select and customize gauges</p>
+    </div>
+  </div>
+
+  <!-- Vehicle + shifter configuration (R8, R9) — compact card; the shift-light
+       editor lives in a modal so the sensor grid keeps the page real estate. -->
+  <div class="mb-4 shrink-0 p-4" style="background-color: var(--metro-card); border: 1px solid var(--metro-border);">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex min-w-0 flex-col gap-0.5">
+        <p class="text-[13px] font-extrabold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Vehicle & Shifter</p>
+        <p class="truncate text-[11px]" style="color: var(--metro-text-muted);" role="status">{shifterSummary}</p>
+        {#if shifterDirty}
+          <p class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-orange);" role="status">
+            <span class="inline-block h-1.5 w-1.5 rounded-full" style="background-color: var(--metro-orange);"></span>
+            Unsaved changes
+          </p>
+        {/if}
+      </div>
+      <div class="flex shrink-0 gap-2">
+        <button
+          class="metro-hover-bg px-3 py-2 text-[12px] font-medium transition-colors duration-150"
+          style="background-color: var(--metro-input-bg); border: 1px solid var(--metro-input-border); color: var(--metro-text-secondary);"
+          onclick={() => onOpenVehicleConfig?.()}
+        >
+          <span class="flex items-center gap-2"><IconCar size={14} /> Vehicle Config</span>
+        </button>
+        <button
+          class="metro-btn-primary px-3 py-2 text-[12px] font-bold uppercase tracking-wider"
+          onclick={() => { shifterModalOpen = true; }}
+        >
+          <span class="flex items-center gap-2"><IconGauge size={14} /> Shift Light</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -631,3 +1015,169 @@
     </div>
   </div>
 </div>
+
+<!-- Shift-light editor modal (R19) — the single save routine stays page-owned
+     so the App dirty gate keeps working; closing with unsaved changes keeps the
+     gate armed (the card shows the "Unsaved changes" chip). -->
+{#if shifterModalOpen}
+  <Modal bind:open={shifterModalOpen} size="md" placement="center" outsideclose={true} class="backdrop:bg-gray-900/80">
+    {#snippet header()}
+      <div class="flex w-full items-center justify-between">
+        <h2 class="text-base font-semibold text-gray-100">Shift Light</h2>
+        <p class="text-xs text-gray-500">Dashboard: {dashboardName}</p>
+      </div>
+    {/snippet}
+
+    <div class="flex flex-col gap-4">
+      {#if shifterSaveError}
+        <div class="rounded border px-3 py-2 text-[12px]" style="border-color: rgba(232,17,35,0.4); background-color: rgba(232,17,35,0.1); color: var(--metro-red);" role="alert">
+          {shifterSaveError}
+        </div>
+      {/if}
+
+      <!-- Shift point -->
+      <div>
+        <div class="mb-1.5 flex items-center justify-between">
+          <p class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Shift Point</p>
+          {#if shifterSession}
+            <span class="text-[11px] font-mono" style="color: var(--metro-orange);">{Math.round(shifterSession.shiftPointRpm)} rpm</span>
+          {/if}
+        </div>
+        {#if shifterSession}
+          <NumberInput
+            value={shifterSession.shiftPointRpm}
+            step={100}
+            unit="rpm"
+            onchange={commitShiftPoint}
+            error={shiftPointError}
+            onErrorAutoHide={() => { shiftPointError = null; }}
+            forceCommitOnNudge
+            ondraft={(t) => { shiftPointDraft = t; }}
+          />
+        {:else}
+          <div class="flex items-center gap-2 text-[12px]" style="color: var(--metro-text-muted);">
+            <span class="inline-block h-3 w-3 animate-spin rounded-full border border-[#444] border-t-[#888]"></span>
+            Loading…
+          </div>
+        {/if}
+        <p class="mt-1 text-[10px]" style="color: var(--metro-text-muted);">200–9000 rpm. The bar flashes and ▲ lights here.</p>
+      </div>
+
+      <!-- Downshift floor -->
+      <div>
+        <div class="mb-1.5 flex items-center justify-between">
+          <p class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--metro-text-secondary);">Downshift Floor</p>
+          {#if shifterSession}
+            <span class="text-[11px] font-mono" style="color: var(--metro-orange);">{Math.round(shifterSession.downshiftFloorRpm)} rpm</span>
+          {/if}
+        </div>
+        {#if shifterSession}
+          {#if isFloorFieldDisabled(shifterSession.shiftPointRpm)}
+            <div class="flex min-h-[44px] items-center rounded-lg border px-3 text-[12px]" style="border-color: var(--metro-input-border); background-color: var(--metro-input-bg); color: var(--metro-text-muted);">
+              {SHIFTER_COPY.floorFieldHint}
+            </div>
+          {:else}
+            <NumberInput
+              value={shifterSession.downshiftFloorRpm}
+              step={100}
+              unit="rpm"
+              onchange={commitFloor}
+              error={floorError}
+              onErrorAutoHide={() => { floorError = null; }}
+              forceCommitOnNudge
+              ondraft={(t) => { floorDraft = t; }}
+            />
+          {/if}
+        {:else}
+          <div class="flex items-center gap-2 text-[12px]" style="color: var(--metro-text-muted);">
+            <span class="inline-block h-3 w-3 animate-spin rounded-full border border-[#444] border-t-[#888]"></span>
+            Loading…
+          </div>
+        {/if}
+
+        <!-- Held-state indicator with clamp preview (R19) -->
+        {#if floorHeld}
+          <div class="mt-1.5 flex items-start gap-2 rounded border px-2.5 py-1.5 text-[11px]" style="border-color: rgba(245,159,0,0.35); background-color: rgba(245,159,0,0.08); color: #f5a623;" role="status">
+            <span class="flex-1">
+              Floor held above shift point — will clamp to {clampPreview != null ? Math.round(clampPreview) : '—'} on save
+            </span>
+          </div>
+        {/if}
+
+        <!-- Clamped-info notices (persist until any shifter/ramp edit, U8) -->
+        {#if clampedNotice}
+          <div class="mt-1.5">
+            <ClampNotice variant="clamped-info-persist" message={clampedNotice} />
+          </div>
+        {/if}
+        {#if inactiveNotice}
+          <div class="mt-1.5">
+            <ClampNotice variant="clamped-info-persist" message={inactiveNotice}>
+              {#snippet actions()}
+                <button
+                  class="rounded px-2 py-0.5 text-[10px] font-bold transition-colors"
+                  style="background-color: rgba(245,159,0,0.15); color: #f5a623;"
+                  onclick={clearFloor}
+                >{SHIFTER_COPY.clearFloor}</button>
+              {/snippet}
+            </ClampNotice>
+          </div>
+        {/if}
+
+        <p class="mt-1 text-[10px]" style="color: var(--metro-text-muted);" role="status" aria-label={floorMutedLabel ?? undefined}>
+          {#if floorMutedLabel}
+            {floorMutedLabel}
+          {:else}
+            ▼ lights when RPM drops through the floor. Minimum {FLOOR_MIN} rpm.
+          {/if}
+        </p>
+      </div>
+
+      <!-- Suggestion overlay (R19): re-derived floor from an unset state -->
+      {#if suggestion !== null && shifterSession}
+        <div class="flex flex-col gap-2 rounded border px-3 py-2.5" style="border-color: rgba(0,120,215,0.4); background-color: rgba(0,120,215,0.08);" role="dialog" aria-label="Shift point suggestion">
+          <p class="text-[12px]" style="color: var(--metro-text-secondary);">
+            {formatShifterCopy(SHIFTER_COPY.suggestionBody, suggestion)}
+          </p>
+          <div class="flex gap-2">
+            <button
+              class="metro-btn-primary px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider"
+              onclick={acceptSuggestion}
+            >Accept</button>
+            <button
+              class="metro-btn-secondary px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider"
+              onclick={dismissSuggestion}
+            >Dismiss</button>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    {#snippet footer()}
+      <div class="flex w-full flex-wrap items-center justify-between gap-2">
+        <p class="flex items-center gap-1.5 text-[11px]" style="color: var(--metro-text-muted);" role="status" aria-label={mutedLabel ?? undefined}>
+          {#if mutedLabel}
+            {mutedLabel}
+          {/if}
+          {#if showSuggestAgain}
+            <button
+              class="rounded px-2 py-0.5 text-[10px] font-bold transition-colors"
+              style="background-color: var(--metro-input-bg); color: var(--metro-blue, #0078D7);"
+              onclick={() => { suggestionDismissed = false; suggestionPending = true; }}
+            >Suggest again</button>
+          {/if}
+        </p>
+        <div class="flex gap-2">
+          <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600" onclick={() => { shifterModalOpen = false; }}>
+            Close
+          </Button>
+          <Button
+            class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600"
+            onclick={() => void saveShifter()}
+            disabled={shifterSession === null || !shifterDirty}
+          >Save</Button>
+        </div>
+      </div>
+    {/snippet}
+  </Modal>
+{/if}

@@ -22,9 +22,14 @@
   let gearStrs = $state<string[]>([]);
   let slipStr = $state('');
   let enabled = $state(true);
+  // Auto-detect tracking (R8): an auto-detect-applied save carries an explicit
+  // payload flag so the seed template gate excludes it; a manual mapping edit
+  // marks the save as deliberate (seed refresh allowed).
+  let autoDetectApplied = $state(false);
+  let mappingTouched = $state(false);
 
   onMount(async () => {
-    console.log('[VEHCFG] Modal onMount: loading global config');
+    console.log('[VEHCFG] Modal onMount: loading per-dashboard config');
     const loaded = await loadDerivedConfig();
     console.log('[VEHCFG] Modal loaded config:', loaded);
     config = loaded;
@@ -42,6 +47,7 @@
       if (detected.vssSpeedEntityId !== null) config.vssSpeedEntityId = detected.vssSpeedEntityId;
       if (detected.mapEntityId !== null) config.mapEntityId = detected.mapEntityId;
       if (detected.baroEntityId !== null) config.baroEntityId = detected.baroEntityId;
+      autoDetectApplied = true;
     }
   });
 
@@ -58,8 +64,20 @@
     config.gearRatios = ratios.length > 0 ? ratios : def.gearRatios;
     config.wheelSlipPercent = isNaN(slip) ? def.wheelSlipPercent : slip;
 
-    console.log('[VEHCFG] handleSave: about to call saveDerivedConfig with:', JSON.parse(JSON.stringify(config)));
-    await saveDerivedConfig(config);
+    // Vehicle-only save: strip the shifter block (this modal never edits shifter
+    // settings) so it cannot zero or overwrite the shifter block on either the
+    // C# side or the TS cache (U1 partial-payload contract).
+    const { shifter: _shifter, ...vehicleOnly } = config;
+    void _shifter;
+
+    // Auto-detect writes carry the flag so the seed gate excludes them (R8);
+    // manual mapping edits make the save deliberate (seed refresh allowed).
+    const payload = {
+      ...vehicleOnly,
+      autoDetect: autoDetectApplied && !mappingTouched,
+    };
+
+    await saveDerivedConfig(payload);
     onclose();
   }
 </script>
@@ -95,9 +113,17 @@
         </label>
       </div>
       <div class="space-y-1">
-        <span class="text-xs text-gray-400">Gear Ratios</span>
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-gray-400">Gear Ratios</span>
+          <div class="flex gap-1">
+            <button type="button" class="rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600" onclick={() => gearStrs = [...gearStrs, '1.0']}>+ Add Gear</button>
+            {#if gearStrs.length > 1}
+              <button type="button" class="rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600" onclick={() => gearStrs = gearStrs.slice(0, -1)}>− Remove</button>
+            {/if}
+          </div>
+        </div>
         <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {#each gearStrs as gear, i (gear)}
+          {#each gearStrs as _, i (i)}
             <label class="space-y-0.5">
               <span class="text-xs text-gray-500">{i + 1}</span>
               <input type="number" step="0.01" bind:value={gearStrs[i]} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
@@ -122,7 +148,7 @@
         ] as item (item.key)}
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm text-gray-300">{item.label}</span>
-            <select class="w-64 rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none" value={config[item.key] ?? ''} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; config[item.key] = v ? Number(v) : null; }}>
+            <select class="w-64 rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none" value={config[item.key] ?? ''} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; config[item.key] = v ? Number(v) : null; mappingTouched = true; }}>
               <option value="">Auto-detect / Disabled</option>
               {#each sensors as s (s.id)}
                 <option value={s.id}>{s.name} (ID {s.id})</option>

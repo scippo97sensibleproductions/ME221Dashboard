@@ -100,19 +100,15 @@ try
     });
     services.AddSingleton<CalibrationLoader>();
 
-    // VehicleConfig: try --vehicle-config arg, then well-known path, then calibration.json fallback
+    // VehicleConfig: --vehicle-config arg wins; otherwise the dashboard's own
+    // dashboard-config.json (first dashboard with gears), then the legacy shared
+    // ~/.me221/vehicle-config.json, then the calibration.json VSS fallback.
     services.AddSingleton<VehicleConfigData>(sp =>
     {
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("VehicleConfig");
         var cal = sp.GetRequiredService<CalibrationData>();
-
-        // Check well-known path if no explicit arg
-        var wellKnownPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".me221", "vehicle-config.json");
-
-        var configPath = vehicleConfigPath ?? (File.Exists(wellKnownPath) ? wellKnownPath : null);
-        return VehicleConfigLoader.Load(configPath, cal, logger);
+        VehicleConfigLoader.Configure(vehicleConfigPath);
+        return VehicleConfigLoader.Load(cal, logger);
     });
 
     services.AddScoped<EcuState>();
@@ -158,6 +154,10 @@ try
         calibration.Drivers.Count);
 
     var server = serviceProvider.GetRequiredService<TcpServer>();
+    var console = serviceProvider.GetRequiredService<EmulatorConsole>();
+    console.Startup(calibration, port);
+    console.AttachSimulator(serviceProvider.GetRequiredService<SensorSimulator>());
+    console.StartCommandLoop();
 
     logger.LogInformation("ECU Emulator starting on 127.0.0.1:{Port}", port);
     await server.StartAsync();

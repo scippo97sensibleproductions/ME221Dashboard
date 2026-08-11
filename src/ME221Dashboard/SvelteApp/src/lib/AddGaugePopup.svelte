@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { HybridBridge, type AvailableSensor } from '../lib/HybridBridge';
+  import { searchSensors } from '../lib/sensorSearch';
   import { IconSearch, IconX, IconPlus } from '@tabler/icons-svelte';
 
   let { dashboardName, existingEntityIds = new Set(), anchorX, anchorY, onAdd, onclose }: {
@@ -18,16 +19,10 @@
   let popupEl = $state<HTMLDivElement | null>(null);
   let searchInputEl = $state<HTMLInputElement | null>(null);
 
-  let filtered = $derived.by(() => {
-    if (!searchText.trim()) return sensors.slice(0, 30);
-    const q = searchText.toLowerCase();
-    return sensors.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.category.toLowerCase().includes(q) ||
-      s.unit.toLowerCase().includes(q) ||
-      String(s.id).includes(q)
-    ).slice(0, 30);
-  });
+  // Ranked search (name matches first, no cap): the derived entities are appended
+  // LAST in the C# payload, so an array-order cap would starve "RPM to Shift" /
+  // "Shift State" behind every rpm-unit calibration link.
+  let filtered = $derived.by(() => searchSensors(sensors, searchText));
 
   onMount(async () => {
     searchInputEl?.focus();

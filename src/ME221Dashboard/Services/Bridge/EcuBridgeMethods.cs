@@ -118,6 +118,7 @@ public partial class HybridBridgeService
             await using var stream = await fileResult.OpenReadAsync().ConfigureAwait(false);
             var data = await _calibration.LoadAndParseAsync(stream).ConfigureAwait(false);
             await _calibration.SaveCalibrationAsync(data).ConfigureAwait(false);
+            _lifecycleBridge?.NotifyCalibrationLoaded();
 
             return JsonSerializer.Serialize(new
             {
@@ -151,6 +152,7 @@ public partial class HybridBridgeService
         try
         {
             await _connection.EnableReportingAsync().ConfigureAwait(false);
+            _lifecycleBridge?.NotifyCalibrationLoaded();
             return JsonSerializer.Serialize(new { success = true });
         }
         catch (Exception ex)

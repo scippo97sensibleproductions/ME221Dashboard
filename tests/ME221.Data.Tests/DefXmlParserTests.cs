@@ -210,7 +210,7 @@ public class DefXmlParserTests
         ok.Severity.Should().Be(DataLinkFeedbackSeverity.Ok);
         ok.MinValue.Should().Be(-40f);   // Gt
         ok.MaxValue.Should().Be(100f);   // Lt
-        ok.Flashing.Should().BeFalse();
+        ok.Flashing.Should().BeNull();
 
         var warning = link.Feedbacks[1];
         warning.Severity.Should().Be(DataLinkFeedbackSeverity.Warning);
@@ -223,6 +223,7 @@ public class DefXmlParserTests
         alarm.MinValue.Should().Be(120f); // GtEq
         // Eq constraint "3 4" contains a space — must be skipped, no range equivalent
         alarm.MaxValue.Should().BeNull();
+        alarm.Flashing.Should().BeNull();
     }
 
     [Fact]

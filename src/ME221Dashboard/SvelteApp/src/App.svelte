@@ -1,8 +1,15 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { HybridBridge, type ConnectionStateInfo, type BridgeEvent, type UpdateCheckResult } from './lib/HybridBridge';
-  import type { DataLinkWarningSetting } from './lib/HybridBridgeTypes';
-  import { computeWarningState, buildWarningMap } from './lib/gauges/types';
+  import { warningEvaluator } from './lib/stores/warningEvaluator';
+  import { shiftEvaluator } from './lib/shift/shiftEvaluator';
+  import { shiftLightAnnouncer } from './lib/gauges/shiftLightAnnouncer';
+  import { SHIFTER_COPY } from './lib/shift/shifterConfig';
+  import { DerivedEntityId } from './lib/derived/types';
+  import { Modal, Button } from 'flowbite-svelte';
+  import { warningToasts } from './lib/warningToasts';
+  import { navigationGate } from './lib/navigationGate.svelte';
+  import { pulseCounter } from './lib/gauges/pulseCounter';
   import WelcomePage from './pages/WelcomePage.svelte';
   import ConnectionPage from './pages/ConnectionPage.svelte';
   import CalibrationPage from './pages/CalibrationPage.svelte';
@@ -26,11 +33,31 @@
   import NewDashboardDialog from './lib/NewDashboardDialog.svelte';
   import VehicleConfigModal from './lib/VehicleConfigModal.svelte';
   import UpdateAvailableModal from './lib/UpdateAvailableModal.svelte';
-  import WarningPanel from './lib/WarningPanel.svelte';
   import { warningStore } from './lib/stores/warningStore.svelte';
   import { initDeviceMode } from './lib/stores/deviceMode.svelte';
 
-  let _updateChecked = false;
+  // Update check guards — sessionStorage-backed: Vite hot reloads remount
+  // App.svelte and reset in-memory flags, which would re-fire checkForUpdate()
+  // and re-pop the dismissed modal on every HMR. The tab's session survives
+  // HMR, so these flags do too; a real app restart (new tab) resets them.
+  const UPDATE_CHECK_KEY = 'me221.updateCheckDone';
+  const UPDATE_DISMISS_KEY = 'me221.updateCheckDismissed';
+
+  function storageFlagGet(key: string): boolean {
+    try { return sessionStorage.getItem(key) === '1'; } catch { return false; }
+  }
+
+  function storageFlagSet(key: string): void {
+    try { sessionStorage.setItem(key, '1'); } catch { /* non-fatal */ }
+  }
+  let toastDataId = $state<number | null>(null);
+
+  const newDashboardModal = navigationGate.registerModal('newDashboard');
+
+  $effect(() => {
+    if (newDashboardDialog) newDashboardModal.open();
+    else newDashboardModal.close();
+  });
 
   let connectionState: ConnectionStateInfo = $state({ state: 'Disconnected' });
   let notification = $state<{
@@ -73,44 +100,123 @@
   let updateCheckResult = $state<UpdateCheckResult | null>(null);
   let updateModalOpen = $state(false);
 
-  // ─── Global warning computation ───────────────────────────────────────
-  let warningSettings = $state<DataLinkWarningSetting[] | null>(null);
-  let warningMap = $state<Map<number, DataLinkWarningSetting> | null>(null);
+  // ─── Shifter dirty-form gate (U8) ───────────────────────────────────────
+  // The config page registers its single save/discard routine; the gate arms
+  // while the form diverges from the persisted baseline (incl. uncommitted
+  // text) and intercepts navigation, dashboard create/delete, and Android back.
+  let shifterApi: { save: () => Promise<boolean>; discard: () => Promise<void>; isDirty: () => boolean } | null = null;
+  let shifterDirtyArmed = $state(false);
+  let dirtyDialogOpen = $state(false);
+  let dirtyDialogDelete = $state(false);
+  let dirtyDialogTitle = $state('');
+  let dirtyDialogBody = $state('');
+  let dirtyDialogDiscardLabel = $state('');
 
-  // Load warning settings when connected
+  function registerShifterApi(api: { save: () => Promise<boolean>; discard: () => Promise<void>; isDirty: () => boolean }) {
+    shifterApi = api;
+  }
+
+  function setShifterDirty(dirty: boolean) {
+    shifterDirtyArmed = dirty;
+    navigationGate.setBlocked('dirty-form', dirty);
+    // When the page disarms (unmount, save, discard), a dangling dialog must
+    // never stay open — it could invoke a dead page's save routine.
+    if (!dirty) dirtyDialogOpen = false;
+  }
+
+  function openDirtyDialog(deleteVariant: boolean) {
+    dirtyDialogDelete = deleteVariant;
+    dirtyDialogTitle = SHIFTER_COPY.dirtyTitle;
+    dirtyDialogBody = SHIFTER_COPY.dirtyBody;
+    dirtyDialogDiscardLabel = deleteVariant ? SHIFTER_COPY.dirtyDelete : SHIFTER_COPY.dirtyDiscard;
+    dirtyDialogOpen = true;
+  }
+
+  async function resolveDirty(action: 'save' | 'discard') {
+    const pending = navigationGate.takePendingNavigation();
+    dirtyDialogOpen = false;
+    if (action === 'save') {
+      // The page's save routine reports persistence failure: stay on the page
+      // (the gate stays armed and the error is surfaced inline) instead of
+      // navigating away with the edits silently lost.
+      const saved = await shifterApi?.save();
+      if (saved === false) return;
+    } else {
+      await shifterApi?.discard();
+    }
+    // Clear the gate explicitly — the page's dirty effect may not have flushed
+    // yet, and navigating while armed would re-open the dialog.
+    navigationGate.setBlocked('dirty-form', false);
+    shifterDirtyArmed = false;
+    if (pending?.disconnect) {
+      await performDisconnect();
+    } else if (pending?.deleteName) {
+      await performDeleteDashboard(pending.deleteName);
+    } else if (pending?.createName) {
+      await createDashboard(pending.createName);
+    } else if (pending) {
+      navigateTo(pending.page, pending.params);
+    }
+  }
+
+  function dirtyStay() {
+    dirtyDialogOpen = false;
+    navigationGate.clearPendingNavigation();
+  }
+
+  // Vehicle config modal (R8): populate the sensor list from the active
+  // dashboard on open — the modal was previously unreachable (never opened,
+  // sensors never populated).
+  async function openVehicleConfig() {
+    try {
+      const result = await HybridBridge.getAvailableSensors(activeDashboard);
+      allSensors = (result.sensors ?? []).map(s => ({ id: s.id, name: s.name }));
+    } catch {
+      allSensors = [];
+    }
+    vehicleConfigOpen = true;
+  }
+
+  // ─── Warning evaluation (shared evaluator, raw values) ─────────────────
+  // Load warning settings + delay when connected; reset on disconnect.
   $effect(() => {
     if (isConnected) {
-      HybridBridge.getWarningSettings().then(s => {
-        warningSettings = s;
-        warningMap = s ? buildWarningMap(s) : null;
+      HybridBridge.getWarningSettings().then(p => {
+        warningEvaluator.refresh(p);
+        warningToasts.refreshDisplayLookup();
       }).catch(() => {});
     } else {
-      warningSettings = null;
-      warningMap = null;
+      warningEvaluator.reset();
     }
   });
 
-  // Compute warnings globally — runs regardless of which page is mounted
+  // ─── Shift-light machine (KTD4) ────────────────────────────────────────
+  // Reset the tick-driven evaluator when the active dashboard changes, and
+  // clear the −3005/−3006 entity slots so no stale values bleed into the
+  // newly mounted dashboard's first frames (the tick re-fills them).
+  // The slot clears are untracked: they must NOT make this effect depend on
+  // the live values proxy (the 150 ms tick writes those keys every tick, so
+  // a tracked write would reset the evaluator ~6×/s and the floor-crossing
+  // edge could never fire).
+  $effect(() => {
+    void activeDashboard;
+    shiftEvaluator.reset();
+    // Reset the announcement coordinator too: its dedupe is session-scoped, so
+    // a switch to another dashboard (or back) must re-allow announcements.
+    shiftLightAnnouncer.reset();
+    untrack(() => {
+      const v = liveDataStore.values;
+      v[String(DerivedEntityId.RpmToShift)] = null;
+      v[String(DerivedEntityId.ShiftState)] = null;
+    });
+  });
+
+  // Feed the evaluator raw datalink values every frame.
   $effect(() => {
     void liveDataStore.frameCount;
-    const ws = warningMap;
-    if (!ws || ws.size === 0) return;
-    const v = liveDataStore.values;
-    for (const [dataId, setting] of ws) {
-      if (!setting.enabled) continue;
-      const val = v[String(dataId)];
-      if (val == null) continue;
-      const newState = computeWarningState(val, ws, dataId);
-      warningStore.updateWarning(
-        dataId,
-        setting.name,
-        setting.unit,
-        setting.category,
-        val,
-        newState,
-        warningSettings
-      );
-    }
+    const now = performance.now();
+    warningEvaluator.step(now, liveDataStore.values);
+    warningToasts.tick(now);
   });
 
   let showBottomBar = $derived(sidebarVisible && isConnected && currentPage !== 'welcome' && currentPage !== 'connection' && currentPage !== 'calibration');
@@ -166,6 +272,13 @@
   }
 
   async function createDashboard(name: string) {
+    // Dirty check fires at the NewDashboardDialog confirm handler (U8): the
+    // creation is queued until the gate resolves.
+    if (navigationGate.isReasonActive('dirty-form')) {
+      navigationGate.stashNavigation({ page: 'config', createName: name });
+      openDirtyDialog(false);
+      return;
+    }
     newDashboardError = null;
     const trimmed = name.trim();
     if (!trimmed) {
@@ -187,6 +300,17 @@
 
   async function deleteDashboard(name: string) {
     if (dashboardNames.length <= 1) return;
+    // Route through the dirty gate: queued until it resolves, then the delete
+    // confirm follows (the delete path skips the save routine — U8).
+    if (navigationGate.isReasonActive('dirty-form')) {
+      navigationGate.stashNavigation({ page: 'dashboard', deleteName: name });
+      openDirtyDialog(true);
+      return;
+    }
+    await performDeleteDashboard(name);
+  }
+
+  async function performDeleteDashboard(name: string) {
     const result = await HybridBridge.deleteDashboard(name);
     if (result.success) {
       dashboardNames = dashboardNames.filter(n => n !== name);
@@ -203,6 +327,17 @@
   }
 
   async function disconnectEcu() {
+    // Route through the dirty gate: unsaved shifter edits must not be dropped
+    // by a disconnect, and the gate must not stay armed on a dead page.
+    if (navigationGate.isReasonActive('dirty-form')) {
+      navigationGate.stashNavigation({ page: 'connection', disconnect: true });
+      openDirtyDialog(false);
+      return;
+    }
+    await performDisconnect();
+  }
+
+  async function performDisconnect() {
     isManualDisconnect = true;
     cancelReconnect();
     try {
@@ -215,6 +350,14 @@
   }
 
   function navigateTo(page: string, params?: Record<string, unknown>) {
+    // Dirty-form gate: stash the target and let the dialog resolve it
+    // (Stay clears the stash; Discard/Save-and-leave execute it).
+    if (navigationGate.isReasonActive('dirty-form')) {
+      navigationGate.stashNavigation({ page, params });
+      openDirtyDialog(false);
+      return;
+    }
+    if (navigationGate.isNavigationBlocked()) return;
     if (isConnected && page === 'connection') return;
     if (page === 'calibration' && hasCalibratedThisSession) return;
     if (page === 'tableEditor' && params?.tableId != null) {
@@ -236,6 +379,21 @@
     navigateTo(target);
   }
 
+  function navigateBackTarget(): string {
+    return pageSource ?? 'dashboard';
+  }
+
+  // Android back interception (U8): the native OnBackPressed callback is
+  // enabled only while the app actually handles back — the dirty gate is armed
+  // or a back-capable page is mounted. At the root (dashboard, connection,
+  // splash, …) interception stays off so back exits the app normally.
+  const BACK_CAPABLE_PAGES: Page[] = ['config', 'dashboard', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'logs', 'ecuMonitor', 'sessions', 'warnings', 'settings', 'gaugeBuilder'];
+
+  $effect(() => {
+    const want = shifterDirtyArmed || BACK_CAPABLE_PAGES.includes(currentPage);
+    HybridBridge.setBackInterceptionEnabled(want).catch(() => {});
+  });
+
   const DASHBOARD_PAGES: Page[] = ['dashboard', 'config', 'tableList', 'tableEditor', 'driverList', 'driverEditor', 'ecuMonitor', 'warnings', 'gaugeBuilder'];
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_BASE_DELAY_MS = 1500;
@@ -256,6 +414,7 @@
         // before enableReporting() has finished.
         await loadDashboardNames();
         await liveDataStore.enableReporting();
+        warningToasts.firstRunCompleted();
         if (hasCalibratedThisSession) {
           navigateTo('dashboard');
         } else {
@@ -388,9 +547,12 @@
     }
   }
 
-  function handleCalibrationDone(page: string) {
+  async function handleCalibrationDone(page: string) {
     hasCalibratedThisSession = true;
-    loadDashboardNames();
+    // Resolve the real active dashboard BEFORE the next page mounts: the config
+    // page/dashboard query their dashboard by name on mount, and a 'default'
+    // fallback here would load the wrong dashboard's sensors (no customizations).
+    await loadDashboardNames();
     navigateTo(page);
   }
 
@@ -438,12 +600,15 @@
     startup();
     liveDataStore.start();
     warningStore.loadHistory();
+    warningToasts.attachEvaluator(warningEvaluator);
+    pulseCounter.attachEvaluator(warningEvaluator);
 
-    // Check for updates once per session (non-blocking)
-    if (!_updateChecked) {
-      _updateChecked = true;
+    // Check for updates once per session (non-blocking) — the storage flag is
+    // set BEFORE the async check so a hot reload mid-flight cannot re-fire it.
+    if (!storageFlagGet(UPDATE_CHECK_KEY)) {
+      storageFlagSet(UPDATE_CHECK_KEY);
       HybridBridge.checkForUpdate().then(result => {
-        if (result.updateAvailable) {
+        if (result.updateAvailable && !storageFlagGet(UPDATE_DISMISS_KEY)) {
           updateCheckResult = result;
           updateModalOpen = true;
         }
@@ -453,7 +618,40 @@
     // App.svelte still monitors connection changes for reconnect logic
     const unsubscribe = HybridBridge.onMessage((event: BridgeEvent) => {
       if (event.event === 'connectionStateChanged') {
+        if (event.state !== 'Connected') {
+          warningEvaluator.reset();
+          shiftEvaluator.reset();
+          shiftLightAnnouncer.reset();
+          warningToasts.reset();
+        }
         handleConnectionChange({ state: event.state, error: event.error });
+      } else if (event.event === 'appBackgrounded') {
+        const now = performance.now();
+        warningEvaluator.setPaused(now, true);
+        warningToasts.setBackgrounded(true, now);
+      } else if (event.event === 'appForegrounded') {
+        const now = performance.now();
+        warningEvaluator.setPaused(now, false);
+        warningToasts.setBackgrounded(false, now);
+        warningToasts.revalidate();
+      } else if (event.event === 'calibrationLoaded') {
+        warningEvaluator.reset();
+        shiftEvaluator.reset();
+        shiftLightAnnouncer.reset();
+        warningToasts.reset();
+      } else if (event.event === 'androidBack') {
+        // Android back channel (U8): the dirty dialog fires with unsaved
+        // edits; otherwise the router's back navigation runs. While the dialog
+        // is already open, back stays on the dialog (never overwrites the
+        // queued intent — the user must choose Stay/Discard/Save-and-leave).
+        if (navigationGate.isReasonActive('dirty-form')) {
+          if (!dirtyDialogOpen) {
+            navigationGate.stashNavigation({ page: navigateBackTarget() });
+            openDirtyDialog(false);
+          }
+        } else {
+          navigateBack();
+        }
       }
     });
 
@@ -531,6 +729,9 @@
               dashboardNames = [...dashboardNames, name];
               activeDashboard = name;
             }}
+            onOpenVehicleConfig={openVehicleConfig}
+            onRegisterShifterApi={registerShifterApi}
+            onShifterDirtyChange={setShifterDirty}
           />
         {/key}
       {:else if currentPage === 'dashboard'}
@@ -539,6 +740,8 @@
             dashboardName={activeDashboard}
             onNavigate={navigateTo}
             {gpsLocation}
+            {toastDataId}
+            onToastDataIdHandled={() => { toastDataId = null; }}
           />
         {/key}
       {:else if currentPage === 'tableList'}
@@ -558,7 +761,7 @@
       {:else if currentPage === 'warnings'}
         <WarningSettingsPage onNavigate={navigateTo} />
       {:else if currentPage === 'settings'}
-        <AppSettingsPage />
+        <AppSettingsPage onNavigate={navigateTo} />
       {:else if currentPage === 'gaugeBuilder'}
         {#key activeDashboard}
           <GaugeBuilderPage onNavigate={navigateTo} dashboardName={activeDashboard} />
@@ -575,6 +778,34 @@
     onClose={() => { newDashboardDialog = false; }}
   />
 
+  {#if dirtyDialogOpen}
+    <Modal
+      bind:open={dirtyDialogOpen}
+      size="xs"
+      placement="center"
+      outsideclose={false}
+      dismissable={false}
+      class="backdrop:bg-gray-900/80"
+      onclose={dirtyStay}
+    >
+      {#snippet header()}
+        <div class="flex w-full items-center justify-between">
+          <h2 class="text-base font-semibold text-gray-100">{dirtyDialogTitle}</h2>
+        </div>
+      {/snippet}
+      <p class="text-sm text-gray-300">{dirtyDialogBody}</p>
+      {#snippet footer()}
+        <div class="flex w-full justify-end gap-2">
+          <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600" onclick={dirtyStay}>{SHIFTER_COPY.dirtyStay}</Button>
+          <Button color="danger" class="!bg-red-800 !text-white" onclick={() => void resolveDirty('discard')}>{dirtyDialogDiscardLabel}</Button>
+          {#if !dirtyDialogDelete}
+            <Button class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600" onclick={() => void resolveDirty('save')}>{SHIFTER_COPY.dirtySaveAndLeave}</Button>
+          {/if}
+        </div>
+      {/snippet}
+    </Modal>
+  {/if}
+
   {#if vehicleConfigOpen}
     <VehicleConfigModal
       open={vehicleConfigOpen}
@@ -587,13 +818,19 @@
     <UpdateAvailableModal
       open={updateModalOpen}
       update={updateCheckResult}
-      onDismiss={() => { updateModalOpen = false; }}
+      onDismiss={() => { updateModalOpen = false; storageFlagSet(UPDATE_DISMISS_KEY); }}
     />
   {/if}
 
   <NotificationModal bind:open={notification.show} type={notification.type} title={notification.title} message={notification.message} />
-  <WarningPanel />
-  <ToastContainer />
+  <ToastContainer
+    gateBlocked={navigationGate.blockedReason === 'modal-sheet'}
+    onNavigate={(page, dataId) => {
+      toastDataId = dataId ?? null;
+      if (dataId != null) navigateTo(page, { toastDataId: dataId });
+      else navigateTo(page);
+    }}
+  />
 </div>
 
 <style>

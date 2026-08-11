@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toGaugeDefinition, toSavePayload } from '../gaugeUtils';
+import { toGaugeDefinition, toSavePayload, estimateVisualSize } from '../gaugeUtils';
 import { GaugeShapeCategory } from '../gaugeTypes';
 import type { GaugeConfigEntry } from '../../HybridBridgeTypes';
 
@@ -172,6 +172,43 @@ describe('toGaugeDefinition customization v2 defaults (AE1)', () => {
     const multiRing = baseConfig();
     multiRing.shapeCategory = 7;
     expect(toGaugeDefinition(multiRing, overrides).ringSweepAngle).toBe(270);
+  });
+});
+
+describe('shift-light category (U4/KTD5)', () => {
+  function shiftLightConfig(over: Partial<GaugeConfigEntry> = {}): GaugeConfigEntry {
+    return { ...baseConfig(), shapeCategory: GaugeShapeCategory.ShiftLight, entityId: -3005, ...over };
+  }
+
+  it('toGaugeDefinition defaults rampWidthRpm to 1500 and derives the linked shift-state entity', () => {
+    const def = toGaugeDefinition(shiftLightConfig(), overrides);
+    expect(def.rampWidthRpm).toBe(1500);
+    expect(def.linkedEntities).toEqual([{ entityId: -3006, color: '#E81123' }]);
+  });
+
+  it('flips the derived pair when anchored on the shift-state entity (−3006 → −3005)', () => {
+    const def = toGaugeDefinition(shiftLightConfig({ entityId: -3006 }), overrides);
+    expect(def.linkedEntities).toEqual([{ entityId: -3005, color: '#E81123' }]);
+  });
+
+  it('toSavePayload writes rampWidthRpm unconditionally for shift-light (clamp resets survive the whitelist)', () => {
+    const payload = toSavePayload(shiftLightConfig());
+    const json = JSON.stringify(payload);
+    expect(json).toContain('"rampWidthRpm":1500');
+    const clamped = toSavePayload(shiftLightConfig({ rampWidthRpm: 1000 }));
+    expect(JSON.stringify(clamped)).toContain('"rampWidthRpm":1000');
+  });
+
+  it('toSavePayload omits rampWidthRpm for other categories at the default (legacy payloads stay byte-identical)', () => {
+    const payload = toSavePayload({ ...baseConfig(), shapeCategory: GaugeShapeCategory.Bar });
+    expect(JSON.stringify(payload)).not.toContain('rampWidthRpm');
+    const nonDefault = toSavePayload({ ...baseConfig(), shapeCategory: GaugeShapeCategory.Bar, rampWidthRpm: 2000 });
+    expect(JSON.stringify(nonDefault)).toContain('"rampWidthRpm":2000');
+  });
+
+  it('estimateVisualSize uses the full design box, not the Text fallback', () => {
+    const size = estimateVisualSize(GaugeShapeCategory.ShiftLight, 350, 80, {});
+    expect(size).toEqual({ w: 350, h: 80 });
   });
 });
 

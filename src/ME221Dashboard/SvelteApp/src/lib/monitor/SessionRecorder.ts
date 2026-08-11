@@ -1,5 +1,6 @@
 import { liveDataStore } from '../stores/LiveDataStore.svelte';
 import type { FreezeFrame } from './SessionStore';
+import { buildSessionCsv, buildSessionVdCsv } from './sessionCsv';
 
 export type RecordingState = 'idle' | 'recording' | 'stopped';
 
@@ -120,93 +121,11 @@ class SessionRecorderClass {
   }
 
   toCsv(): string {
-    const ids = this.#recordedSensorIds;
-    if (ids.length === 0) return '';
-
-    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    const headers = ['time_ms', ...ids.map(id => escapeCsv(this.#sensorNames.get(id) ?? String(id)))];
-    const rows: string[] = [headers.join(',')];
-
-    const maxLen = Math.max(...ids.map((id) => this.#buffer.get(id)?.length ?? 0));
-    for (let i = 0; i < maxLen; i++) {
-      const row: string[] = [];
-      for (const id of ids) {
-        const buf = this.#buffer.get(id);
-        const sample = buf?.[i];
-        row.push(sample ? `${sample.t.toFixed(1)},${sample.v}` : ',');
-      }
-      rows.push(row.join(','));
-    }
-    return rows.join('\n');
+    return buildSessionCsv(this.getRecordedData());
   }
 
   toVirtualDynoCsv(): string {
-    const ids = this.#recordedSensorIds;
-    if (ids.length === 0) return '';
-
-    const VD_NAME_MAP: Record<string, string> = {
-      'rpm': 'RPM',
-      'engine speed': 'RPM',
-      'throttle position': 'Throttle Position',
-      'tps': 'Throttle Position',
-      'afr': 'AFR',
-      'wideband': 'AFR',
-      'lambda': 'AFR',
-      'boost': 'Boost',
-      'map': 'Boost',
-      'baro': 'Barometric Pressure',
-      'clt': 'Coolant Temp',
-      'coolant temp': 'Coolant Temp',
-      'coolant temperature': 'Coolant Temp',
-      'iat': 'Intake Air Temp',
-      'intake air temp': 'Intake Air Temp',
-      'intake air temperature': 'Intake Air Temp',
-      'batt': 'Battery Voltage',
-      'battery': 'Battery Voltage',
-      'battery voltage': 'Battery Voltage',
-      'vss': 'Vehicle Speed',
-      'vehicle speed': 'Vehicle Speed',
-      'speed': 'Vehicle Speed',
-      'ignition': 'Ignition Timing',
-      'ignition timing': 'Ignition Timing',
-      'ignition advance': 'Ignition Timing',
-      'duty': 'Injector Duty',
-      'injector duty': 'Injector Duty',
-      'fuel rail': 'Fuel Pressure',
-      'fuel pressure': 'Fuel Pressure',
-    };
-
-    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-
-    const mapName = (raw: string): string => {
-      const lower = raw.toLowerCase().trim();
-      if (VD_NAME_MAP[lower]) return VD_NAME_MAP[lower];
-      for (const [key, val] of Object.entries(VD_NAME_MAP)) {
-        if (lower.includes(key)) return val;
-      }
-      return raw;
-    };
-
-    const mappedNames = ids.map(id => mapName(this.#sensorNames.get(id) ?? String(id)));
-    const headers = ['Time', ...mappedNames.map(escapeCsv)];
-
-    const lines: string[] = ['ME221', headers.join(',')];
-
-    // One Time column plus one value per sensor per row — VirtualDyno maps
-    // columns by index, so interleaving (t,v) pairs would misalign everything.
-    const maxLen = Math.max(...ids.map(id => this.#buffer.get(id)?.length ?? 0));
-    for (let i = 0; i < maxLen; i++) {
-      const row: string[] = [];
-      let timeCell = '';
-      for (const id of ids) {
-        const sample = this.#buffer.get(id)?.[i];
-        if (!sample) { row.push(''); continue; }
-        if (timeCell === '') timeCell = (sample.t / 1000).toFixed(3);
-        row.push(String(sample.v));
-      }
-      lines.push([timeCell, ...row].join(','));
-    }
-    return lines.join('\n');
+    return buildSessionVdCsv(this.getRecordedData());
   }
 
   toYaml(): string {

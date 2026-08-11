@@ -7,15 +7,10 @@ import {
   positionToCenterAngle,
   describeArc,
   formatValue,
-  computeWarningState,
+  levelVisualStyle,
   estimateVisualSize,
 } from '../gaugeUtils';
 import { GaugeShapeCategory, DigitalStyle, ArcPosition } from '../gaugeTypes';
-import type { DataLinkWarningSetting } from '../../HybridBridgeTypes';
-
-function warning(partial: Partial<DataLinkWarningSetting>): DataLinkWarningSetting {
-  return { dataId: 1, enabled: true, minWarning: null, maxWarning: null, ...partial } as DataLinkWarningSetting;
-}
 
 describe('computeValueFraction', () => {
   it('clamps to [0, 1] and handles zero/negative ranges', () => {
@@ -205,47 +200,6 @@ describe('formatValue', () => {
   });
 });
 
-describe('computeWarningState', () => {
-  it('returns none without settings or when disabled', () => {
-    expect(computeWarningState(50, null, 1)).toBe('none');
-    expect(computeWarningState(50, new Map([[1, warning({ enabled: false, maxWarning: 10 })]]), 1)).toBe('none');
-  });
-
-  it('works with array and map lookups', () => {
-    const arr = [warning({ dataId: 1, minWarning: 0, maxWarning: 100 })];
-    const map = new Map([[1, warning({ dataId: 1, minWarning: 0, maxWarning: 100 })]]);
-    expect(computeWarningState(150, arr, 1)).toBe('warning');
-    expect(computeWarningState(150, map, 1)).toBe('warning');
-  });
-
-  it('does not flag exact threshold values', () => {
-    expect(computeWarningState(100, [warning({ dataId: 1, minWarning: 0, maxWarning: 100 })], 1)).toBe('none');
-    expect(computeWarningState(0, [warning({ dataId: 1, minWarning: 0, maxWarning: 100 })], 1)).toBe('none');
-  });
-
-  it('flags values beyond the threshold as warning', () => {
-    expect(computeWarningState(101, [warning({ dataId: 1, minWarning: 0, maxWarning: 100 })], 1)).toBe('warning');
-    expect(computeWarningState(-1, [warning({ dataId: 1, minWarning: 0, maxWarning: 100 })], 1)).toBe('warning');
-  });
-
-  it('escalates to critical beyond half the range', () => {
-    const w = warning({ dataId: 1, minWarning: 0, maxWarning: 100 });
-    expect(computeWarningState(120, [w], 1)).toBe('warning');
-    expect(computeWarningState(160, [w], 1)).toBe('critical');
-    expect(computeWarningState(-60, [w], 1)).toBe('critical');
-    expect(computeWarningState(-40, [w], 1)).toBe('warning');
-  });
-
-  it('treats missing min/max with default single-unit ranges', () => {
-    // maxWarning only: default min = max-1 → range 1 → critical > max+0.5
-    expect(computeWarningState(101, [warning({ dataId: 1, maxWarning: 100 })], 1)).toBe('critical');
-    expect(computeWarningState(100.2, [warning({ dataId: 1, maxWarning: 100 })], 1)).toBe('warning');
-    // minWarning only: default max = min+1 → range 1 → critical < min-0.5
-    expect(computeWarningState(-1, [warning({ dataId: 1, minWarning: 0 })], 1)).toBe('critical');
-    expect(computeWarningState(-0.2, [warning({ dataId: 1, minWarning: 0 })], 1)).toBe('warning');
-  });
-});
-
 describe('estimateVisualSize', () => {
   it('arc gauges are square', () => {
     expect(estimateVisualSize(GaugeShapeCategory.Arc, 200, 100, {})).toEqual({ w: 100, h: 100 });
@@ -290,5 +244,32 @@ describe('estimateVisualSize', () => {
     const b = estimateVisualSize(GaugeShapeCategory.MultiRing, 100, 300, {});
     expect(a).toEqual({ w: 100, h: 100 });
     expect(b).toEqual({ w: 100, h: 100 });
+  });
+
+  it('multiring box grows with font scale (unclamped past 2x)', () => {
+    const base = estimateVisualSize(GaugeShapeCategory.MultiRing, 100, 300, { fontSizeScale: 1 });
+    const big = estimateVisualSize(GaugeShapeCategory.MultiRing, 100, 300, { fontSizeScale: 10 });
+    const bigger = estimateVisualSize(GaugeShapeCategory.MultiRing, 100, 300, { fontSizeScale: 2 });
+    expect(base).toEqual({ w: 100, h: 100 });
+    expect(bigger.w).toBeGreaterThan(base.w);
+    expect(big.w).toBeGreaterThan(bigger.w);
+    expect(big.w).toBeGreaterThanOrEqual(190);
+  });
+});
+
+describe('levelVisualStyle (R11)', () => {
+  it('renders the neutral state with no border or alert role', () => {
+    expect(levelVisualStyle(null, null, 'RPM')).toEqual({
+      color: null, border: 'none', bg: 'transparent', shadow: 'none', ariaLabel: null,
+    });
+  });
+
+  it('derives border/bg/shadow and the alert label from the active level', () => {
+    const style = levelVisualStyle('#f59e0b', 'warning', 'Oil Temp');
+    expect(style.color).toBe('#f59e0b');
+    expect(style.border).toBe('2px solid #f59e0b');
+    expect(style.bg).toContain('rgba(245, 158, 11, 0.08)');
+    expect(style.shadow).toContain('#f59e0b');
+    expect(style.ariaLabel).toBe('Oil Temp: warning');
   });
 });

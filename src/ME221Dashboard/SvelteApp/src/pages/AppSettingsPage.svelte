@@ -2,8 +2,12 @@
   import { onMount } from 'svelte';
   import { HybridBridge } from '../lib/HybridBridge';
   import type { EcuInfoResult } from '../lib/HybridBridgeTypes';
-  import { IconDownload, IconUpload, IconCar, IconPackage, IconFileCode, IconCheck, IconX, IconLoader2, IconInfoCircle } from '@tabler/icons-svelte';
+  import { IconDownload, IconUpload, IconCar, IconPackage, IconFileCode, IconCheck, IconX, IconLoader2, IconInfoCircle, IconArrowRight } from '@tabler/icons-svelte';
   import MecalImportPreview from '../lib/MecalImportPreview.svelte';
+
+  let { onNavigate }: {
+    onNavigate: (page: string) => void;
+  } = $props();
 
   let connected = $state(false);
   let ecuInfo = $state<EcuInfoResult | null>(null);
@@ -20,22 +24,6 @@
   let dashNames = $state<string[]>([]);
   let selectedDashName = $state('');
 
-  // ── Vehicle config state ──
-  let vehicleConfig = $state({
-    enabled: true,
-    tireDiameterInches: 23,
-    finalDriveRatio: 4.3,
-    gearRatios: [3.0, 2.0, 1.5, 1.1, 0.85, 0.7],
-    wheelSlipPercent: 3,
-    rpmEntityId: null as number | null,
-    vssSpeedEntityId: null as number | null,
-    mapEntityId: null as number | null,
-    baroEntityId: null as number | null,
-    gearEntityId: null as number | null,
-  });
-  let vehicleSaving = $state(false);
-  let vehicleResult = $state<{ success: boolean; message: string } | null>(null);
-
   function getErrorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
   }
@@ -49,9 +37,6 @@
         const info = await HybridBridge.getEcuInfo();
         if (info.success) ecuInfo = info;
       }
-
-      const vc = await HybridBridge.getVehicleConfig();
-      if (vc) vehicleConfig = { ...vehicleConfig, ...vc };
 
       const names = await HybridBridge.getDashboardNames();
       dashNames = names?.names ?? [];
@@ -144,28 +129,6 @@
     } finally {
       dashImporting = false;
     }
-  }
-
-  // ── Vehicle Config Save ──
-  async function handleVehicleSave() {
-    vehicleSaving = true;
-    vehicleResult = null;
-    try {
-      await HybridBridge.setVehicleConfig(vehicleConfig);
-      vehicleResult = { success: true, message: 'Vehicle config saved' };
-    } catch (e) {
-      vehicleResult = { success: false, message: getErrorMessage(e) };
-    } finally {
-      vehicleSaving = false;
-    }
-  }
-
-  function addGear() {
-    vehicleConfig.gearRatios = [...vehicleConfig.gearRatios, 1.0];
-  }
-
-  function removeGear(index: number) {
-    vehicleConfig.gearRatios = vehicleConfig.gearRatios.filter((_, i) => i !== index);
   }
 </script>
 
@@ -307,109 +270,26 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- VEHICLE CONFIGURATION SECTION -->
+    <!-- VEHICLE CONFIGURATION POINTER (R8) -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <section class="rounded-lg border p-4 space-y-3" style="border-color: var(--metro-border, #333); background-color: var(--metro-card, #16213e);">
-      <div class="flex items-center gap-2">
-        <IconCar size={18} style="color: var(--metro-green, #107C10);" />
-        <h2 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--metro-text-secondary, #A0A0A0);">Vehicle Configuration</h2>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <label class="flex flex-col gap-1">
-          <span class="text-xs" style="color: var(--metro-text-secondary, #A0A0A0);">Tire Diameter (inches)</span>
-          <input
-            type="number"
-            step="0.1"
-            class="rounded border px-2 py-1.5 text-sm"
-            style="border-color: var(--metro-border, #333); background-color: var(--metro-bg, #1a1a2e); color: var(--metro-text, #fff);"
-            bind:value={vehicleConfig.tireDiameterInches}
-          />
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-xs" style="color: var(--metro-text-secondary, #A0A0A0);">Final Drive Ratio</span>
-          <input
-            type="number"
-            step="0.01"
-            class="rounded border px-2 py-1.5 text-sm"
-            style="border-color: var(--metro-border, #333); background-color: var(--metro-bg, #1a1a2e); color: var(--metro-text, #fff);"
-            bind:value={vehicleConfig.finalDriveRatio}
-          />
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-xs" style="color: var(--metro-text-secondary, #A0A0A0);">Wheel Slip (%)</span>
-          <input
-            type="number"
-            step="0.1"
-            class="rounded border px-2 py-1.5 text-sm"
-            style="border-color: var(--metro-border, #333); background-color: var(--metro-bg, #1a1a2e); color: var(--metro-text, #fff);"
-            bind:value={vehicleConfig.wheelSlipPercent}
-          />
-        </label>
-      </div>
-
-      <!-- Gear Ratios -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs" style="color: var(--metro-text-secondary, #A0A0A0);">Gear Ratios</span>
-          <button
-            class="rounded px-2 py-0.5 text-xs transition-colors"
-            style="background-color: var(--metro-bg, #1a1a2e); color: var(--metro-blue, #0078D7);"
-            onclick={addGear}
-          >+ Add Gear</button>
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <IconCar size={18} style="color: var(--metro-green, #107C10);" />
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--metro-text-secondary, #A0A0A0);">Vehicle Configuration</h2>
+            <p class="text-xs" style="color: var(--metro-text-muted, #666);">Gear ratios, tire, final drive, and sensor mapping are now per-dashboard.</p>
+          </div>
         </div>
-        <div class="flex flex-wrap gap-2">
-          {#each vehicleConfig.gearRatios as _, i (i)}
-            <div class="flex items-center gap-1">
-              <span class="text-[10px]" style="color: var(--metro-text-muted, #666);">G{i + 1}</span>
-              <input
-                type="number"
-                step="0.01"
-                class="w-16 rounded border px-1.5 py-1 text-xs"
-                style="border-color: var(--metro-border, #333); background-color: var(--metro-bg, #1a1a2e); color: var(--metro-text, #fff);"
-                bind:value={vehicleConfig.gearRatios[i]}
-              />
-              {#if vehicleConfig.gearRatios.length > 1}
-                <button
-                  class="p-0.5 transition-colors"
-                  style="color: var(--metro-text-muted, #666);"
-                  onclick={() => removeGear(i)}
-                >
-                  <IconX size={10} />
-                </button>
-              {/if}
-            </div>
-          {/each}
-        </div>
+        <button
+          class="flex items-center gap-1 rounded px-3 py-2 text-sm font-medium transition-colors"
+          style="background-color: var(--metro-green, #107C10); color: #fff;"
+          onclick={() => onNavigate('config')}
+        >
+          Configure
+          <IconArrowRight size={14} />
+        </button>
       </div>
-
-      <button
-        class="flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition-colors"
-        style="background-color: var(--metro-green, #107C10); color: #fff;"
-        disabled={vehicleSaving}
-        onclick={handleVehicleSave}
-      >
-        {#if vehicleSaving}
-          <IconLoader2 size={14} class="animate-spin" />
-          Saving...
-        {:else}
-          <IconCheck size={14} />
-          Save Vehicle Config
-        {/if}
-      </button>
-
-      {#if vehicleResult}
-        <div class="flex items-start gap-2 rounded p-2 text-xs" style="background-color: {vehicleResult.success ? 'rgba(16,124,16,0.15)' : 'rgba(232,17,35,0.15)'}; color: {vehicleResult.success ? '#4ade80' : '#f87171'};">
-          {#if vehicleResult.success}
-            <IconCheck size={14} class="mt-0.5 shrink-0" />
-          {:else}
-            <IconX size={14} class="mt-0.5 shrink-0" />
-          {/if}
-          <span>{vehicleResult.message}</span>
-        </div>
-      {/if}
     </section>
   </div>
 </div>

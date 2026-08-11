@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { HybridBridge, type GaugeConfigEntry, type AvailableSensor } from '../HybridBridge';
+  import { searchSensors } from '../sensorSearch';
   import { IconX, IconSearch } from '@tabler/icons-svelte';
 
   let { gaugeDef, onchange }: {
@@ -25,16 +26,7 @@
 
   const overlays = $derived(gaugeDef.chartOverlays ?? []);
 
-  const filteredSensors = $derived.by(() => {
-    const q = searchText.trim().toLowerCase();
-    if (!q) return sensors.slice(0, 40);
-    return sensors.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.category.toLowerCase().includes(q) ||
-      s.unit.toLowerCase().includes(q) ||
-      String(s.id).includes(q)
-    ).slice(0, 40);
-  });
+  const filteredSensors = $derived.by(() => searchSensors(sensors, searchText));
 
   onMount(async () => {
     try {

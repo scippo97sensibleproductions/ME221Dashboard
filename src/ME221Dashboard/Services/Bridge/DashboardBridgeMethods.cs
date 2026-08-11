@@ -22,13 +22,31 @@ public partial class HybridBridgeService
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
             var names = config?.Dashboards?.Keys.ToList() ?? [];
             if (names.Count == 0) names = ["default"];
-            return JsonSerializer.Serialize(new { names, activeDashboard = config?.ActiveDashboard ?? "default" });
+            return JsonSerializer.Serialize(new { names, activeDashboard = ResolveEffectiveActiveDashboard(config) });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "GetDashboardNames failed");
             return JsonSerializer.Serialize(new { names = new[] { "default" }, activeDashboard = "default" });
         }
+    }
+
+    /// <summary>
+    /// Resolve the effective active dashboard from the persisted config:
+    /// the persisted ActiveDashboard when that dashboard exists, else the FIRST
+    /// dashboard in insertion order, else "default" (a fresh config always
+    /// contains one). Never invents a name that is not in the config — a stale
+    /// or missing ActiveDashboard must not make pages query "default".
+    /// </summary>
+    internal static string ResolveEffectiveActiveDashboard(DashboardConfig? config)
+    {
+        if (config?.Dashboards is { Count: > 0 } dashboards)
+        {
+            if (config.ActiveDashboard is { Length: > 0 } active && dashboards.ContainsKey(active))
+                return active;
+            return dashboards.Keys.First();
+        }
+        return "default";
     }
 
     /// <summary>
@@ -40,6 +58,7 @@ public partial class HybridBridgeService
         _logger.LogInformation("CreateDashboard called");
         try
         {
+            await EnsureVehicleMigrationAsync().ConfigureAwait(false);
             name = name?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(name))
                 return JsonSerializer.Serialize(new { success = false, error = "Name is required" });
@@ -49,9 +68,22 @@ public partial class HybridBridgeService
             if (config.Dashboards.ContainsKey(name))
                 return JsonSerializer.Serialize(new { success = false, error = "A dashboard with this name already exists" });
 
-            config.Dashboards[name] = new DashboardDefinition();
+            // Seed the new dashboard's vehicle from the hidden template (R7); shifter
+            // settings always initialize to zero, never seed values (R9).
+            var seeded = config.VehicleSeedTemplate != null
+                ? VehicleConfigMigration.Clone(config.VehicleSeedTemplate)
+                : null;
+            config.Dashboards[name] = new DashboardDefinition
+            {
+                Vehicle = seeded,
+                ShifterConfig = new ShifterConfig(),
+            };
             config.ActiveDashboard = name;
+            _activeDashboardName = name;
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+
+            // The created dashboard becomes active — keep the emulator feed on it (R10).
+            await WriteEmulatorVehicleFileAsync(config, name).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new { success = true });
         }
@@ -83,7 +115,10 @@ public partial class HybridBridgeService
 
             config.Dashboards.Remove(name);
             if (config.ActiveDashboard == name)
+            {
                 config.ActiveDashboard = config.Dashboards.Keys.First();
+                _activeDashboardName = config.ActiveDashboard;
+            }
 
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
             return JsonSerializer.Serialize(new { success = true, activeDashboard = config.ActiveDashboard });
@@ -123,7 +158,10 @@ public partial class HybridBridgeService
             config.Dashboards[newName] = def;
 
             if (config.ActiveDashboard == oldName)
+            {
                 config.ActiveDashboard = newName;
+                _activeDashboardName = newName;
+            }
 
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
             return JsonSerializer.Serialize(new { success = true, activeDashboard = config.ActiveDashboard });
@@ -144,6 +182,7 @@ public partial class HybridBridgeService
         _logger.LogInformation("SetActiveDashboard called");
         try
         {
+            await EnsureVehicleMigrationAsync().ConfigureAwait(false);
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
             if (config?.Dashboards is null)
                 return JsonSerializer.Serialize(new { success = false, error = "No config found" });
@@ -154,6 +193,10 @@ public partial class HybridBridgeService
             config.ActiveDashboard = name;
             _activeDashboardName = name;
             await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+
+            // The active dashboard changed — keep the emulator feed on it (R10).
+            await WriteEmulatorVehicleFileAsync(config, name).ConfigureAwait(false);
+
             return JsonSerializer.Serialize(new { success = true });
         }
         catch (Exception ex)
@@ -436,6 +479,8 @@ public partial class HybridBridgeService
                     peakHoldAutoResetSec = g.PeakHoldAutoResetSec,
                     wedgeSegmentCount = g.WedgeSegmentCount,
                     wedgeRedlineStart = g.WedgeRedlineStart,
+                    rampWidthRpm = g.RampWidthRpm,
+                    zoneCount = g.ZoneCount,
                     chartOverlays = g.ChartOverlays?.Select(o => new { entityId = o.EntityId, color = o.Color, lineWidth = o.LineWidth, lineStyle = o.LineStyle }).ToList(),
                     overlayPillPosition = g.OverlayPillPosition,
                     overlayFontScale = g.OverlayFontScale,
@@ -683,6 +728,8 @@ public partial class HybridBridgeService
                     if (g["peakHoldAutoResetSec"] is JsonValue) existing.PeakHoldAutoResetSec = g["peakHoldAutoResetSec"]!.GetValue<double>();
                     if (g["wedgeSegmentCount"] is JsonValue) existing.WedgeSegmentCount = g["wedgeSegmentCount"]!.GetValue<int>();
                     if (g["wedgeRedlineStart"] is JsonValue) existing.WedgeRedlineStart = g["wedgeRedlineStart"]!.GetValue<double>();
+                    if (g["rampWidthRpm"] is JsonValue) existing.RampWidthRpm = g["rampWidthRpm"]!.GetValue<double>();
+                    if (g["zoneCount"] is JsonValue) existing.ZoneCount = g["zoneCount"]!.GetValue<int>();
                     if (gObj.ContainsKey("chartOverlays"))
                     {
                         existing.ChartOverlays = null;
@@ -865,13 +912,39 @@ public partial class HybridBridgeService
                 sensorList.Add(new { id = -2001, name = "Odometer", category = "Odometer", unit = "km", inEntityMap = true, isSelected = selectedIds.Contains(-2001), customization = (object?)null });
             }
 
-            // Derived entities — always available
-            sensorList.Add(new { id = -3001, name = "Gear", category = "Derived", unit = "", inEntityMap = true, isSelected = selectedIds.Contains(-3001), customization = (object?)null });
-            sensorList.Add(new { id = -3002, name = "True Speed", category = "Derived", unit = "km/h", inEntityMap = true, isSelected = selectedIds.Contains(-3002), customization = (object?)null });
-            sensorList.Add(new { id = -3003, name = "Boost Pressure", category = "Derived", unit = "kPa", inEntityMap = true, isSelected = selectedIds.Contains(-3003), customization = (object?)null });
-            sensorList.Add(new { id = -3004, name = "Speed Error", category = "Derived", unit = "km/h", inEntityMap = true, isSelected = selectedIds.Contains(-3004), customization = (object?)null });
+            // Derived entities — always available, with real picker metadata
+            // mirroring S_derivedDefaults (R5: the countdown uses the fixed
+            // nominal 0–9000 range, independent of any configured shift point).
+            // Customizations are read back like the links block: without this,
+            // a customized derived sensor (e.g. "Gear" renamed to "True Gear")
+            // looks reset after a restart, and the next save rebuilds the dict
+            // from the nulled entries — silently DELETING the customization.
+            foreach (var (id, meta) in S_derivedDefaults.OrderBy(kv => kv.Key))
+            {
+                customizations.TryGetValue(id, out var c);
+                sensorList.Add(new
+                {
+                    id,
+                    name = meta.Name,
+                    category = "Derived",
+                    unit = meta.Unit,
+                    minValue = meta.Min,
+                    maxValue = meta.Max,
+                    inEntityMap = true,
+                    isSelected = selectedIds.Contains(id),
+                    customization = c is not null ? new
+                    {
+                        customName = c.CustomName,
+                        customUnit = c.CustomUnit,
+                        minRange = c.MinRange.HasValue ? (double)c.MinRange.Value : (double?)null,
+                        maxRange = c.MaxRange.HasValue ? (double)c.MaxRange.Value : (double?)null,
+                        minRangeBypass = c.MinRangeBypass,
+                        maxRangeBypass = c.MaxRangeBypass,
+                    } : null,
+                });
+            }
 
-            var totalCount = links.Count + (_gps is { IsRunning: true } ? 7 : 0) + 4;
+            var totalCount = links.Count + (_gps is { IsRunning: true } ? 7 : 0) + S_derivedDefaults.Count;
 
             return JsonSerializer.Serialize(new
             {
@@ -954,6 +1027,7 @@ public partial class HybridBridgeService
                 BackgroundImagePath = backgroundImagePath,
                 Odometer = existingDef?.Odometer,
                 Vehicle = existingDef?.Vehicle,
+                ShifterConfig = existingDef?.ShifterConfig,
                 WarningHistory = existingDef?.WarningHistory ?? [],
             };
 

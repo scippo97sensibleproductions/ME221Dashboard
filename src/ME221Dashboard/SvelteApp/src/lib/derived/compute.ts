@@ -13,6 +13,22 @@ export interface ComputationResult {
   [DerivedEntityId.TrueSpeed]: number | null;
   [DerivedEntityId.Boost]: number | null;
   [DerivedEntityId.SpeedError]: number | null;
+  [DerivedEntityId.RpmToShift]: number | null;
+}
+
+/**
+ * Countdown (R2): shift point minus current RPM, clamped at 0; 0 means the shift
+ * point is reached. Null per R14 whenever the RPM datalink is unconfigured, the
+ * RPM sample is null, or the shift point is unset or zero. Shared by the
+ * recompute path and the shift tick so both writers agree on the −3005 value.
+ */
+export function computeRpmToShift(
+  rpm: number | null,
+  shiftPoint: number | null | undefined,
+): number | null {
+  if (rpm === null) return null;
+  if (shiftPoint == null || shiftPoint <= 0) return null;
+  return Math.max(0, shiftPoint - rpm);
 }
 
 function safeEntity(values: Record<string, number | null>, id: number | null): number | null {
@@ -101,6 +117,7 @@ export function computeDerived(inputs: ComputationInputs): ComputationResult {
     [DerivedEntityId.TrueSpeed]: trueSpeed,
     [DerivedEntityId.Boost]: boost,
     [DerivedEntityId.SpeedError]: speedError,
+    [DerivedEntityId.RpmToShift]: computeRpmToShift(rpm, config.shifter?.shiftPointRpm),
   };
 }
 
@@ -114,6 +131,11 @@ export function formatDerivedValue(entityId: number, rawValue: number | null): s
   if (entityId === DerivedEntityId.Boost) {
     if (rawValue < 0) return rawValue.toFixed(1);
     return '+' + rawValue.toFixed(1);
+  }
+  if (entityId === DerivedEntityId.ShiftState) {
+    if (rawValue === -1) return 'DOWN';
+    if (rawValue === 1) return 'SHIFT';
+    return 'CRUISE';
   }
   return String(rawValue);
 }

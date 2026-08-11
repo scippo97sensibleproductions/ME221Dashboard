@@ -88,4 +88,9 @@
         <ProjectReference Include="..\ME221Dashboard.Comms\ME221Dashboard.Comms.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Test seam access (shared emulator-file dir override, etc.). -->
+        <InternalsVisibleTo Include="ME221Dashboard.Tests" />
+    </ItemGroup>
+
 </Project>

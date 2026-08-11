@@ -9,6 +9,7 @@ export enum GaugeShapeCategory {
   WedgeBar = 5,
   LedRing = 6,
   MultiRing = 7,
+  ShiftLight = 8,
 }
 
 export enum ArcPosition {
@@ -99,8 +100,12 @@ export interface GaugeDefinition {
   spikeGatePercent: number;
   // Transforms
   transformSteps?: ValueTransformStep[];
-  // Warning state
-  warningState: 'none' | 'warning' | 'critical';
+  // Warning state (level id, 'none' when not active — fed by the evaluator)
+  warningState: string;
+  // Transient per-frame level visuals (R11)
+  warningLevelName?: string | null;
+  warningLevelColor?: string | null;
+  warningCvdFlag?: boolean;
   // Pre-computed lowercase strings (avoids toLowerCase() in 30fps hot path)
   lowerName?: string;
   lowerUnit?: string;
@@ -158,6 +163,14 @@ export interface GaugeDefinition {
   // WedgeBar
   wedgeSegmentCount: number;
   wedgeRedlineStart: number;
+  // Shift-light: how far before the shift point the first segment lights (R13)
+  rampWidthRpm: number;
+  // Shift-light: number of segments in the bar (4..32) and color zones (1..3).
+  zoneCount: number;
+  // Shift-light enrichment pass-through (U2): per-dashboard shift point + RPM
+  // datalink, consumed by the renderer; undefined for every other category.
+  shiftPoint?: number | null;
+  rpmEntityId?: number | null;
   // Chart overlays / style
   chartOverlays: ChartOverlayLine[];
   overlayPillPosition: number; // 0=topRight 1=topLeft 2=bottomRight 3=bottomLeft

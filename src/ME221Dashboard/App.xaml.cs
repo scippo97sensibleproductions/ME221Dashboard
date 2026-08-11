@@ -1,7 +1,11 @@
-﻿namespace ME221Dashboard;
+﻿using ME221Dashboard.Services;
+
+namespace ME221Dashboard;
 
 public partial class App
 {
+    private AppLifecycleBridge? _lifecycleBridge;
+
 #if WINDOWS
     [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
     private static extern uint SetThreadExecutionState(uint esFlags);
@@ -16,8 +20,11 @@ public partial class App
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var mainPage = activationState!.Context.Services.GetRequiredService<MainPage>();
+        var services = activationState!.Context.Services;
+        var mainPage = services.GetRequiredService<MainPage>();
+        _lifecycleBridge ??= services.GetRequiredService<AppLifecycleBridge>();
         var window = new Window(mainPage) { Title = "ME221 Dashboard" };
+        _lifecycleBridge.Attach(window);
 #if WINDOWS
         // Keep the display on while the app window is active (dashboard use).
         // DisplayRequest isn't projected in MAUI's reduced Windows SDK ref pack,

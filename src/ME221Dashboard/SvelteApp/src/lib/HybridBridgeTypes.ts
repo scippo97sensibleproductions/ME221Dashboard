@@ -4,6 +4,7 @@
 
 import type { ColorScheme } from './tables/types';
 import type { ValueTransformStep } from './gauges/transformUtils';
+import type { ShifterConfig } from './derived/types';
 
 export type { ColorScheme };
 
@@ -133,6 +134,10 @@ export interface ChartOverlayLine {
 export interface GaugeConfigEntry {
   entityId: number;
   shapeCategory: number;
+  // Enrichment-only (never persisted): the DashboardPage attaches the per-dashboard
+  // shift point + RPM datalink to shift-light gauges (U2/KTD2) for the renderer.
+  shiftPoint?: number | null;
+  rpmEntityId?: number | null;
   sweepAngle: number;
   arcPosition: number;
   digitalStyle: number;
@@ -235,6 +240,10 @@ export interface GaugeConfigEntry {
   // WedgeBar
   wedgeSegmentCount?: number;
   wedgeRedlineStart?: number;
+  // Shift-light: how far before the shift point the first segment lights (R13)
+  rampWidthRpm?: number;
+  // Shift-light: color-zone count for the bar (1..3, default 3)
+  zoneCount?: number;
   // Chart overlays / style
   chartOverlays?: ChartOverlayLine[];
   overlayPillPosition?: number; // 0=topRight 1=topLeft 2=bottomRight 3=bottomLeft
@@ -357,6 +366,10 @@ export interface SaveLayoutPayload {
   peakHoldAutoResetSec?: number;
   wedgeSegmentCount?: number;
   wedgeRedlineStart?: number;
+  // Shift-light: ramp width before the shift point (R13)
+  rampWidthRpm?: number;
+  // Shift-light: color-zone count for the bar (1..3, default 3)
+  zoneCount?: number;
   chartOverlays?: ChartOverlayLine[];
   overlayPillPosition?: number;
   overlayFontScale?: number;
@@ -365,6 +378,7 @@ export interface SaveLayoutPayload {
 }
 
 // ─── Vehicle Config ──────────────────────────────────────────────────────────
+// ─── Vehicle Config (per-dashboard) ─────────────────────────────────────────
 
 export interface VehicleConfig {
   enabled: boolean;
@@ -377,6 +391,7 @@ export interface VehicleConfig {
   mapEntityId: number | null;
   baroEntityId: number | null;
   gearEntityId: number | null;
+  shifter?: ShifterConfig;
 }
 
 // ─── Sensor Selection / Config Types ─────────────────────────────────────────
@@ -454,6 +469,15 @@ export interface LogEntryEvent {
   exception?: string;
 }
 
+export interface AppLifecycleEvent {
+  event: 'appBackgrounded' | 'appForegrounded' | 'calibrationLoaded';
+}
+
+/** Android back press forwarded by the MainActivity dispatcher (U8). */
+export interface AndroidBackEvent {
+  event: 'androidBack';
+}
+
 export interface GpsStatus {
   available: boolean;
   isRunning: boolean;
@@ -461,7 +485,7 @@ export interface GpsStatus {
 
 // ─── Union Types ─────────────────────────────────────────────────────────────
 
-export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent;
+export type BridgeEvent = LiveDataEvent | ConnectionStateChangedEvent | GpsUpdateEvent | OdometerUpdateEvent | LogEntryEvent | AppLifecycleEvent | AndroidBackEvent;
 
 // ─── Update Check Types ─────────────────────────────────────────────────────
 
@@ -556,16 +580,82 @@ export interface DataLinksResult {
 // ─── Warning Centre Types ────────────────────────────────────────────────────
 
 export type WarningSettingStatus = 'Typical' | 'Custom' | 'Disabled';
+export type WarningDirection = 'min' | 'max';
+export type WarningWriteKind = 'enable-toggle' | 'points-levels-edit' | 'preset-restore' | 'undo-restore';
+
+export interface WarningLevel {
+  id: string;
+  name: string;
+  color: string;
+  autolog: boolean;
+  flash: boolean;
+  order: number;
+}
+
+export interface WarningPoint {
+  id: string;
+  value: number;
+  direction: WarningDirection;
+  levelId: string;
+  enabled: boolean;
+}
 
 export interface DataLinkWarningSetting {
   dataId: number;
   enabled: boolean;
-  minWarning: number | null;
-  maxWarning: number | null;
   name: string;
   unit: string;
   category: string;
   status: WarningSettingStatus;
+  levels: WarningLevel[];
+  points: WarningPoint[];
+  migratedBoundsMarkerLevelId: string | null;
+  migratedBoundsMarkerSet: boolean;
+}
+
+export interface WarningSettingsPayload {
+  settings: DataLinkWarningSetting[];
+  delayMs: number;
+  /** DataIds with R19 load-time point removals since the last read (in-memory, cleared on read). */
+  pointsRemovedIds?: number[];
+}
+
+export interface WarningDatalinkResult {
+  success: boolean;
+  rejected?: string;
+  snapshot?: DataLinkWarningSetting;
+  clamps?: string[];
+  error?: string;
+}
+
+export interface SaveWarningDatalinkPayload {
+  dataId: number;
+  levels: WarningLevel[];
+  points: WarningPoint[];
+  enabled: boolean;
+  writeKind: WarningWriteKind;
+  markerSet?: boolean;
+  preDeleteStatus?: WarningSettingStatus;
+  interveningEdit?: boolean;
+  markerLevelName?: string | null;
+}
+
+export interface QueuedBanner {
+  dataIds: number[];
+  kind: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface UndoExpiryNotice {
+  dataId: number;
+  timestamp: number;
+}
+
+export interface BatchLedgerEntry {
+  dataId: number;
+  outcome: string;
+  timestamp: number;
 }
 
 export interface WarningHistoryEntry {

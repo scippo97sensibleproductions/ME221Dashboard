@@ -1,9 +1,16 @@
-import type { DataLinkWarningSetting, WarningHistoryEntry } from '../HybridBridgeTypes';
+import type { WarningHistoryEntry } from '../HybridBridgeTypes';
 export type { WarningHistoryEntry } from '../HybridBridgeTypes';
 import { HybridBridge } from '../HybridBridge';
 import { SvelteMap } from 'svelte/reactivity';
-
-export type WarningSeverity = 'warning' | 'critical';
+import { liveDataStore } from './LiveDataStore.svelte';
+import {
+  warningEvaluator,
+  furthestPoint,
+  type ActivationEvent,
+  type DropEvent,
+  type EvaluatorEvent,
+  type WarningEvaluator,
+} from './warningEvaluator';
 
 export interface ActiveWarning {
   dataId: number;
@@ -11,7 +18,9 @@ export interface ActiveWarning {
   unit: string;
   category: string;
   value: number;
-  severity: WarningSeverity;
+  levelId: string;
+  levelName: string;
+  color: string;
   threshold: number;
   thresholdType: 'min' | 'max';
   triggeredAt: number;
@@ -24,19 +33,158 @@ let activeWarnings = $state<Map<number, ActiveWarning>>(new Map());
 let warningHistory = $state<WarningHistoryEntry[]>([]);
 let historyCounter = 0;
 let panelOpen = $state(false);
-const previousStates = new SvelteMap<number, 'none' | 'warning' | 'critical'>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let loaded = false;
+let pendingSave: WarningHistoryEntry[] | null = null;
+let openEntryByDataId = new SvelteMap<number, { entry: WarningHistoryEntry; levelId: string }>();
+
+let evaluator: WarningEvaluator = warningEvaluator;
+let unsubscribeEvents: (() => void) | null = null;
 
 function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    HybridBridge.saveWarningHistory(warningHistory).catch(e =>
-      console.error('[WARN] Failed to save warning history:', e)
-    );
+    void persistHistory();
   }, SAVE_DEBOUNCE_MS);
 }
+
+async function persistHistory() {
+  try {
+    if (pendingSave !== null) {
+      await HybridBridge.saveWarningHistory(pendingSave);
+      pendingSave = null;
+    }
+    await HybridBridge.saveWarningHistory(warningHistory);
+  } catch (e) {
+    pendingSave = pendingSave ?? warningHistory.slice();
+    console.error('[WARN] Failed to save warning history:', e);
+  }
+}
+
+function levelInfo(dataId: number, levelId: string): { name: string; color: string; autolog: boolean } | null {
+  const level = evaluator.getLevel(dataId, levelId);
+  if (!level) return null;
+  return { name: level.name, color: level.color, autolog: level.autolog };
+}
+
+function datalinkDisplay(dataId: number): { name: string; unit: string; category: string } {
+  const snapshot = evaluator.getSnapshot();
+  const dl = snapshot.settings.get(dataId);
+  return { name: dl?.name ?? '', unit: dl?.unit ?? '', category: dl?.category ?? '' };
+}
+
+function openSnapshot(dataId: number, levelId: string, value: number, triggeredAt: number) {
+  const info = levelInfo(dataId, levelId);
+  const dl = datalinkDisplay(dataId);
+  if (openEntryByDataId.has(dataId)) return;
+  const entry: WarningHistoryEntry = {
+    id: ++historyCounter,
+    dataId,
+    name: dl.name,
+    unit: dl.unit,
+    category: dl.category,
+    value,
+    severity: info?.name ?? 'warning',
+    threshold: 0,
+    thresholdType: 'max',
+    triggeredAt,
+    clearedAt: null,
+  };
+  const active = activeWarnings.get(dataId);
+  if (active) {
+    entry.threshold = active.threshold;
+    entry.thresholdType = active.thresholdType;
+  }
+  warningHistory = [entry, ...warningHistory].slice(0, MAX_HISTORY);
+  openEntryByDataId = new SvelteMap(openEntryByDataId).set(dataId, { entry, levelId });
+}
+
+function closeOpenEntry(dataId: number, clearedAt: number) {
+  const open = openEntryByDataId.get(dataId);
+  if (!open) return;
+  const next = new SvelteMap(openEntryByDataId);
+  next.delete(dataId);
+  openEntryByDataId = next;
+  warningHistory = warningHistory.map(h =>
+    h.id === open.entry.id ? { ...h, clearedAt } : h
+  );
+}
+
+function upsertActive(dataId: number, levelId: string, value: number, threshold: number, thresholdType: 'min' | 'max', triggeredAt: number) {
+  const info = levelInfo(dataId, levelId);
+  const dl = datalinkDisplay(dataId);
+  if (!info) return;
+  const existing = activeWarnings.get(dataId);
+  const warning: ActiveWarning = {
+    dataId,
+    name: dl.name,
+    unit: dl.unit,
+    category: dl.category,
+    value,
+    levelId,
+    levelName: info.name,
+    color: info.color,
+    threshold: threshold ?? existing?.threshold ?? 0,
+    thresholdType: thresholdType ?? existing?.thresholdType ?? 'max',
+    triggeredAt,
+  };
+  activeWarnings = new SvelteMap(activeWarnings).set(dataId, warning);
+}
+
+function onActivation(event: ActivationEvent) {
+  const { dataId, levelId, value, threshold, thresholdType, viaRecompute } = event;
+  const now = Date.now();
+  const info = levelInfo(dataId, levelId);
+  upsertActive(dataId, levelId, value, threshold, thresholdType, now);
+
+  const open = openEntryByDataId.get(dataId);
+  if (open && open.levelId !== levelId) {
+    closeOpenEntry(dataId, now);
+  }
+  if (!viaRecompute && info?.autolog && !openEntryByDataId.has(dataId)) {
+    openSnapshot(dataId, levelId, value, now);
+  }
+  scheduleSave();
+}
+
+function onDrop(event: DropEvent) {
+  const { dataId, toLevelId } = event;
+  const now = Date.now();
+  closeOpenEntry(dataId, now);
+  if (toLevelId !== null) {
+    const info = levelInfo(dataId, toLevelId);
+    const live = liveDataStore.values[String(dataId)];
+    const value = live ?? activeWarnings.get(dataId)?.value ?? 0;
+    const snapshot = evaluator.getSnapshot();
+    const dl = snapshot.settings.get(dataId);
+    const points = dl?.points.filter(p => p.levelId === toLevelId && p.enabled) ?? [];
+    const furthest = furthestPoint(points, value);
+    upsertActive(dataId, toLevelId, value, furthest.threshold, furthest.thresholdType, now);
+    if (info?.autolog && !openEntryByDataId.has(dataId)) {
+      openSnapshot(dataId, toLevelId, value, now);
+    }
+  } else {
+    const next = new SvelteMap(activeWarnings);
+    next.delete(dataId);
+    activeWarnings = next;
+  }
+  scheduleSave();
+}
+
+function handleEvents(events: EvaluatorEvent[]) {
+  for (const event of events) {
+    if (event.type === 'activation') onActivation(event.activation);
+    else onDrop(event.drop);
+  }
+}
+
+function attach() {
+  unsubscribeEvents?.();
+  unsubscribeEvents = evaluator.subscribe(handleEvents);
+}
+
+attach();
 
 class WarningStore {
   get activeWarnings(): Map<number, ActiveWarning> {
@@ -85,120 +233,60 @@ class WarningStore {
   }
 
   /**
-   * Called from the live data loop. Updates warning state for an entity
-   * and fires toast on state transitions (none→warning, none→critical, warning→critical).
+   * R12 toggle-moment snapshot: called synchronously right after a successful
+   * autolog-toggle write, so an ongoing activation that has no open entry yet
+   * (autolog was off at activation) snapshots at the toggle moment even if the
+   * debounced re-read lands after the level deactivates.
    */
-  updateWarning(
-    dataId: number,
-    name: string,
-    unit: string,
-    category: string,
-    value: number,
-    newState: 'none' | 'warning' | 'critical',
-    warningSettings: DataLinkWarningSetting[] | null
-  ): void {
-    const prev = previousStates.get(dataId) ?? 'none';
-    previousStates.set(dataId, newState);
-
-    if (newState === 'none') {
-      // Clear if was active
-      if (prev !== 'none') {
-        this.#clearWarning(dataId);
-      }
-      return;
-    }
-
-    // Find the threshold that was crossed
-    const setting = warningSettings?.find(s => s.dataId === dataId);
-    let threshold = 0;
-    let thresholdType: 'min' | 'max' = 'max';
-    if (setting) {
-      if (setting.maxWarning != null && value > setting.maxWarning) {
-        threshold = setting.maxWarning;
-        thresholdType = 'max';
-      } else if (setting.minWarning != null && value < setting.minWarning) {
-        threshold = setting.minWarning;
-        thresholdType = 'min';
-      }
-    }
-
-    // State transition → fire toast
-    if (prev === 'none' || (prev === 'warning' && newState === 'critical')) {
-      this.#addActiveWarning(dataId, name, unit, category, value, newState, threshold, thresholdType);
-    } else {
-      // Update existing warning with new value
-      const existing = activeWarnings.get(dataId);
-      if (existing) {
-        existing.value = value;
-        existing.severity = newState;
-      }
-    }
+  snapshotToggle(dataId: number, levelId: string) {
+    const active = activeWarnings.get(dataId);
+    if (!active || active.levelId !== levelId) return;
+    if (openEntryByDataId.has(dataId)) return;
+    const value = liveDataStore.values[String(dataId)] ?? active.value;
+    openSnapshot(dataId, levelId, value, Date.now());
+    scheduleSave();
   }
 
+  /**
+   * Interim close actions for the pre-U5 panel: in-place clearedAt closes,
+   * never separate entries (R12). Removed with the U5 panel rebuild.
+   */
   clearWarning(dataId: number) {
-    this.#clearWarning(dataId);
+    closeOpenEntry(dataId, Date.now());
+    const next = new SvelteMap(activeWarnings);
+    next.delete(dataId);
+    activeWarnings = next;
+    scheduleSave();
   }
 
   clearAllWarnings() {
-    const now = Date.now();
-    for (const [, w] of activeWarnings) {
-      this.#addToHistory(w, now);
-    }
+    for (const dataId of activeWarnings.keys()) closeOpenEntry(dataId, Date.now());
     activeWarnings = new Map();
     scheduleSave();
   }
 
   reset() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
     activeWarnings = new Map();
     warningHistory = [];
-    previousStates.clear();
+    openEntryByDataId = new SvelteMap();
+    pendingSave = null;
     panelOpen = false;
     loaded = false;
   }
 
-  #addActiveWarning(
-    dataId: number,
-    name: string,
-    unit: string,
-    category: string,
-    value: number,
-    severity: WarningSeverity,
-    threshold: number,
-    thresholdType: 'min' | 'max'
-  ) {
-    const warning: ActiveWarning = {
-      dataId, name, unit, category, value, severity, threshold, thresholdType,
-      triggeredAt: Date.now(),
-    };
-    activeWarnings = new SvelteMap(activeWarnings).set(dataId, warning);
+  /** Test hook: attach a fresh factory evaluator instance. */
+  __attachEvaluator(e: WarningEvaluator) {
+    unsubscribeEvents?.();
+    evaluator = e;
+    attach();
   }
 
-  #clearWarning(dataId: number) {
-    const existing = activeWarnings.get(dataId);
-    if (existing) {
-      this.#addToHistory(existing, Date.now());
-      const next = new SvelteMap(activeWarnings);
-      next.delete(dataId);
-      activeWarnings = next;
-      scheduleSave();
-    }
-  }
-
-  #addToHistory(w: ActiveWarning, clearedAt: number) {
-    const entry: WarningHistoryEntry = {
-      id: ++historyCounter,
-      dataId: w.dataId,
-      name: w.name,
-      unit: w.unit,
-      category: w.category,
-      value: w.value,
-      severity: w.severity,
-      threshold: w.threshold,
-      thresholdType: w.thresholdType,
-      triggeredAt: w.triggeredAt,
-      clearedAt,
-    };
-    warningHistory = [entry, ...warningHistory].slice(0, MAX_HISTORY);
+  __detachEvaluator() {
+    unsubscribeEvents?.();
+    unsubscribeEvents = null;
+    evaluator = warningEvaluator;
   }
 }
 

@@ -2,6 +2,7 @@
   import StreamingLineChart from '../lib/charts/StreamingLineChart.svelte';
   import { SessionStore, type RecordedSession } from '../lib/monitor/SessionStore';
   import { getSensorColor } from '../lib/monitor/sensorColors';
+  import { buildSessionCsv, buildSessionVdCsv } from '../lib/monitor/sessionCsv';
   import { HybridBridge } from '../lib/HybridBridge';
   import {
     IconPlayerPlay, IconPlayerStop, IconTrash, IconX,
@@ -161,68 +162,6 @@
   }
 
   // ── Export/Import ──────────────────────────────────────────────────────
-  const VD_NAME_MAP: Record<string, string> = {
-    'rpm': 'RPM', 'engine speed': 'RPM',
-    'throttle position': 'Throttle Position', 'tps': 'Throttle Position',
-    'afr': 'AFR', 'wideband': 'AFR', 'lambda': 'AFR',
-    'boost': 'Boost', 'map': 'Boost',
-    'baro': 'Barometric Pressure',
-    'clt': 'Coolant Temp', 'coolant temp': 'Coolant Temp',
-    'iat': 'Intake Air Temp', 'intake air temp': 'Intake Air Temp',
-    'batt': 'Battery Voltage', 'battery voltage': 'Battery Voltage',
-    'vss': 'Vehicle Speed', 'speed': 'Vehicle Speed',
-    'ignition': 'Ignition Timing', 'ignition advance': 'Ignition Timing',
-    'duty': 'Injector Duty', 'injector duty': 'Injector Duty',
-    'fuel rail': 'Fuel Pressure', 'fuel pressure': 'Fuel Pressure',
-  };
-  function mapVdName(raw: string): string {
-    const lower = raw.toLowerCase().trim();
-    if (VD_NAME_MAP[lower]) return VD_NAME_MAP[lower];
-    for (const [key, val] of Object.entries(VD_NAME_MAP)) {
-      if (lower.includes(key)) return val;
-    }
-    return raw;
-  }
-
-  function buildSessionCsv(session: RecordedSession): string {
-    const ids = session.sensorIds;
-    if (ids.length === 0) return '';
-    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    const headers = ['time_ms', ...ids.map(id => escapeCsv(session.sensorNames[id] ?? String(id)))];
-    const lines: string[] = [headers.join(',')];
-    const maxLen = Math.max(...ids.map(id => session.data[id]?.length ?? 0));
-    for (let i = 0; i < maxLen; i++) {
-      const row: string[] = [];
-      for (const id of ids) {
-        const pts = session.data[id] ?? [];
-        const s = pts[i];
-        row.push(s ? `${s.t.toFixed(1)},${s.v}` : ',');
-      }
-      lines.push(row.join(','));
-    }
-    return lines.join('\n');
-  }
-
-  function buildSessionVdCsv(session: RecordedSession): string {
-    const ids = session.sensorIds;
-    if (ids.length === 0) return '';
-    const escapeCsv = (s: string) => s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    const mappedNames = ids.map(id => mapVdName(session.sensorNames[id] ?? String(id)));
-    const headers = ['Time', ...mappedNames.map(escapeCsv)];
-    const lines: string[] = ['ME221', headers.join(',')];
-    const maxLen = Math.max(...ids.map(id => session.data[id]?.length ?? 0));
-    for (let i = 0; i < maxLen; i++) {
-      const row: string[] = [];
-      for (const id of ids) {
-        const pts = session.data[id] ?? [];
-        const s = pts[i];
-        row.push(s ? `${(s.t / 1000).toFixed(3)},${s.v}` : ',');
-      }
-      lines.push(row.join(','));
-    }
-    return lines.join('\n');
-  }
-
   async function handleImportMes() {
     busyAction = 'import';
     sessionError = null;

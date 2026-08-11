@@ -1,13 +1,12 @@
 <script lang="ts">
   // Shared segment-geometry controls (controlled component; LedRing full, WedgeBar count only).
-  let { segmentCount, gap, showGap, onchange }: {
+  let { segmentCount, gap, showGap, presets = [16, 24, 32, 36, 48, 60], onchange }: {
     segmentCount: number;
     gap: number;
     showGap: boolean;
+    presets?: number[];
     onchange: (patch: { segmentCount: number; gap?: number }) => void;
   } = $props();
-
-  const presets = [16, 24, 32, 36, 48, 60];
 </script>
 
 <div class="space-y-3">

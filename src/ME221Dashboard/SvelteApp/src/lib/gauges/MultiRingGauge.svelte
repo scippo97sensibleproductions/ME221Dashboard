@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { GaugeDefinition } from './types';
 	import { computeValueFraction } from './types';
+	import { multiRingBoxScale } from './gaugeUtils';
 	import { HybridBridge } from '../HybridBridge';
 
 	let { gauge, pixelWidth, pixelHeight, valueTextColor }: {
@@ -205,15 +206,32 @@
 	const primary = $derived(rings[0] ?? null);
 
 	const alarmColor = $derived(
-		gauge.warningState === 'critical' ? '#ef4444'
-		: gauge.warningState === 'warning' ? '#f59e0b'
-		: null
+		gauge.warningState === 'none' ? null : (gauge.warningLevelColor ?? null)
 	);
 	const primaryStroke = $derived(alarmColor ?? primary?.color ?? '#0078D7');
 	const valueFill = $derived(alarmColor ?? (valueTextColor || primary?.color || '#ffffff'));
 
 	const valueLen = $derived(gauge.formattedValue.length);
-	const valueFs = $derived(valueLen > 6 ? 20 : valueLen > 4 ? 26 : 33);
+	// Font Scale (Text tab): applied to every text element — value, labels,
+	// units, scale numerals, chips. Unlike the other gauges this is NOT capped
+	// at 2x — the slider runs 0.5–10 and the box below grows with it.
+	const fontSizeScale = $derived(Math.max(0.5, Math.min(10, gauge.fontSizeScale ?? 1.0)));
+	const valueFs = $derived(Math.min(110, (valueLen > 6 ? 20 : valueLen > 4 ? 26 : 33) * fontSizeScale));
+	const labelFs = $derived(6.5 * fontSizeScale);
+	const unitFs = $derived(7.5 * fontSizeScale);
+	const scaleFs = $derived(6.5 * fontSizeScale);
+	const chipLabelFs = $derived(5 * fontSizeScale);
+	const chipValueFs = $derived(10.5 * fontSizeScale);
+	const chipUnitFs = $derived(6 * fontSizeScale);
+	const emptyFs = $derived(8 * fontSizeScale);
+	const emptySubFs = $derived(6 * fontSizeScale);
+
+	// The SVG must fill the square visual box (min of the design box), not the
+	// full non-square design box — the dashboard wrap box is square, so a
+	// wider SVG would offset the ring from its drag/clamp area (invisible
+	// walls at the borders). The box also grows with the font scale so the
+	// larger text stays inside the gauge instead of clipping at the canvas.
+	const box = $derived(Math.round(Math.min(pixelWidth, pixelHeight) * multiRingBoxScale(gauge.fontSizeScale)));
 
 	const filterId = $derived(`mr-${gauge.entityId}`);
 
@@ -237,8 +255,8 @@
 
 <svg
 	viewBox="0 0 {V} {V}"
-	width={pixelWidth}
-	height={pixelHeight}
+	width={box}
+	height={box}
 	preserveAspectRatio="xMidYMid meet"
 	role="img"
 	aria-label="{gauge.name} multi-channel gauge"
@@ -274,9 +292,9 @@
 	{#if rings.length === 0}
 		<circle {cx} {cy} r={DISC_R} fill="url(#disc-{filterId})" stroke="#262636" />
 		<text x={cx} y={cy - 4} text-anchor="middle" fill="#565669"
-			font-family="'Segoe UI',sans-serif" font-size="8" letter-spacing="0.2em">NO CHANNELS</text>
+			font-family="'Segoe UI',sans-serif" font-size={emptyFs} letter-spacing="0.2em">NO CHANNELS</text>
 		<text x={cx} y={cy + 10} text-anchor="middle" fill="#3f3f50"
-			font-family="'Segoe UI',sans-serif" font-size="6" letter-spacing="0.12em">LINK IN GAUGE BUILDER</text>
+			font-family="'Segoe UI',sans-serif" font-size={emptySubFs} letter-spacing="0.12em">LINK IN GAUGE BUILDER</text>
 	{:else}
 		<!-- ── Rings ── -->
 		{#each rings as ring (ring.entityId)}
@@ -301,8 +319,7 @@
 						d={arcPath(ring.r, start, start + ring.frac * sweep)}
 						fill="none" stroke={stroke} stroke-width={ring.w} stroke-linecap="round"
 						opacity="0.92" filter="url(#{filterId})"
-						class={ring.isPrimary && gauge.warningState === 'critical' ? 'mr-crit'
-							: ring.isPrimary && gauge.warningState === 'warning' ? 'mr-warn' : ''}
+						class={ring.isPrimary && gauge.warningState !== 'none' ? 'mr-crit' : ''}
 					/>
 				{/if}
 
@@ -332,7 +349,7 @@
 					{@const p = polar(ring.labelR, ang)}
 					{@const lit = f <= ring.frac + 0.001}
 					<text x={p.x} y={p.y} text-anchor="middle" dominant-baseline="central"
-						font-family="'JetBrains Mono',monospace" font-size="6.5" font-weight="600"
+						font-family="'JetBrains Mono',monospace" font-size={scaleFs} font-weight="600"
 						fill={lit ? ring.color : '#3f3f50'} opacity={lit ? 0.95 : 0.8}>
 						{fmtScale(f === 0 ? ring.minV : f === 1 ? ring.maxV : (ring.minV + ring.maxV) / 2)}
 					</text>
@@ -360,19 +377,19 @@
 
 		{#if primary}
 			<text x={cx} y={cy - 27} text-anchor="middle" fill="#565669"
-				font-family="'Segoe UI',sans-serif" font-size="6.5" font-weight="600"
+				font-family="'Segoe UI',sans-serif" font-size={labelFs} font-weight="600"
 				letter-spacing="0.18em">
 				{trunc(primary.label, 16).toUpperCase()}
 			</text>
 			<text x={cx} y={cy + 8} text-anchor="middle" fill={valueFill}
 				font-family="'Orbitron Variable','Segoe UI',sans-serif" font-size={valueFs} font-weight="900"
 				filter="url(#{filterId})"
-				class={gauge.warningState === 'critical' ? 'mr-crit' : gauge.warningState === 'warning' ? 'mr-warn' : ''}>
+				class={gauge.warningState !== 'none' ? 'mr-crit' : ''}>
 				{gauge.formattedValue}
 			</text>
 			{#if primary.unit}
 				<text x={cx} y={cy + 22} text-anchor="middle" fill="#66667a"
-					font-family="'Segoe UI',sans-serif" font-size="7.5" letter-spacing="0.12em">
+					font-family="'Segoe UI',sans-serif" font-size={unitFs} letter-spacing="0.12em">
 					{primary.unit}
 				</text>
 			{/if}
@@ -401,14 +418,14 @@
 						stroke={hovered ? ring.color : '#1d1d2b'} stroke-width="0.75" />
 					<rect x={x} y="306" width="2.5" height="27" fill={ring.color} />
 					<text x={x + chipW / 2 + 1} y="314.5" text-anchor="middle"
-						font-family="'Segoe UI',sans-serif" font-size="5" font-weight="600"
+						font-family="'Segoe UI',sans-serif" font-size={chipLabelFs} font-weight="600"
 						letter-spacing="0.08em" fill="#565669">
 						{trunc(ring.label, 13).toUpperCase()}
 					</text>
 					<text x={x + chipW / 2 + 1} y="327.5" text-anchor="middle"
-						font-family="'JetBrains Mono',monospace" font-size="10.5" font-weight="700"
+						font-family="'JetBrains Mono',monospace" font-size={chipValueFs} font-weight="700"
 						fill={ring.color}>
-						{fmtVal(ring.value)}<tspan dx="2" font-size="6" fill="#565669">{ring.unit}</tspan>
+						{fmtVal(ring.value)}<tspan dx="2" font-size={chipUnitFs} fill="#565669">{ring.unit}</tspan>
 					</text>
 				</g>
 			{/each}

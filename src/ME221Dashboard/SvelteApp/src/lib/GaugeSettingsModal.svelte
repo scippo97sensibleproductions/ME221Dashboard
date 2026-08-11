@@ -9,11 +9,13 @@
   import WedgeBarSettings from './gauges/WedgeBarSettings.svelte';
   import LedRingSettings from './gauges/LedRingSettings.svelte';
   import MultiRingSettings from './gauges/MultiRingSettings.svelte';
+  import ShiftLightSettings from './gauges/ShiftLightSettings.svelte';
   import ColorConfigSettings from './gauges/ColorConfigSettings.svelte';
   import SmoothingSettings from './gauges/SmoothingSettings.svelte';
   import GpsSpeedDebugSettings from './gauges/GpsSpeedDebugSettings.svelte';
   import TransformSettings from './gauges/TransformSettings.svelte';
   import GaugePreviewPanel from './GaugePreviewPanel.svelte';
+  import { liveDataStore } from './stores/LiveDataStore.svelte';
   import { Modal, Button, Tabs, TabItem } from 'flowbite-svelte';
   import { IconX } from '@tabler/icons-svelte';
 
@@ -36,6 +38,7 @@
     { value: GaugeShapeCategory.WedgeBar, label: 'Wedge' },
     { value: GaugeShapeCategory.LedRing, label: 'LED Ring' },
     { value: GaugeShapeCategory.MultiRing, label: 'Multi-Ring' },
+    { value: GaugeShapeCategory.ShiftLight, label: 'Shift Light' },
   ];
 
   let activeTab = $state('shape');
@@ -62,7 +65,10 @@
 
   const minValue = $derived(entityInfo?.minValue ?? 0);
   const maxValue = $derived(entityInfo?.maxValue ?? 10000);
-  const liveValue = $derived(entityInfo ? ((entityInfo.minValue ?? 0) + (entityInfo.maxValue ?? 10000)) / 2 : 5000);
+  const liveValue = $derived(
+    liveDataStore.values[String(gaugeDef.entityId)]
+    ?? (entityInfo ? ((entityInfo.minValue ?? 0) + (entityInfo.maxValue ?? 10000)) / 2 : 5000)
+  );
 
   const previewValue = $derived(testValue ?? liveValue);
   function setCategory(cat: GaugeShapeCategory) {
@@ -77,6 +83,7 @@
       case GaugeShapeCategory.WedgeBar: wf = 0.30; hf = 0.12; break;
       case GaugeShapeCategory.LedRing: wf = 0.25; hf = 0.25; break;
       case GaugeShapeCategory.MultiRing: wf = 0.30; hf = 0.30; break;
+      case GaugeShapeCategory.ShiftLight: wf = 0.35; hf = 0.08; break;
     }
     onchange({ ...gaugeDef, shapeCategory: cat, widthFraction: wf, heightFraction: hf });
   }
@@ -116,6 +123,7 @@
   const isWedge = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.WedgeBar);
   const isLedRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.LedRing);
   const isMultiRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.MultiRing);
+  const isShiftLight = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.ShiftLight);
   const hasNeedle = $derived(isArc);
 
   let customUnitDraft = $derived(gaugeDef.customUnitLabel ?? '');
@@ -266,6 +274,8 @@
                   <LedRingSettings {gaugeDef} {onchange} />
                 {:else if isMultiRing}
                   <MultiRingSettings {gaugeDef} {onchange} />
+                {:else if isShiftLight}
+                  <ShiftLightSettings {gaugeDef} {onchange} />
                 {:else}
                   <p class="text-xs text-gray-500">No layout settings for this shape.</p>
                 {/if}
@@ -511,7 +521,7 @@
 
                 <!-- Color -->
                 <div class="border-t border-gray-700/30 pt-4">
-                  <ColorConfigSettings {gaugeDef} {onchange} />
+                  <ColorConfigSettings {gaugeDef} {onchange} {minValue} {maxValue} unit={entityInfo?.unit ?? ''} />
                 </div>
               </div>
             </TabItem>

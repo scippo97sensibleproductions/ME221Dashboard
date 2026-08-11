@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { computeDerived, formatDerivedValue } from '../compute';
 import { autoDetectMapping } from '../autoDetect';
 import { DerivedEntityId, defaultDerivedConfig } from '../types';
+import type { VehicleConfig as BridgeVehicleConfig } from '../../HybridBridgeTypes';
+import type { VehicleConfig as DerivedVehicleConfig } from '../types';
 
 const cfg = {
   ...defaultDerivedConfig(),
@@ -90,8 +92,7 @@ describe('computeDerived — boost', () => {
   });
 });
 
-describe('computeDerived — speed error', () => {
-  it('compares GPS against VSS when both present', () => {
+describe('computeDerived — speed error', () => {  it('compares GPS against VSS when both present', () => {
     const r = computeDerived({ entityValues: val({ '2': 55 }), config: cfg, gpsSpeedKmh: 60, gpsValid: true });
     expect(r[DerivedEntityId.SpeedError]).toBe(5);
   });
@@ -113,7 +114,65 @@ describe('computeDerived — speed error', () => {
       [DerivedEntityId.TrueSpeed]: null,
       [DerivedEntityId.Boost]: null,
       [DerivedEntityId.SpeedError]: null,
+      [DerivedEntityId.RpmToShift]: null,
     });
+  });
+});
+
+describe('computeDerived — RPM to shift countdown (R2, R14)', () => {
+  const shiftCfg = { ...cfg, shifter: { shiftPointRpm: 7000, downshiftFloorRpm: 5000 } };
+
+  it('countdown = shiftPoint − rpm', () => {
+    const r = computeDerived({ entityValues: val({ '1': 6000 }), config: shiftCfg, gpsSpeedKmh: null, gpsValid: false });
+    expect(r[DerivedEntityId.RpmToShift]).toBe(1000);
+  });
+
+  it('clamps at 0 at/above the shift point', () => {
+    const r = computeDerived({ entityValues: val({ '1': 7500 }), config: shiftCfg, gpsSpeedKmh: null, gpsValid: false });
+    expect(r[DerivedEntityId.RpmToShift]).toBe(0);
+  });
+
+  it('null when the shift point is unset or zero', () => {
+    const noShift = computeDerived({ entityValues: val({ '1': 6000 }), config: cfg, gpsSpeedKmh: null, gpsValid: false });
+    expect(noShift[DerivedEntityId.RpmToShift]).toBeNull();
+  });
+
+  it('null when RPM is null', () => {
+    const r = computeDerived({ entityValues: val({}), config: shiftCfg, gpsSpeedKmh: null, gpsValid: false });
+    expect(r[DerivedEntityId.RpmToShift]).toBeNull();
+  });
+
+  it('null when no RPM datalink is configured', () => {
+    const noRpm = { ...shiftCfg, rpmEntityId: null };
+    const r = computeDerived({ entityValues: val({ '1': 6000 }), config: noRpm, gpsSpeedKmh: null, gpsValid: false });
+    expect(r[DerivedEntityId.RpmToShift]).toBeNull();
+  });
+});
+
+describe('formatDerivedValue — shift state labels', () => {
+  it('maps −1 to DOWN, 0 to CRUISE, +1 to SHIFT', () => {
+    expect(formatDerivedValue(DerivedEntityId.ShiftState, -1)).toBe('DOWN');
+    expect(formatDerivedValue(DerivedEntityId.ShiftState, 0)).toBe('CRUISE');
+    expect(formatDerivedValue(DerivedEntityId.ShiftState, 1)).toBe('SHIFT');
+  });
+
+  it('formats null as ---', () => {
+    expect(formatDerivedValue(DerivedEntityId.ShiftState, null)).toBe('---');
+  });
+});
+
+describe('vehicle-config shape parity (single type home)', () => {
+  // Compile-time structural-equality assertion: both files must stay mutually
+  // assignable, so HybridBridgeTypes never drifts from derived/types.
+  const bridgeToDerived = (_v: BridgeVehicleConfig): DerivedVehicleConfig => _v;
+  const derivedToBridge = (_v: DerivedVehicleConfig): BridgeVehicleConfig => _v;
+
+  it('shapes are mutually assignable and carry the shifter block', () => {
+    const sample: BridgeVehicleConfig = { ...defaultDerivedConfig(), shifter: { shiftPointRpm: 7000, downshiftFloorRpm: 5000 } };
+    const asDerived = bridgeToDerived(sample);
+    expect(asDerived.shifter?.shiftPointRpm).toBe(7000);
+    const back = derivedToBridge(asDerived);
+    expect(back.shifter?.downshiftFloorRpm).toBe(5000);
   });
 });
 

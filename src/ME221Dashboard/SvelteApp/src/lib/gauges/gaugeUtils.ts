@@ -1,7 +1,8 @@
 import { GaugeShapeCategory, DigitalStyle, WedgeStyle } from './gaugeTypes';
 import type { ArcPosition, ChartOverlayLine, ColorLuts, ColorStop, GaugeDefinition, NeedleCurvePoint } from './gaugeTypes';
-import type { DataLinkWarningSetting } from '../HybridBridgeTypes';
 import type { ValueTransformStep } from './transformUtils';
+import { parseHex } from '../warnings/colorWarnings';
+import { DerivedEntityId } from '../derived/types';
 
 export function computeValueFraction(value: number, min: number, max: number): number {
   const range = max - min;
@@ -145,44 +146,31 @@ export function formatValue(
   return val.toFixed(1);
 }
 
-// ── Warning state computation ──────────────────────────────────────
-// Pre-build a Map for O(1) lookups in the hot path (replaces Array.find).
-export function buildWarningMap(settings: DataLinkWarningSetting[]): Map<number, DataLinkWarningSetting> {
-  const map = new Map<number, DataLinkWarningSetting>();
-  for (const s of settings) {
-    map.set(s.dataId, s);
-  }
-  return map;
+// ── Level visual style ──────────────────────────────────────────────
+// The gauge border/background/alert surface derived from the active
+// warning level (R11). Pure so the per-frame consumer stays testable.
+
+export interface LevelVisualStyle {
+  color: string | null;
+  border: string;
+  bg: string;
+  shadow: string;
+  ariaLabel: string | null;
 }
 
-export function computeWarningState(
-  value: number,
-  warningSettings: Map<number, DataLinkWarningSetting> | DataLinkWarningSetting[] | null,
-  entityId: number
-): 'none' | 'warning' | 'critical' {
-  if (!warningSettings) return 'none';
-  const setting = warningSettings instanceof Map
-    ? warningSettings.get(entityId)
-    : warningSettings.find(s => s.dataId === entityId);
-  if (!setting || !setting.enabled) return 'none';
-
-  const { minWarning, maxWarning } = setting;
-  const exceededMin = minWarning != null && value < minWarning;
-  const exceededMax = maxWarning != null && value > maxWarning;
-
-  if (exceededMin || exceededMax) {
-    // Determine severity: critical if value is far beyond the threshold
-    if (maxWarning != null && exceededMax) {
-      const range = maxWarning - (minWarning ?? maxWarning - 1);
-      if (value > maxWarning + range * 0.5) return 'critical';
-    }
-    if (minWarning != null && exceededMin) {
-      const range = (maxWarning ?? minWarning + 1) - minWarning;
-      if (value < minWarning - range * 0.5) return 'critical';
-    }
-    return 'warning';
+export function levelVisualStyle(color: string | null, levelName: string | null, gaugeName: string): LevelVisualStyle {
+  if (!color) {
+    return { color: null, border: 'none', bg: 'transparent', shadow: 'none', ariaLabel: null };
   }
-  return 'none';
+  const rgb = parseHex(color);
+  const rgba = rgb ? `${rgb.r}, ${rgb.g}, ${rgb.b}` : null;
+  return {
+    color,
+    border: `2px solid ${color}`,
+    bg: rgba ? `rgba(${rgba}, 0.08)` : 'transparent',
+    shadow: `0 0 12px ${color}4d, inset 0 0 20px ${rgba ? `rgba(${rgba}, 0.05)` : 'transparent'}`,
+    ariaLabel: levelName ? `${gaugeName}: ${levelName}` : null,
+  };
 }
 
 // ── GaugeConfigEntry → GaugeDefinition mapping ─────────────────────
@@ -281,6 +269,10 @@ export function toGaugeDefinition(
     peakHoldAutoResetSec?: number;
     wedgeSegmentCount?: number;
     wedgeRedlineStart?: number;
+    rampWidthRpm?: number;
+    shiftPoint?: number | null;
+    rpmEntityId?: number | null;
+    zoneCount?: number;
     chartOverlays?: ChartOverlayLine[];
     overlayPillPosition?: number;
     overlayFontScale?: number;
@@ -353,7 +345,12 @@ export function toGaugeDefinition(
     warningState: 'none',
     showHistogram: config.showHistogram ?? false,
     zIndex: config.zIndex ?? 0,
-    linkedEntities: config.linkedEntities ?? [],
+    // Shift-light: the linked shift-state entity is derived from entityId (−3005 ⇔ −3006,
+    // KTD5) with no persisted field — a deliberate deviation from MultiRing's stored
+    // linkedEntities precedent, because the pair is fixed by the feature.
+    linkedEntities: config.shapeCategory === GaugeShapeCategory.ShiftLight
+      ? [{ entityId: config.entityId === DerivedEntityId.ShiftState ? DerivedEntityId.RpmToShift : DerivedEntityId.ShiftState, color: '#E81123' }]
+      : config.linkedEntities ?? [],
     // Gauge customization v2 defaults — each reproduces today's rendering (AE1)
     tickCount: clampInt(config.tickCount ?? 3, 0, 20),
     tickLabels: config.tickLabels ?? false,
@@ -380,7 +377,14 @@ export function toGaugeDefinition(
     minDigitCount: clampInt(config.minDigitCount ?? 0, 0, 12),
     rollAnimation: config.rollAnimation ?? false,
     rollSpeedMs: clamp(config.rollSpeedMs ?? 300, 50, 2000),
-    segmentCount: clampInt(config.segmentCount ?? 36, 4, 120),
+    // LedRing defaults to 36 segments, the shift-light bar to 16 — a shared
+    // field, so the default is category-aware to keep legacy dashboards
+    // identical (AE1) while the shift light stays fine-grained.
+    segmentCount: clampInt(
+      config.segmentCount ?? (config.shapeCategory === GaugeShapeCategory.ShiftLight ? 16 : 36),
+      config.shapeCategory === GaugeShapeCategory.ShiftLight ? 3 : 4,
+      config.shapeCategory === GaugeShapeCategory.ShiftLight ? 48 : 120
+    ),
     segmentGap: clamp01(config.segmentGap ?? 0),
     ringStartAngle: clamp(config.ringStartAngle ?? 0, -360, 360),
     // LedRing defaults to 360°, MultiRing to 270° — a shared field, so the
@@ -395,6 +399,14 @@ export function toGaugeDefinition(
     peakHoldAutoResetSec: clamp(config.peakHoldAutoResetSec ?? 0, 0, 3600),
     wedgeSegmentCount: clampInt(config.wedgeSegmentCount ?? 32, 4, 96),
     wedgeRedlineStart: clamp01(config.wedgeRedlineStart ?? 0.8),
+    // Shift-light: 1500 rpm before the shift point the first segment lights (R13)
+    rampWidthRpm: clamp(config.rampWidthRpm ?? 1500, 0, 9000),
+    // Shift-light: color-zone count (1..3) for the bar's zone coloring.
+    zoneCount: clampInt(config.zoneCount ?? 3, 1, 3),
+    // Shift-light enrichment pass-through (U2): per-dashboard shift point + RPM
+    // datalink, consumed by the renderer; absent for every other category.
+    shiftPoint: config.shapeCategory === GaugeShapeCategory.ShiftLight ? (config.shiftPoint ?? null) : undefined,
+    rpmEntityId: config.shapeCategory === GaugeShapeCategory.ShiftLight ? (config.rpmEntityId ?? null) : undefined,
     chartOverlays: (config.chartOverlays ?? []).slice(0, 5),
     overlayPillPosition: enumOr(config.overlayPillPosition, 0, 3),
     overlayFontScale: clamp(config.overlayFontScale ?? 1, 0.5, 2),
@@ -517,12 +529,22 @@ export function toSavePayload(def: {
   peakHoldAutoResetSec?: number;
   wedgeSegmentCount?: number;
   wedgeRedlineStart?: number;
+  rampWidthRpm?: number;
+  zoneCount?: number;
   chartOverlays?: ChartOverlayLine[];
   overlayPillPosition?: number;
   overlayFontScale?: number;
   chartLineStyle?: number;
   chartBackgroundColor?: string;
 }) {
+  // Shift-light: copied unconditionally so a clamp back to the 1500 default
+  // survives the C# whitelist (absent key = "don't touch"); other categories
+  // keep omit-when-non-default so legacy payloads stay byte-identical.
+  const rampWidth = def.shapeCategory === GaugeShapeCategory.ShiftLight
+    ? { rampWidthRpm: def.rampWidthRpm ?? 1500 }
+    : def.rampWidthRpm !== undefined && def.rampWidthRpm !== 1500
+      ? { rampWidthRpm: def.rampWidthRpm }
+      : {};
   return {
     entityId: def.entityId,
     fractionX: def.fractionX,
@@ -614,11 +636,13 @@ export function toSavePayload(def: {
     peakHoldAutoResetSec: def.peakHoldAutoResetSec,
     wedgeSegmentCount: def.wedgeSegmentCount,
     wedgeRedlineStart: def.wedgeRedlineStart,
+    zoneCount: def.zoneCount,
     chartOverlays: def.chartOverlays,
     overlayPillPosition: def.overlayPillPosition,
     overlayFontScale: def.overlayFontScale,
     chartLineStyle: def.chartLineStyle,
     chartBackgroundColor: def.chartBackgroundColor,
+    ...rampWidth,
   };
 }
 
@@ -628,6 +652,17 @@ export function toSavePayload(def: {
 // ── Visual content size estimation ──────────────────────────────────
 // Returns the actual rendered bounding-box dimensions for a gauge,
 // so the container can be sized to match instead of leaving dead space.
+/**
+ * MultiRing font scaling is NOT capped at 2x like the other gauges: the
+ * Font Scale slider (0.5–10) keeps scaling past 2.0, and the gauge box grows
+ * with the text so the dashboard wrap box (drag/clamp area) always fits the
+ * text. 1.0 → box unchanged; 2.0 → 1.1x; 10 → ~2x.
+ */
+export function multiRingBoxScale(fontSizeScale?: number): number {
+  const fs = Math.max(0.5, Math.min(10, fontSizeScale ?? 1.0));
+  return 1 + 0.1 * (fs - 1);
+}
+
 export function estimateVisualSize(
   category: GaugeShapeCategory,
   designPxW: number,
@@ -652,15 +687,10 @@ export function estimateVisualSize(
     return { w: arcBox, h: arcBox };
   }
 
-  if (category === GaugeShapeCategory.Bar) {
-    return { w: designPxW, h: designPxH };
-  }
-
-  if (category === GaugeShapeCategory.Chart) {
-    return { w: designPxW, h: designPxH };
-  }
-
-  if (category === GaugeShapeCategory.WedgeBar) {
+  if (category === GaugeShapeCategory.Bar
+    || category === GaugeShapeCategory.Chart
+    || category === GaugeShapeCategory.WedgeBar
+    || category === GaugeShapeCategory.ShiftLight) {
     return { w: designPxW, h: designPxH };
   }
 
@@ -671,7 +701,8 @@ export function estimateVisualSize(
 
   if (category === GaugeShapeCategory.MultiRing) {
     const ringD = Math.min(designPxW, designPxH);
-    return { w: ringD, h: ringD };
+    const grow = Math.round(ringD * multiRingBoxScale(opts.fontSizeScale));
+    return { w: grow, h: grow };
   }
 
   if (category === GaugeShapeCategory.Digital) {

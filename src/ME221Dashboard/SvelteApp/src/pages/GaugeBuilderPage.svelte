@@ -40,6 +40,7 @@
     { type: GaugeShapeCategory.WedgeBar, name: 'Wedge', icon: '◧', color: '#F59F00', desc: 'Fiat Uno wedge bar', maxEnt: 1 },
     { type: GaugeShapeCategory.LedRing, name: 'LED Ring', icon: '◉', color: '#6B2C91', desc: 'Circular LED segments', maxEnt: 1 },
     { type: GaugeShapeCategory.MultiRing, name: 'Multi-Ring', icon: '◎+', color: '#FFB900', desc: 'Concentric arcs', maxEnt: 5 },
+    { type: GaugeShapeCategory.ShiftLight, name: 'Shift Light', icon: '▮', color: '#E81123', desc: 'RPM shift-point LED bar', maxEnt: 1 },
   ];
 
   const RING_COLORS = ['#0078D7', '#107C10', '#F59F00', '#E81123', '#6B2C91'];

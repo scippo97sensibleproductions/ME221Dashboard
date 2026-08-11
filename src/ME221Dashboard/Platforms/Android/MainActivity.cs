@@ -4,6 +4,10 @@ using Android.Content.PM;
 using Android.Hardware.Usb;
 using Android.OS;
 using Android.Views;
+using AndroidX.Activity;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.ApplicationModel;
+using ME221Dashboard.Services;
 
 namespace ME221Dashboard;
 
@@ -16,6 +20,8 @@ public class MainActivity : MauiAppCompatActivity
 {
     public static MainActivity? Instance { get; private set; }
 
+    private static AndroidBackCallback? s_backCallback;
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
@@ -25,6 +31,35 @@ public class MainActivity : MauiAppCompatActivity
         // automatically ignored when the window loses visibility, so the
         // screen can still sleep normally when the app is backgrounded.
         Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
+
+        // Dirty-form gate leg (U8): forward Android back presses to the Svelte
+        // app, which decides between the dirty dialog and the router's back
+        // navigation. The legacy OnBackPressed override is deprecated and a
+        // no-op on API 35+ targets, so the dispatcher path is required.
+        // Disabled by default: the Svelte side enables it only while the dirty
+        // gate is armed or a back-capable sub-page is mounted (the bridge
+        // method SetBackInterceptionEnabled), so back at the root exits the
+        // app normally and pre-mount presses are never swallowed.
+        s_backCallback = new AndroidBackCallback();
+        OnBackPressedDispatcher.AddCallback(this, s_backCallback);
+    }
+
+    /// <summary>Enable/disable back interception (called from the JS bridge).</summary>
+    public static void SetBackInterceptionEnabled(bool enabled)
+    {
+        if (s_backCallback != null)
+            s_backCallback.Enabled = enabled;
+    }
+
+    private sealed class AndroidBackCallback : OnBackPressedCallback
+    {
+        public AndroidBackCallback() : base(false) { }
+
+        public override void HandleOnBackPressed()
+        {
+            var bridge = IPlatformApplication.Current?.Services?.GetService<HybridBridgeService>();
+            bridge?.SendAndroidBack();
+        }
     }
 
     protected override void OnNewIntent(Intent? intent)

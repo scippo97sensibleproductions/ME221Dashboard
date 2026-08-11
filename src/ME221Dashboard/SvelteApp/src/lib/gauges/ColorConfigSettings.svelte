@@ -2,13 +2,32 @@
   import type { GaugeConfigEntry } from '../HybridBridge';
   import { DEFAULT_COLOR_STOPS } from './types';
 
-  let { gaugeDef, onchange }: {
+  let { gaugeDef, onchange, minValue = 0, maxValue = 10000, unit = '' }: {
     gaugeDef: GaugeConfigEntry;
     onchange: (def: GaugeConfigEntry) => void;
+    /** Entity value range — the percentage is a position within this range. */
+    minValue?: number;
+    maxValue?: number;
+    unit?: string;
   } = $props();
 
   const stops = $derived(gaugeDef.colorStops?.length ? gaugeDef.colorStops : DEFAULT_COLOR_STOPS);
   const hysteresis = $derived(gaugeDef.colorHysteresis ?? 0.03);
+
+  const range = $derived(maxValue - minValue > 0 ? maxValue - minValue : 1);
+
+  // A stop's percentage = where it sits between the gauge's min and max value.
+  function valueAtFraction(fraction: number): number {
+    return minValue + fraction * range;
+  }
+  function fractionAtValue(value: number): number {
+    return Math.max(0, Math.min(1, (value - minValue) / range));
+  }
+
+  // Format like the gauge does: whole numbers stay whole, decimals get 1 digit.
+  function formatStopValue(v: number): string {
+    return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '');
+  }
 
   function setStopColor(idx: number, hex: string) {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -20,6 +39,11 @@
 
   function setStopFraction(idx: number, pct: number) {
     const updated = stops.map((s, i) => i === idx ? { ...s, fraction: Math.max(0, Math.min(1, pct / 100)) } : s);
+    onchange({ ...gaugeDef, colorStops: updated });
+  }
+
+  function setStopValue(idx: number, value: number) {
+    const updated = stops.map((s, i) => i === idx ? { ...s, fraction: fractionAtValue(value) } : s);
     onchange({ ...gaugeDef, colorStops: updated });
   }
 
@@ -54,7 +78,10 @@
 
   <!-- Header -->
   <div class="flex items-center justify-between">
-    <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Color Stops</p>
+    <div>
+      <p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Color Stops</p>
+      <p class="text-[9px] text-gray-600">Each stop is a position between the min and max value</p>
+    </div>
     <div class="flex gap-1.5">
       <button
         class="rounded-md px-2 py-1 text-[10px] font-medium transition-colors text-gray-500 hover:text-gray-300"
@@ -69,9 +96,15 @@
 
   <!-- Gradient preview -->
   <div class="h-3 rounded-full border border-gray-700/50" style="background: linear-gradient(to right, {previewStops()})"></div>
+  <div class="flex justify-between -mt-1 text-[9px] font-mono text-gray-600">
+    <span>{formatStopValue(minValue)}{unit ? ` ${unit}` : ''}</span>
+    <span>{formatStopValue(maxValue)}{unit ? ` ${unit}` : ''}</span>
+  </div>
 
   <!-- Stops -->
   {#each stops as stop, idx (idx)}
+    {@const stopValue = valueAtFraction(stop.fraction)}
+    {@const stopValueText = formatStopValue(stopValue)}
     <div class="flex items-center gap-2.5">
       <!-- Color picker -->
       <input
@@ -80,10 +113,20 @@
         onchange={(e) => setStopColor(idx, (e.target as HTMLInputElement).value)}
         class="h-8 w-8 shrink-0 cursor-pointer rounded-md border border-gray-700 bg-transparent p-0"
       />
-      <!-- Fraction slider -->
+      <!-- Value + fraction slider -->
       <div class="flex-1 min-w-0">
         <div class="flex items-center justify-between mb-0.5">
-          <span class="text-[10px] font-mono text-gray-400">{Math.round(stop.fraction * 100)}%</span>
+          <input
+            type="number"
+            value={stopValueText}
+            onchange={(e) => {
+              const v = parseFloat((e.target as HTMLInputElement).value);
+              if (!isNaN(v)) setStopValue(idx, v);
+            }}
+            title="Value at this color stop"
+            class="w-20 rounded border border-gray-700 bg-gray-800/60 px-1.5 py-0.5 text-[11px] font-mono text-gray-300 outline-none focus:border-cyan-500/50"
+          />
+          <span class="text-[10px] font-mono text-gray-400">{unit ? `${unit} · ` : ''}{Math.round(stop.fraction * 100)}%</span>
           {#if stops.length > 2}
             <button
               class="text-[10px] text-gray-600 hover:text-red-400 transition-colors"

@@ -4,24 +4,47 @@
   import GaugeCard from '../lib/gauges/GaugeCard.svelte';
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
-  import type { DataLinkWarningSetting } from '../lib/HybridBridgeTypes';
-  import { liveDataStore } from '../lib/stores/LiveDataStore.svelte';
-  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, computeWarningState, buildWarningMap, type ValueTransformStep } from '../lib/gauges/types';
+  import { liveDataStore, STALE_MS } from '../lib/stores/LiveDataStore.svelte';
+  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, type ValueTransformStep } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
+  import { warningEvaluator } from '../lib/stores/warningEvaluator';
   import { pushSample, type ChartSample } from '../lib/gauges/chartDataUtils';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
   import { computeDerived, type ComputationInputs, type ComputationResult } from '../lib/derived/compute';
-  import { DERIVED_ENTITIES } from '../lib/derived/types';
+  import { shiftEvaluator, type ShiftRuntimeConfig } from '../lib/shift/shiftEvaluator';
+  import { DERIVED_ENTITIES, DerivedEntityId } from '../lib/derived/types';
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
   import TableWidget from '../lib/tables/TableWidget.svelte';
   import TableSettingsModal from '../lib/tables/TableSettingsModal.svelte';
   import AddGaugePopup from '../lib/AddGaugePopup.svelte';
+  import WarningPanel from '../lib/WarningPanel.svelte';
+  import { navigationGate } from '../lib/navigationGate.svelte';
+  import { warningStore } from '../lib/stores/warningStore.svelte';
 
-  let { dashboardName, onNavigate, gpsLocation }: {
+  let { dashboardName, onNavigate, gpsLocation, toastDataId = null, onToastDataIdHandled = () => {} }: {
     dashboardName: string;
     onNavigate: (page: string, params?: Record<string, unknown>) => void;
     gpsLocation: GpsLocation | null;
+    toastDataId?: number | null;
+    onToastDataIdHandled?: () => void;
   } = $props();
+
+  const gaugeSettingsModal = navigationGate.registerModal('gaugeSettings');
+
+  $effect(() => {
+    if (settingsOpen) gaugeSettingsModal.open();
+    else gaugeSettingsModal.close();
+  });
+
+  $effect(() => {
+    if (toastDataId != null) {
+      warningStore.openPanel();
+      queueMicrotask(() => {
+        document.getElementById(`warning-row-${toastDataId}`)?.scrollIntoView({ block: 'center' });
+      });
+      onToastDataIdHandled();
+    }
+  });
 
   let containerEl = $state<HTMLDivElement | null>(null);
   let gaugeDefs = $state<GaugeConfigEntry[]>([]);
@@ -55,7 +78,6 @@
   let loaded = $state(false);
   let loadError = $state<string | null>(null);
   let backgroundImageDataUrl = $state<string | null>(null);
-  let warningMap = $state<Map<number, DataLinkWarningSetting> | null>(null);
   let useLambdaMode = $state(false);
   let stoichAfr = $state(14.7);
 
@@ -67,6 +89,12 @@
   const GPS_COURSE = -1005;
   const GPS_ACC = -1006;
   const ODOMETER = -2001;
+  const SHIFT_TICK_MS = 150;
+
+  // Per-dashboard shifter payload (U1 flip): loaded on mount, fed to the tick and
+  // the shift-light static-config enrichment. Until it resolves the tick emits
+  // null for both entities (R14).
+  let shiftPayload = $state<ShiftRuntimeConfig | null>(null);
 
   // Inject GPS values into entityValues when GPS updates.
   // Also update gaugeStates in place for zero-GC rendering.
@@ -154,9 +182,11 @@
       const config = await loadDerivedConfig();
       if (!config.enabled) return;
 
-      // Fingerprint: only recompute if inputs actually changed
+      // Fingerprint: only recompute if inputs actually changed. The shifter block
+      // is part of the fingerprint so a live shift-point edit recomputes the
+      // countdown without RPM movement (KTD4).
       const gpsSpeed = gpsLocation?.speed != null ? gpsLocation.speed * 3.6 : null;
-      const fp = `${config.rpmEntityId}:${entityValues[String(config.rpmEntityId)] ?? ''}|${config.vssSpeedEntityId}:${entityValues[String(config.vssSpeedEntityId)] ?? ''}|${config.mapEntityId}:${entityValues[String(config.mapEntityId)] ?? ''}|${config.baroEntityId}:${entityValues[String(config.baroEntityId)] ?? ''}|${config.gearEntityId}:${entityValues[String(config.gearEntityId)] ?? ''}|${gpsSpeed ?? ''}`;
+      const fp = `${config.rpmEntityId}:${entityValues[String(config.rpmEntityId)] ?? ''}|${config.vssSpeedEntityId}:${entityValues[String(config.vssSpeedEntityId)] ?? ''}|${config.mapEntityId}:${entityValues[String(config.mapEntityId)] ?? ''}|${config.baroEntityId}:${entityValues[String(config.baroEntityId)] ?? ''}|${config.gearEntityId}:${entityValues[String(config.gearEntityId)] ?? ''}|${gpsSpeed ?? ''}|${config.shifter?.shiftPointRpm ?? ''}:${config.shifter?.downshiftFloorRpm ?? ''}`;
       if (fp === _lastDerivedFingerprint) return;
       _lastDerivedFingerprint = fp;
 
@@ -169,6 +199,54 @@
       const result = computeDerived(inputs);
       injectDerived(result);
     }, 20);
+  }
+
+  // ── Shift-light tick (KTD4) ─────────────────────────────────────────────
+  // The shift-state machine needs wall-clock behavior (3 s hold, staleness
+  // reset) and runs on its own fixed-rate tick, independent of the
+  // fingerprint-gated recompute path. The tick is the sole staleness
+  // authority: on stale/no-input it emits null for BOTH entities in the same
+  // tick, so countdown and shift-state go inert together (R14/R16).
+  // The tick deliberately ignores the vehicle-config `enabled` flag: −3005/−3006
+  // are a standalone shift advisor (config-surface driven), not a vehicle
+  // geometry calc — they keep working even when `enabled` is off.
+  let _shiftTickTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startShiftTick() {
+    stopShiftTick();
+    _shiftTickTimer = setInterval(() => {
+      const now = performance.now();
+      const stale = now - liveDataStore.lastUpdateAt > STALE_MS;
+      const result = shiftEvaluator.step(now, entityValues, shiftPayload, stale);
+      writeShiftEntity(DerivedEntityId.RpmToShift, result.countdown);
+      writeShiftEntity(DerivedEntityId.ShiftState, result.state);
+    }, SHIFT_TICK_MS);
+  }
+
+  function stopShiftTick() {
+    if (_shiftTickTimer !== null) {
+      clearInterval(_shiftTickTimer);
+      _shiftTickTimer = null;
+    }
+  }
+
+  function writeShiftEntity(entityId: number, value: number | null) {
+    const key = String(entityId);
+    if (entityValues[key] === value) return;
+    entityValues[key] = value;
+    updateGaugeValue(entityId, value);
+  }
+
+  function loadShiftPayload() {
+    HybridBridge.getVehicleConfig().then(vc => {
+      shiftPayload = {
+        shiftPointRpm: vc.shifter?.shiftPointRpm ?? 0,
+        downshiftFloorRpm: vc.shifter?.downshiftFloorRpm ?? 0,
+        rpmEntityId: vc.rpmEntityId,
+      };
+    }).catch(() => {
+      shiftPayload = null;
+    });
   }
 
   // Settings modal state
@@ -218,8 +296,15 @@
       return { ...le, name: info?.name, unit: info?.unit, minValue: info?.minValue, maxValue: info?.maxValue };
     });
 
+    // Enrich shift-light gauges with the per-dashboard shift point + RPM datalink
+    // (mirrors the per-category linked-entities enrichment); the renderer (U5)
+    // consumes these as its bounds and raw source.
+    const shiftLight = def.shapeCategory === GaugeShapeCategory.ShiftLight
+      ? { shiftPoint: shiftPayload?.shiftPointRpm ?? null, rpmEntityId: shiftPayload?.rpmEntityId ?? null }
+      : {};
+
     return {
-      config: { ...def, needleCurve, linkedEntities },
+      config: { ...def, needleCurve, linkedEntities, ...shiftLight },
       entityIdStr: String(def.entityId),
       name,
       unit,
@@ -294,6 +379,9 @@
         fractionY: sc.config.fractionY,
         transformSteps: sc.transformSteps,
         warningState: 'none',
+        warningLevelName: null,
+        warningLevelColor: null,
+        warningCvdFlag: false,
       });
       idxMap.set(sc.config.entityId, i);
       // Seed smoothed value with current raw value
@@ -400,7 +488,6 @@
       if (gaugeStates.length === 0) return;
       const states = gaugeStates;
       const v = entityValues;
-      const ws = warningMap;
       for (let i = 0; i < states.length; i++) {
         const g = states[i];
         const rawKv = v[g.entityId];
@@ -410,7 +497,12 @@
           g.value = val;
           g.formattedValue = formatValue(val, g.name, g.unit, useLambdaMode, stoichAfr, g.lowerName, g.lowerUnit);
         }
-        g.warningState = computeWarningState(val, ws, g.entityId);
+        // Warning state fed by the shared evaluator (raw scale, R11)
+        const ws = warningEvaluator.getState(g.entityId);
+        g.warningState = ws.activeLevelId ?? 'none';
+        g.warningLevelName = ws.activeLevelName;
+        g.warningLevelColor = ws.activeLevelColor;
+        g.warningCvdFlag = ws.hasCvdConfusablePair;
         // Push to history buffer for histograms
         if (g.showHistogram) {
           let buf = gaugeValueHistory.get(g.entityId);
@@ -890,23 +982,24 @@
     loadRealConfig();
     const od = liveDataStore.odometer;
     if (od != null) entityValues[String(ODOMETER)] = od;
-    HybridBridge.getWarningSettings().then(s => {
-      warningMap = s ? buildWarningMap(s) : null;
-    }).catch(() => {});
     HybridBridge.getLambdaSettings().then(s => {
       useLambdaMode = s.useLambdaMode;
       stoichAfr = s.stoichAfr;
     }).catch(() => {});
+    loadShiftPayload();
+    startShiftTick();
   });
 
   onDestroy(() => {
     if (layoutDirty) persistLayout();
     if (saveTimer) clearTimeout(saveTimer);
     if (resizeObserver) resizeObserver.disconnect();
+    stopShiftTick();
   });
 </script>
 
 <div class="relative flex h-full w-full items-center justify-center select-none" role="application" aria-label="Dashboard">
+  <WarningPanel {dashboardName} page="dashboard" />
   {#if loadError}
     <div class="flex h-full w-full flex-col items-center justify-center gap-2">
       <p class="text-sm text-red-400">Failed to load dashboard</p>

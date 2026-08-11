@@ -5,6 +5,8 @@ export enum DerivedEntityId {
   TrueSpeed = -3002,
   Boost = -3003,
   SpeedError = -3004,
+  RpmToShift = -3005,
+  ShiftState = -3006,
 }
 
 export const DERIVED_ENTITIES: Record<number, { name: string; unit: string; minValue: number; maxValue: number; decimalPlaces: number }> = {
@@ -12,7 +14,14 @@ export const DERIVED_ENTITIES: Record<number, { name: string; unit: string; minV
   [DerivedEntityId.TrueSpeed]: { name: 'True Speed',     unit: 'km/h', minValue: 0,  maxValue: 400, decimalPlaces: 1 },
   [DerivedEntityId.Boost]:     { name: 'Boost Pressure', unit: 'kPa',  minValue: 0,  maxValue: 400, decimalPlaces: 1 },
   [DerivedEntityId.SpeedError]:{ name: 'Speed Error',    unit: 'km/h', minValue: -50, maxValue: 50, decimalPlaces: 1 },
+  [DerivedEntityId.RpmToShift]:{ name: 'RPM to Shift',   unit: 'rpm',  minValue: 0,  maxValue: 9000, decimalPlaces: 1 },
+  [DerivedEntityId.ShiftState]:{ name: 'Shift State',    unit: '',     minValue: -1, maxValue: 1, decimalPlaces: 0 },
 };
+
+export interface ShifterConfig {
+  shiftPointRpm: number;
+  downshiftFloorRpm: number;
+}
 
 export interface VehicleConfig {
   enabled: boolean;
@@ -25,6 +34,7 @@ export interface VehicleConfig {
   mapEntityId: number | null;
   baroEntityId: number | null;
   gearEntityId: number | null;
+  shifter?: ShifterConfig;
 }
 
 export function defaultDerivedConfig(): VehicleConfig {
@@ -39,5 +49,6 @@ export function defaultDerivedConfig(): VehicleConfig {
     mapEntityId: null,
     baroEntityId: null,
     gearEntityId: null,
+    shifter: { shiftPointRpm: 0, downshiftFloorRpm: 0 },
   };
 }

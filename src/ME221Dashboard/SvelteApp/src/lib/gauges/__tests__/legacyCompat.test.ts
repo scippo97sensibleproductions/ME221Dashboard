@@ -60,6 +60,7 @@ const DEFAULT_ASSERTIONS: Array<[keyof ReturnType<typeof toGaugeDefinition>, unk
   ['peakHoldAutoResetSec', 0],
   ['wedgeSegmentCount', 32],
   ['wedgeRedlineStart', 0.8],
+  ['rampWidthRpm', 1500],
   ['overlayPillPosition', 0],
   ['overlayFontScale', 1],
   ['chartLineStyle', 0],

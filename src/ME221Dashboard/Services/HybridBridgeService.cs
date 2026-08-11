@@ -55,6 +55,8 @@ public partial class HybridBridgeService : IDisposable
         [-3002] = ("True Speed", "km/h", 0, 400),
         [-3003] = ("Boost Pressure", "kPa", 0, 400),
         [-3004] = ("Speed Error", "km/h", -50, 50),
+        [-3005] = ("RPM to Shift", "rpm", 0, 9000),
+        [-3006] = ("Shift State", "", -1, 1),
     };
 
     private const int OdometerEntityId = -2001;
@@ -68,6 +70,7 @@ public partial class HybridBridgeService : IDisposable
     internal readonly LogCapture _logCapture;
     internal readonly IChannelFactory? _channelFactory;
     internal readonly IUpdateCheckerService? _updateChecker;
+    internal AppLifecycleBridge? _lifecycleBridge;
     internal HybridWebView? _webView;
 
     internal readonly Dictionary<int, string> _entityIdStrings = new();
@@ -79,6 +82,8 @@ public partial class HybridBridgeService : IDisposable
     internal long _lastGpsTimestamp;
     internal long _lastVssTimestamp;
     internal readonly Dictionary<string, OdometerConfig> _odometerByDashboard = new();
+    private bool _vehicleMigrationComplete;
+    private readonly SemaphoreSlim _vehicleMigrationLock = new(1, 1);
 
     public HybridBridgeService(
         IEcuConnectionService connection,
@@ -124,6 +129,50 @@ public partial class HybridBridgeService : IDisposable
             _webView?.SendRawMessage(json);
             return Task.CompletedTask;
         }));
+    }
+
+    /// <summary>
+    /// Lazy, idempotent one-time migration guard (KTD3): copies the legacy global vehicle
+    /// config into the hidden seed template exactly once, materializes the seed into the
+    /// active dashboard's Vehicle when null, and saves. The flag is set only after the
+    /// seed copy and materialization complete, so a failed migration is retried on the
+    /// next first-bridge-call; the seed template itself is only written when absent, so
+    /// an already-migrated seed survives across sessions. When no config exists on disk
+    /// yet (fresh install), the flag stays false so the migration runs once the first
+    /// config appears. Serialized with a lock: concurrent first bridge calls cannot do
+    /// read-modify-write on independently deserialized config copies.
+    /// </summary>
+    internal async Task EnsureVehicleMigrationAsync()
+    {
+        if (_vehicleMigrationComplete) return;
+        await _vehicleMigrationLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_vehicleMigrationComplete) return;
+            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            if (config != null)
+            {
+                if (config.VehicleSeedTemplate == null)
+                {
+                    var seed = VehicleConfigMigration.ResolveSeed(config);
+                    config.VehicleSeedTemplate = seed;
+                    _logger.LogInformation("[VEHCFG] Migration: seed template captured (fd={FD})", seed.FinalDriveRatio);
+                }
+
+                var name = _activeDashboardName ?? config.ActiveDashboard ?? "default";
+                VehicleConfigMigration.MaterializeSeed(config, config.VehicleSeedTemplate, name);
+                await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+                _vehicleMigrationComplete = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[VEHCFG] Migration failed; will retry on the next first-bridge-call");
+        }
+        finally
+        {
+            _vehicleMigrationLock.Release();
+        }
     }
 
     private void SendLiveUpdate()
@@ -240,6 +289,40 @@ public partial class HybridBridgeService : IDisposable
         {
             _logger.LogError(ex, "Failed to send message to React");
         }
+    }
+
+    /// <summary>
+    /// Send a lifecycle event (appBackgrounded / appForegrounded / calibrationLoaded) to the Svelte app.
+    /// </summary>
+    public void SendLifecycleEvent(string eventName)
+    {
+        SendToReact(new { @event = eventName });
+    }
+
+    /// <summary>
+    /// Forward an Android back press to the Svelte app (U8 dirty-form gate leg).
+    /// The app decides between the dirty dialog and the router's back navigation.
+    /// Called from the MainActivity OnBackPressedDispatcher callback.
+    /// </summary>
+    public void SendAndroidBack()
+    {
+        SendToReact(new { @event = "androidBack" });
+    }
+
+    /// <summary>
+    /// Called from JS: window.HybridWebView.InvokeDotNet('SetBackInterceptionEnabled', [json])
+    /// Enables/disables the Android OnBackPressed callback. The callback is only enabled
+    /// while the Svelte app actually handles back (dirty gate armed, or a back-capable
+    /// sub-page mounted); otherwise the system default applies, so back at the root exits
+    /// the app normally and pre-JS-mount presses are never swallowed.
+    /// </summary>
+    public Task<string> SetBackInterceptionEnabled(string json)
+    {
+        var enabled = System.Text.Json.Nodes.JsonNode.Parse(json)?["enabled"]?.GetValue<bool>() ?? false;
+#if ANDROID
+        MainActivity.SetBackInterceptionEnabled(enabled);
+#endif
+        return Task.FromResult(JsonSerializer.Serialize(new { success = true }));
     }
 
     /// <summary>

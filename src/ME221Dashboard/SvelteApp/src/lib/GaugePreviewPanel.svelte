@@ -1,9 +1,12 @@
 <script lang="ts">
   import { GaugeShapeCategory, toGaugeDefinition, formatValue } from './gauges/types';
+  import { multiRingBoxScale } from './gauges/gaugeUtils';
   import type { GaugeConfigEntry, EntityInfo } from './HybridBridge';
+  import { DerivedEntityId, DERIVED_ENTITIES } from './derived/types';
   import GaugeCard from './gauges/GaugeCard.svelte';
   import NumberInput from './NumberInput.svelte';
   import { deviceMode } from './stores/deviceMode.svelte';
+  import { liveDataStore } from './stores/LiveDataStore.svelte';
   import { IconZoomIn, IconZoomOut, IconRotate, IconChevronDown } from '@tabler/icons-svelte';
 
   let { gaugeDef, gaugeName, entityInfo, testValue, onTestValueChange }: {
@@ -14,9 +17,21 @@
     onTestValueChange: (v: number | null) => void;
   } = $props();
 
-  const minValue = $derived(entityInfo?.minValue ?? 0);
-  const maxValue = $derived(entityInfo?.maxValue ?? 10000);
-  const liveValue = $derived(entityInfo ? ((entityInfo.minValue ?? 0) + (entityInfo.maxValue ?? 10000)) / 2 : 5000);
+  const isShiftLight = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.ShiftLight);
+
+  // Shift-light preview: the test value is treated as RPM, so the slider spans
+  // the derived "RPM to Shift" entity range (0..9000) regardless of the gauge's
+  // own bound entity, and the default sits mid-ramp so the bar shows a fill.
+  const shiftLightInfo = $derived(DERIVED_ENTITIES[DerivedEntityId.RpmToShift] ?? null);
+  const minValue = $derived(isShiftLight && shiftLightInfo ? shiftLightInfo.minValue : (entityInfo?.minValue ?? 0));
+  const maxValue = $derived(isShiftLight && shiftLightInfo ? shiftLightInfo.maxValue : (entityInfo?.maxValue ?? 10000));
+  const previewUnit = $derived(isShiftLight && shiftLightInfo ? shiftLightInfo.unit : (entityInfo?.unit ?? ''));
+  const liveValue = $derived(isShiftLight
+    ? (gaugeDef.shiftPoint ?? 0) > 0
+      ? Math.max(0, (gaugeDef.shiftPoint ?? 0) - (gaugeDef.rampWidthRpm ?? 1500) / 2)
+      : 4500
+    : (liveDataStore.values[String(gaugeDef.entityId)]
+      ?? (entityInfo ? ((entityInfo.minValue ?? 0) + (entityInfo.maxValue ?? 10000)) / 2 : 5000)));
   const useTestValue = $derived(testValue !== null);
   const previewValue = $derived(testValue ?? liveValue);
 
@@ -33,6 +48,17 @@
 
   const isBar = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Bar);
   const isDigital = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.Digital);
+  const isMultiRing = $derived(gaugeDef.shapeCategory === GaugeShapeCategory.MultiRing);
+
+  // MultiRing text scales past 2x and its SVG grows with the font scale —
+  // the preview box must grow with it or the larger text gets clipped.
+  const previewBoxPx = $derived(isMultiRing
+    ? Math.round(previewArcPx * multiRingBoxScale(gaugeDef.fontSizeScale))
+    : previewArcPx);
+
+  // Decimal-friendly slider: step sized to the value range (1/1000th), so
+  // fractional values (14.7 AFR, 96.5 kPa…) can be dialed in the preview.
+  const sliderStep = $derived(Math.max(0.001, (maxValue - minValue) / 1000));
 
   // Pass the FULL config through toGaugeDefinition (not a hand-picked subset)
   // so the preview matches the dashboard: textures, linkedEntities, needle shape,
@@ -47,9 +73,9 @@
     },
     {
       name: gaugeName,
-      unit: entityInfo?.unit ?? '',
+      unit: previewUnit,
       value: previewValue,
-      formattedValue: formatValue(previewValue, gaugeName, entityInfo?.unit ?? ''),
+      formattedValue: formatValue(previewValue, gaugeName, previewUnit),
       minValue,
       maxValue,
     }
@@ -69,7 +95,7 @@
   <div class="flex flex-col items-center gap-2 sm:gap-3">
     <!-- Gauge preview -->
     <div class="relative shrink-0 flex items-center justify-center rounded-lg bg-gray-800/30 overflow-hidden"
-         style="width: {previewArcPx}px; height: {previewArcPx}px;">
+         style="width: {previewBoxPx}px; height: {previewBoxPx}px;">
       <div style="transform: scale({zoomLevel}); transform-origin: center center;">
         {#if isBar}
           <div style="width: {previewArcPx}px; height: {previewBarH}px;">
@@ -79,8 +105,12 @@
           <div style="width: {previewArcPx}px; height: {previewDigitalH}px;">
             <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewDigitalH} />
           </div>
+        {:else if isShiftLight}
+          <div style="width: {previewArcPx}px; height: 44px;">
+            <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={44} preview={true} />
+          </div>
         {:else}
-          <div style="width: {previewArcPx}px; height: {previewArcPx}px; position: relative;">
+          <div style="width: {previewBoxPx}px; height: {previewBoxPx}px; position: relative;">
             <GaugeCard gauge={previewGauge} pixelWidth={previewArcPx} pixelHeight={previewArcPx} />
           </div>
         {/if}
@@ -111,19 +141,19 @@
         </button>
         {#if mobileTestExpanded}
           <div class="mt-2 space-y-2">
-            <input type="range" step="1"
+            <input type="range" step={sliderStep}
               min={Math.floor(minValue)} max={Math.ceil(maxValue)}
               value={useTestValue ? testValue : Math.round(liveValue)}
-              oninput={(e) => onTestValueChange(parseInt((e.target as HTMLInputElement).value, 10))}
+              oninput={(e) => onTestValueChange(parseFloat((e.target as HTMLInputElement).value))}
               class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500" />
             <NumberInput
               value={useTestValue ? (testValue ?? 0) : (liveValue ?? 0)}
-              min={Math.floor(minValue)}
-              max={Math.ceil(maxValue)}
-              unit={entityInfo?.unit ?? ''}
-              onchange={(v) => onTestValueChange(Math.floor(v))}
+              min={minValue}
+              max={maxValue}
+              unit={previewUnit}
+              onchange={(v) => onTestValueChange(v)}
             />
             {#if useTestValue}
               <button class="flex items-center gap-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors"
@@ -146,20 +176,20 @@
             </button>
           {/if}
         </div>
-        <input id="test-value" type="range" step="1"
+        <input id="test-value" type="range" step={sliderStep}
           min={Math.floor(minValue)} max={Math.ceil(maxValue)}
           value={useTestValue ? testValue : Math.round(liveValue)}
-          oninput={(e) => onTestValueChange(parseInt((e.target as HTMLInputElement).value, 10))}
+          oninput={(e) => onTestValueChange(parseFloat((e.target as HTMLInputElement).value))}
           class="w-full h-1.5 rounded-full appearance-none bg-gray-700 accent-cyan-500 cursor-pointer
             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
             [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-cyan-500/30" />
         <div class="mt-2">
           <NumberInput
             value={useTestValue ? (testValue ?? 0) : (liveValue ?? 0)}
-            min={Math.floor(minValue)}
-            max={Math.ceil(maxValue)}
-            unit={entityInfo?.unit ?? ''}
-            onchange={(v) => onTestValueChange(Math.floor(v))}
+            min={minValue}
+            max={maxValue}
+            unit={previewUnit}
+            onchange={(v) => onTestValueChange(v)}
           />
         </div>
         <div class="mt-1 flex justify-between text-[10px] text-gray-600">

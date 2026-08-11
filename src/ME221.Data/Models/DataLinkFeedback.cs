@@ -15,5 +15,5 @@ public sealed class DataLinkFeedback
     public DataLinkFeedbackSeverity Severity { get; init; }
     public float? MinValue { get; init; }
     public float? MaxValue { get; init; }
-    public bool Flashing { get; init; }
+    public bool? Flashing { get; init; }
 }

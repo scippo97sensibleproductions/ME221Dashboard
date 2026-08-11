@@ -24,6 +24,12 @@ import type {
   DataLinksResult,
   UpdateCheckResult,
   DataLinkWarningSetting,
+  WarningSettingsPayload,
+  WarningDatalinkResult,
+  SaveWarningDatalinkPayload,
+  BatchLedgerEntry,
+  QueuedBanner,
+  UndoExpiryNotice,
   WarningHistoryEntry,
   ConnectionPreference,
   LambdaSettings,
@@ -323,19 +329,37 @@ export const HybridBridge = {
   deleteDashboard: async (name: string): Promise<{ success: boolean; activeDashboard?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const result = await invokeDotNetLogged('DeleteDashboard', [name]);
-    return JSON.parse(result);
+    const parsed = JSON.parse(result);
+    if (parsed.success) {
+      // The active dashboard may have been the deleted one — the vehicle cache is
+      // per-dashboard, so drop it to avoid serving a deleted/phantom dashboard's config.
+      HybridBridge._configCache = null;
+    }
+    return parsed;
   },
 
   renameDashboard: async (oldName: string, newName: string): Promise<{ success: boolean; activeDashboard?: string; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const result = await invokeDotNetLogged('RenameDashboard', [oldName, newName]);
-    return JSON.parse(result);
+    const parsed = JSON.parse(result);
+    if (parsed.success) {
+      // Renaming the active dashboard changes its name — the cached vehicle payload
+      // was keyed to the old name, so drop it (a fresh fetch re-reads the new one).
+      HybridBridge._configCache = null;
+    }
+    return parsed;
   },
 
   setActiveDashboard: async (name: string): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
     const result = await invokeDotNetLogged('SetActiveDashboard', [name]);
-    return JSON.parse(result);
+    const parsed = JSON.parse(result);
+    if (parsed.success) {
+      // Vehicle config is now per-dashboard — the cached payload follows the active
+      // dashboard, so stale values must not leak into the newly active dashboard.
+      HybridBridge._configCache = null;
+    }
+    return parsed;
   },
 
   // ─── Image Picker Methods ───────────────────────────────────────────────
@@ -648,33 +672,63 @@ export const HybridBridge = {
     await invokeDotNetLogged('SetOdometerSpeedConfig', [JSON.stringify({ entityId, unit })]);
   },
 
-  // ─── Vehicle Config (global — not per-dashboard) ─────────────────────
+  // ─── Vehicle Config (per-dashboard) ──────────────────────────────────
   // Cached to avoid ~50 JS→C# roundtrips/sec during live derived computation.
-  // Invalidated on set so user edits take effect immediately.
+  // Invalidated on set and on dashboard switch so edits take effect immediately.
 
   _configCache: null as VehicleConfig | null,
 
+  /** Invalidate the cached payload (U8 "Discard" refetch — never merges). */
+  invalidateVehicleConfigCache(): void {
+    HybridBridge._configCache = null;
+  },
+
   getVehicleConfig: async (): Promise<VehicleConfig> => {
-    if (HybridBridge._configCache) return HybridBridge._configCache;
+    if (HybridBridge._configCache) {
+      const c = HybridBridge._configCache;
+      return { ...c, gearRatios: [...c.gearRatios], shifter: c.shifter ? { ...c.shifter } : undefined };
+    }
     if (!isWebViewAvailable()) return defaultDerivedConfig();
     const result = await invokeDotNetLogged('GetVehicleConfig', []);
     const config: VehicleConfig = { ...defaultDerivedConfig(), ...JSON.parse(result) };
+    // Cache the payload, but hand the caller a copy: mutating the returned
+    // object must never poison the cache.
     HybridBridge._configCache = config;
-    return config;
+    return { ...config, gearRatios: [...config.gearRatios], shifter: config.shifter ? { ...config.shifter } : undefined };
   },
 
-  setVehicleConfig: async (config: VehicleConfig): Promise<{ success: boolean; error?: string }> => {
+  setVehicleConfig: async (config: VehicleConfig & { autoDetect?: boolean }): Promise<{ success: boolean; error?: string }> => {
     if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
-    console.log('[VEHCFG] setVehicleConfig', JSON.parse(JSON.stringify(config)));
     const result = await invokeDotNetLogged('SetVehicleConfig', [JSON.stringify(config)]);
     const parsed = JSON.parse(result);
     if (parsed.success) {
-      HybridBridge._configCache = config;
-      console.log('[VEHCFG] setVehicleConfig OK');
-    } else {
-      console.error('[VEHCFG] setVehicleConfig FAILED:', parsed.error);
+      // Merge partial payloads: a vehicle-only save must never drop the cached shifter
+      // block; absent keys keep the cached values. The transport-only "autoDetect" flag
+      // (R8 seed-refresh gate) must NOT round-trip through the cache — a later save that
+      // merges the cache would silently disable the gate. gearRatios is cloned so the
+      // caller's array cannot poison the cache by later mutation.
+      const { autoDetect: _a, ...persistable } = config;
+      void _a;
+      HybridBridge._configCache = {
+        ...HybridBridge._configCache,
+        ...persistable,
+        gearRatios: [...persistable.gearRatios],
+        shifter: persistable.shifter ?? HybridBridge._configCache?.shifter,
+      };
     }
     return parsed;
+  },
+
+  // ─── Android back interception (U8) ───────────────────────────────────
+
+  /** Enable/disable the Android OnBackPressed interception. The native callback is
+   *  enabled only while the Svelte app actually handles back (dirty gate armed or a
+   *  back-capable sub-page mounted); at the root it stays disabled so back exits the
+   *  app normally. */
+  setBackInterceptionEnabled: async (enabled: boolean): Promise<{ success: boolean }> => {
+    if (!isWebViewAvailable()) return { success: false };
+    const result = await invokeDotNetLogged('SetBackInterceptionEnabled', [JSON.stringify({ enabled })]);
+    return JSON.parse(result);
   },
 
   // ─── Debug ─────────────────────────────────────────────────────────
@@ -740,8 +794,8 @@ export const HybridBridge = {
     await invokeDotNetLogged('OpenExternalUrl', [url]);
   },
 
-  getWarningSettings: async (): Promise<DataLinkWarningSetting[]> => {
-    if (!isWebViewAvailable()) return [];
+  getWarningSettings: async (): Promise<WarningSettingsPayload> => {
+    if (!isWebViewAvailable()) return { settings: [], delayMs: 500 };
     const result = await invokeDotNetLogged('GetWarningSettings');
     return JSON.parse(result);
   },
@@ -755,6 +809,36 @@ export const HybridBridge = {
   getDefXmlDefaults: async (): Promise<DataLinkWarningSetting[]> => {
     if (!isWebViewAvailable()) return [];
     const result = await invokeDotNetLogged('GetDefXmlDefaults');
+    return JSON.parse(result);
+  },
+
+  saveWarningDatalink: async (payload: SaveWarningDatalinkPayload): Promise<WarningDatalinkResult> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveWarningDatalink', [JSON.stringify(payload)]);
+    return JSON.parse(result);
+  },
+
+  saveWarningDelay: async (delayMs: number): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveWarningDelay', [JSON.stringify({ delayMs })]);
+    return JSON.parse(result);
+  },
+
+  saveBatchLedger: async (entries: BatchLedgerEntry[]): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveBatchLedger', [JSON.stringify(entries)]);
+    return JSON.parse(result);
+  },
+
+  getWarningQueuedNotices: async (): Promise<{ banners: QueuedBanner[]; undoExpiryNotices: UndoExpiryNotice[] }> => {
+    if (!isWebViewAvailable()) return { banners: [], undoExpiryNotices: [] };
+    const result = await invokeDotNetLogged('GetWarningQueuedNotices');
+    return JSON.parse(result);
+  },
+
+  saveWarningQueuedNotices: async (payload: { banners: QueuedBanner[]; undoExpiryNotices: UndoExpiryNotice[] }): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'HybridWebView not available' };
+    const result = await invokeDotNetLogged('SaveWarningQueuedNotices', [JSON.stringify(payload)]);
     return JSON.parse(result);
   },
 

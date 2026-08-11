@@ -11,9 +11,10 @@ public sealed class SensorSimulator
     private readonly Dictionary<string, ushort> _dataKeyToId;
     private readonly Dictionary<string, (ushort Id, Func<SimContext, float> Sim)> _nameSim;
     private readonly Dictionary<ushort, List<TableDefinition>> _outputLinkToTables;
+    private readonly Dictionary<ushort, float> _overrides = new();
+    private readonly object _overridesLock = new();
     private VehicleConfigData _vehicleConfig;
     private double _tireCircumferenceMeters;
-    private string? _sharedConfigPath;
     private CalibrationData? _calibration;
     private DateTime _lastConfigReload = DateTime.MinValue;
     private double _simulatedTime;
@@ -21,30 +22,80 @@ public sealed class SensorSimulator
 
     // ── Gear state ──
     private int _currentGear = 1;
-    private const float ShiftUpRpm = 6000f;
-    private const float ShiftDownRpm = 2000f;
+
+    // Shift points — the simulated driver shifts up 1000 RPM past the dashboard's
+    // configured shift light limit (so the light flashes through approach + shiftNow
+    // before the gear change) and engine-brakes down when RPM falls to the coast
+    // floor. The upshift limit follows the dashboard's shifter config (shared
+    // vehicle-config.json / dashboard-config.json); the coast floor is a physical
+    // constant — it must stay well below the upshift point or wide ratio spreads
+    // would bounce gears back up on the downshift bump.
+    private const float ShiftUpDefaultRpm = 7000f;
+    private const float ShiftUpRpmOverrun = 1000f;
+    private const float ShiftDownDefaultRpm = 2200f;
+    private float _shiftUpRpm = ShiftUpDefaultRpm;
+    private float _shiftDownRpm = ShiftDownDefaultRpm;
+
+    // ── Shift state ──
+    // A gear change is a proper lift-shift: the driver closes the throttle for
+    // ~1 s (TPS 0%, manifold drops to vacuum) while the engine freewheels with
+    // the clutch in, then the gear lands and RPM steps to match the (constant)
+    // road speed in the new gear. Virtual Dyno expects exactly this — a WOT
+    // pull with clean 0% gaps at the shifts.
+    private const float ShiftDurationSeconds = 1.0f;
+    private const float ShiftRpmDecayRate = 1200f; // rpm/s freewheel with clutch in
+    private const float ShiftMapTarget = 32f;      // kPa with the blade closed
+    private bool _isShifting;
+    private double _shiftStartTime;
+    private int _pendingGearChange;
+    private float _shiftHoldSpeedKmh;
 
     // ── ADC simulation ──
     private const float RawAdcMax = 65535f;
     private const float VoltMax = 5f;
     private static float VoltageToRaw(float voltage) => Math.Clamp(voltage / VoltMax * RawAdcMax, 0f, RawAdcMax);
 
-    // ── RPM sweep mode state machine ──
-    private enum DrivingMode { Idle, RpmSweepUp, RpmHoldHigh, RpmSweepDown, RpmHoldLow }
+    // ── Drive-cycle state machine ──
+    // A full cycle simulates a real drive: idle at standstill → accelerate
+    // through the gears (each shift drops RPM by the gear ratio, speed stays
+    // continuous) → cruise at the limit → coast down with engine braking
+    // (downshifts bump RPM back up) → back to idle.
+    private enum DrivingMode { Idle, Accelerate, CruiseHigh, Coast }
     private DrivingMode _currentMode = DrivingMode.Idle;
     private double _modeStartTime;
-    private const double IdleDuration = 5.0;
-    private const double SweepUpDuration = 60.0;
-    private const double HoldHighDuration = 3.0;
-    private const double SweepDownDuration = 60.0;
-    private const double HoldLowDuration = 3.0;
+    private const float IdleDuration = 5f;
+    private const float AccelerateDuration = 36f; // cap — normally exits early at top gear + limit
+    private const float CruiseHighDuration = 6f;
+    private const float CoastDuration = 14f; // includes ~1 s per downshift lift
 
-    // Smoothed values for interconnected simulation
-    private float _smoothRpm;
+    // ── Vehicle physics ──
+    // The acceleration model is power-limited (110 whp), traction-capped at launch
+    // (~0.35 g), and fights rolling + aero drag. RPM rate in each gear follows
+    // PHYSICALLY from the wheel acceleration — no arbitrary sweep rates.
+    private const float WheelHorsepowerDefault = 110f;
+    private const float VehicleMassKgDefault = 1000f;
+    private const float MaxLaunchAccel = 3.4f; // m/s² traction ceiling
+    private const float DragArea = 0.67f;      // Cd × frontal area (m²)
+    private const float AirDensity = 1.225f;   // kg/m³
+    private float _wheelHorsepower = WheelHorsepowerDefault;
+    private float _vehicleMassKg = VehicleMassKgDefault;
+    private const float IdleRpm = 800f;
+    private const float CoastDecayRate = 1300f; // rpm/s while coasting (engine braking)
+    private float _rpmState = IdleRpm; // physical engine rpm — integrated, stepped on gear change
     private float _smoothMap;
     private float _smoothTps;
     private float _smoothBatteryV;
+
+    // ── Thermal state ──
+    // Temperatures are first-class simulated values so temp gauges visibly
+    // swing: cold start warms up, coolant follows load with fan hysteresis,
+    // IAT reacts to boost heat vs. ram airflow, oil lags coolant, EGT tracks
+    // rpm × load. All °C/°F links are routed per-channel (no shared pin).
     private float _smoothCoolantTemp;
+    private float _smoothIat;
+    private float _smoothOilTemp;
+    private float _smoothFuelTemp;
+    private float _egtState;
     private float _prevTps;
 
     // ── Computed speed from gear model ──
@@ -56,21 +107,25 @@ public sealed class SensorSimulator
         _logger = logger;
         _vehicleConfig = vehicleConfig ?? new VehicleConfigData();
         _tireCircumferenceMeters = Math.PI * _vehicleConfig.TireDiameterInches * 0.0254;
+        _shiftUpRpm = NormalizeShiftUpRpm(_vehicleConfig.ShiftUpRpm) + ShiftUpRpmOverrun;
+        _shiftDownRpm = NormalizeShiftDownRpm(_vehicleConfig.ShiftDownRpm, _shiftUpRpm);
+        _wheelHorsepower = _vehicleConfig.WheelHorsepower is > 10f ? (float)_vehicleConfig.WheelHorsepower.Value : WheelHorsepowerDefault;
+        _vehicleMassKg = _vehicleConfig.MassKg is > 100f ? (float)_vehicleConfig.MassKg.Value : VehicleMassKgDefault;
         _calibration = calibration;
-
-        _sharedConfigPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".me221", "vehicle-config.json");
 
         _dataKeyToId = calibration.DataLinks
             .Where(dl => dl.DataKey is not null)
             .ToDictionary(dl => dl.DataKey!, dl => dl.Id);
 
-        _smoothRpm = 800f;
+        _rpmState = IdleRpm;
         _smoothMap = 35f;
         _smoothTps = 0f;
         _smoothBatteryV = 13.2f;
-        _smoothCoolantTemp = 82f;
+        _smoothCoolantTemp = 20f; // cold start — warms up through the drive cycle
+        _smoothIat = 24f;
+        _smoothOilTemp = 20f;
+        _smoothFuelTemp = 22f;
+        _egtState = 150f;
         _modeStartTime = 0;
 
         _nameSim = BuildNameSimulation(calibration.DataLinks);
@@ -88,8 +143,8 @@ public sealed class SensorSimulator
             list.Add(table);
         }
 
-        _logger.LogInformation("SensorSimulator: initialized — {DataKeyCount} data-key links, {NameCount} name-based sims, {TableOutputCount} table output links, {Gears} gears, final={Final:F2}, tire={Tire:F1}\", configPath={ConfigPath}",
-            _dataKeyToId.Count, _nameSim.Count, _outputLinkToTables.Count, _vehicleConfig.GearRatios.Length, _vehicleConfig.FinalDriveRatio, _vehicleConfig.TireDiameterInches, _sharedConfigPath);
+        _logger.LogInformation("SensorSimulator: initialized — {DataKeyCount} data-key links, {NameCount} name-based sims, {TableOutputCount} table output links, {Gears} gears, final={Final:F2}, tire={Tire:F1}, shiftUp={ShiftUp:F0}",
+            _dataKeyToId.Count, _nameSim.Count, _outputLinkToTables.Count, _vehicleConfig.GearRatios.Length, _vehicleConfig.FinalDriveRatio, _vehicleConfig.TireDiameterInches, _shiftUpRpm);
     }
 
     public void Tick()
@@ -97,10 +152,10 @@ public sealed class SensorSimulator
         _tickCount++;
         _simulatedTime += 0.1; // ~10Hz tick rate
 
-        // Hot-reload vehicle config from dashboard every ~5 seconds
+        // Hot-reload vehicle config from the dashboard every ~5 seconds
         if (_tickCount % 50 == 0)
         {
-            var reloaded = VehicleConfigLoader.ReloadIfChanged(_sharedConfigPath, _calibration, _logger);
+            var reloaded = VehicleConfigLoader.ReloadIfChanged(_calibration, _logger);
             if (reloaded is not null)
             {
                 _logger.LogWarning(
@@ -109,28 +164,45 @@ public sealed class SensorSimulator
                     reloaded.FinalDriveRatio, reloaded.TireDiameterInches);
                 _vehicleConfig = reloaded;
                 _tireCircumferenceMeters = Math.PI * _vehicleConfig.TireDiameterInches * 0.0254;
+                _shiftUpRpm = NormalizeShiftUpRpm(reloaded.ShiftUpRpm) + ShiftUpRpmOverrun;
+                _shiftDownRpm = NormalizeShiftDownRpm(reloaded.ShiftDownRpm, _shiftUpRpm);
+                _wheelHorsepower = reloaded.WheelHorsepower is > 10f ? (float)reloaded.WheelHorsepower.Value : WheelHorsepowerDefault;
+                _vehicleMassKg = reloaded.MassKg is > 100f ? (float)reloaded.MassKg.Value : VehicleMassKgDefault;
+                if (_currentGear > reloaded.GearRatios.Length)
+                    _currentGear = Math.Max(1, reloaded.GearRatios.Length);
             }
         }
 
         var now = DateTime.UtcNow;
         var elapsed = _simulatedTime;
 
-        // ── Advance driving mode state machine ──
+        // ── Advance driving mode (conditional transitions) ──
         AdvanceDrivingMode(elapsed);
 
-        // ── Compute smoothed primary values ──
-        var (targetRpm, targetMap, targetTps) = GetModeTargets(elapsed);
+        // ── Physics: integrate engine RPM under the current mode ──
+        // RPM is the physical state of the simulated engine: it climbs under
+        // throttle, holds at cruise, decays while coasting, and on a gear change
+        // it steps by the gear ratio (speed stays continuous) — exactly like a
+        // real car accelerating through the gears.
         var dt = 0.1f; // ~10Hz tick rate
+        var (rpmRate, targetMap, targetTps) = GetDriveTargets(elapsed);
+        if (!DrivingModeHold)
+        {
+            _rpmState = Math.Max(IdleRpm, _rpmState + rpmRate * dt);
+            UpdateGear(elapsed);
+        }
 
-        _smoothRpm += (targetRpm - _smoothRpm) * Math.Clamp(dt * 1.5f, 0.01f, 0.3f);
         _smoothMap += (targetMap - _smoothMap) * Math.Clamp(dt * 1.2f, 0.01f, 0.25f);
-        _smoothTps += (targetTps - _smoothTps) * Math.Clamp(dt * 2.0f, 0.01f, 0.4f);
+        // TPS responds fast in a real car: WOT is stabbed in a few ticks and the
+        // shift lift closes the blade fully — slow smoothing would smear the 0%
+        // shift gap and hide the WOT pull from dyno tools.
+        var tpsLerp = _isShifting || _currentMode == DrivingMode.Accelerate ? 0.7f : 0.25f;
+        _smoothTps += (targetTps - _smoothTps) * tpsLerp;
         _smoothBatteryV += (ComputeBatteryVoltage() - _smoothBatteryV) * 0.02f;
-        _smoothCoolantTemp += (85f - _smoothCoolantTemp) * 0.0005f; // slow warmup toward 85°C
 
         // ── Add natural variation (idle hunt, road load, etc.) ──
         var rpmVariation = ComputeRpmVariation(elapsed);
-        var rpm = _smoothRpm + rpmVariation;
+        var rpm = _rpmState + rpmVariation;
 
         var mapNoise = (float)(_random.NextDouble() - 0.5f) * 1.5f;
         var map = _smoothMap + mapNoise;
@@ -138,12 +210,46 @@ public sealed class SensorSimulator
         var tpsNoise = (float)(_random.NextDouble() - 0.5f) * 0.3f;
         var tps = Math.Clamp(_smoothTps + tpsNoise, 0f, 100f);
 
-        // ── Gear logic and speed from RPM ──
-        UpdateGear(rpm);
-        _computedSpeed = RpmToSpeedKmh(rpm, _currentGear);
+        // ── Speed from the gear model ──
+        // During a shift the clutch is in: road speed holds while the engine
+        // freewheels, then RPM steps to match that same speed in the new gear.
+        _computedSpeed = _isShifting
+            ? _shiftHoldSpeedKmh
+            : _rpmState > 1000f ? RpmToSpeedKmh(_rpmState, _currentGear) : 0f;
         var speed = Math.Max(0f, _computedSpeed + (float)(_random.NextDouble() - 0.5f) * 0.5f);
         var batteryV = _smoothBatteryV + (float)(_random.NextDouble() - 0.5f) * 0.05f;
+
+        // ── Thermal model ──
+        // Coolant climbs toward a load-dependent operating point (84 idle …
+        // 96 full load) and the fan drags it back down above 93 — hysteresis
+        // makes it rock a few degrees even at steady cruise. IAT heats up with
+        // load (bay + charge heat) and cools with ram airflow at speed. Oil
+        // lags coolant, fuel temp hugs ambient + load, EGT tracks rpm × load.
+        var loadFrac = Math.Clamp((map - 30f) / 60f, 0f, 1f);
+        var speedFactor = Math.Clamp(speed / 140f, 0f, 1f);
+
+        var coolantTarget = 84f + 12f * loadFrac;
+        if (_smoothCoolantTemp > 93f) coolantTarget -= 6f; // fan on
+        var coolantWarmRate = 0.4f + 1.1f * loadFrac;      // °C/s toward target
+        _smoothCoolantTemp += Math.Clamp(coolantTarget - _smoothCoolantTemp, -0.8f * dt, coolantWarmRate * dt);
+
+        var iatTarget = 24f + 14f * loadFrac - 6f * speedFactor + 2f * (float)Math.Sin(elapsed * 0.15);
+        _smoothIat += (iatTarget - _smoothIat) * 0.2f;
+
+        var oilTarget = Math.Max(_smoothCoolantTemp, 88f) + 6f;
+        _smoothOilTemp += Math.Clamp(oilTarget - _smoothOilTemp, -0.3f * dt, 0.35f * dt);
+
+        var fuelTarget = 22f + 8f * loadFrac + 2f * (float)Math.Sin(elapsed * 0.05);
+        _smoothFuelTemp += (fuelTarget - _smoothFuelTemp) * 0.1f;
+
+        var egtTarget = 150f + 700f * Math.Clamp((rpm - IdleRpm) / 5700f, 0f, 1f) * (0.3f + 0.7f * loadFrac);
+        _egtState += (egtTarget - _egtState) * Math.Clamp(dt * 2.5f, 0f, 1f);
+
         var coolantTemp = _smoothCoolantTemp + (float)(_random.NextDouble() - 0.5f) * 0.5f;
+        var intakeAirTemp = _smoothIat + (float)(_random.NextDouble() - 0.5f) * 0.4f;
+        var oilTemp = _smoothOilTemp + (float)(_random.NextDouble() - 0.5f) * 0.5f;
+        var fuelTemp = _smoothFuelTemp + (float)(_random.NextDouble() - 0.5f) * 0.3f;
+        var egtTemp = _egtState + (float)(_random.NextDouble() - 0.5f) * 4f;
 
         // ── Derived values ──
         var injectorDuty = ComputeInjectorDuty(rpm, map);
@@ -213,6 +319,10 @@ public sealed class SensorSimulator
             Gear = _currentGear,
             BatteryVoltage = batteryV,
             CoolantTemp = coolantTemp,
+            IntakeAirTemp = intakeAirTemp,
+            OilTemp = oilTemp,
+            FuelTemp = fuelTemp,
+            EgtTemp = egtTemp,
             InjectorDuty = injectorDuty,
             InjectorPw = injectorPw,
             Airflow = airflow,
@@ -238,8 +348,11 @@ public sealed class SensorSimulator
         // consistent with the table data, not just hardcoded formulas.
         foreach (var (outputLinkId, tables) in _outputLinkToTables)
         {
-            // Use first table that produces this output (usually there's only one)
-            var table = tables[0];
+            // First enabled table that produces this output (usually there's only
+            // one). Disabled tables are OFF in a real ECU — they must not drive
+            // outputs, and placeholder tables (no real data) interpolate to null.
+            var table = tables.FirstOrDefault(t => _entityStore.IsTableEnabled(t.Id));
+            if (table is null) continue;
             var input0Value = _entityStore.GetDataLinkValue(table.Input0LinkId);
             var input1Value = _entityStore.GetDataLinkValue(table.Input1LinkId);
 
@@ -250,78 +363,186 @@ public sealed class SensorSimulator
 
         _prevTps = tps;
 
-        // Log key sensor values every ~10 ticks
+        // Log key sensor values every ~10 ticks (visible heartbeat — lets you watch
+        // the gear model work: RPM climbs, drops on each shift, speed stays smooth)
         if (_tickCount % 10 == 0)
         {
-            _logger.LogDebug(
-                "SensorSimulator tick #{TickCount} [{Mode}]: RPM={RPM:F0} MAP={MAP:F1} TPS={TPS:F1} Speed={Speed:F0} Batt={Batt:F2} CLT={CLT:F1}",
-                _tickCount, _currentMode, rpm, map, tps, speed, batteryV, coolantTemp);
+            _logger.LogInformation(
+                "SensorSimulator tick #{TickCount} [{Mode}]: RPM={RPM:F0} MAP={MAP:F1} TPS={TPS:F1} Speed={Speed:F0} Gear={Gear} Batt={Batt:F2} CLT={CLT:F1} IAT={IAT:F1} OILT={OILT:F1}",
+                _tickCount, _currentMode, rpm, map, tps, speed, _currentGear, batteryV, coolantTemp, intakeAirTemp, oilTemp);
         }
     }
 
-    // ── Driving mode state machine ──
+    // ── Scripted override injection ──
+
+    public bool DrivingModeHold { get; private set; }
+
+    public void SetDrivingModeHold(bool hold)
+    {
+        DrivingModeHold = hold;
+    }
+
+    public void SetOverride(ushort linkId, float value)
+    {
+        lock (_overridesLock)
+            _overrides[linkId] = value;
+    }
+
+    public void ClearOverride(ushort linkId)
+    {
+        lock (_overridesLock)
+            _overrides.Remove(linkId);
+    }
+
+    public void ApplyOverrides()
+    {
+        lock (_overridesLock)
+        {
+            foreach (var (id, value) in _overrides)
+                _entityStore.SetDataLinkValue(id, value);
+        }
+    }
+
+    // ── Drive-cycle state machine ──
 
     private void AdvanceDrivingMode(double elapsed)
     {
+        if (DrivingModeHold) return;
+
         var modeElapsed = elapsed - _modeStartTime;
-        var duration = _currentMode switch
+        var maxGear = _vehicleConfig.GearRatios.Length;
+        var done = _currentMode switch
         {
-            DrivingMode.Idle => IdleDuration,
-            DrivingMode.RpmSweepUp => SweepUpDuration,
-            DrivingMode.RpmHoldHigh => HoldHighDuration,
-            DrivingMode.RpmSweepDown => SweepDownDuration,
-            DrivingMode.RpmHoldLow => HoldLowDuration,
-            _ => IdleDuration,
+            DrivingMode.Idle => modeElapsed >= IdleDuration,
+            // Accelerate until we hit the limit in the top gear (or the cap — e.g. a
+            // single-gear config never reaches "top gear at the limit" twice).
+            DrivingMode.Accelerate => modeElapsed >= AccelerateDuration
+                || (_currentGear >= maxGear && _rpmState >= _shiftUpRpm),
+            DrivingMode.CruiseHigh => modeElapsed >= CruiseHighDuration,
+            // Coast until the engine settles back to idle at a standstill.
+            DrivingMode.Coast => modeElapsed >= CoastDuration
+                || (_currentGear == 1 && _rpmState <= IdleRpm + 50f),
+            _ => modeElapsed >= IdleDuration,
         };
 
-        if (modeElapsed >= duration)
+        if (done)
         {
             _currentMode = _currentMode switch
             {
-                DrivingMode.Idle => DrivingMode.RpmSweepUp,
-                DrivingMode.RpmSweepUp => DrivingMode.RpmHoldHigh,
-                DrivingMode.RpmHoldHigh => DrivingMode.RpmSweepDown,
-                DrivingMode.RpmSweepDown => DrivingMode.RpmHoldLow,
-                DrivingMode.RpmHoldLow => DrivingMode.Idle,
+                DrivingMode.Idle => DrivingMode.Accelerate,
+                DrivingMode.Accelerate => DrivingMode.CruiseHigh,
+                DrivingMode.CruiseHigh => DrivingMode.Coast,
+                DrivingMode.Coast => DrivingMode.Idle,
                 _ => DrivingMode.Idle,
             };
             _modeStartTime = elapsed;
         }
     }
 
-    private (float rpm, float map, float tps) GetModeTargets(double elapsed)
+    /// <summary>
+    /// Per-mode RPM rate (rpm/s — positive under throttle, negative while coasting)
+    /// plus the MAP/TPS targets for the mode. RPM itself is integrated from this
+    /// rate; the gear model then steps it on gear changes.
+    /// </summary>
+    private (float rpmRate, float map, float tps) GetDriveTargets(double elapsed)
     {
-        var modeElapsed = elapsed - _modeStartTime;
-        var sweepT = (float)Math.Clamp(modeElapsed / SweepUpDuration, 0.0, 1.0);
+        // While shifting, the driver is off the throttle: TPS 0%, manifold drops
+        // to vacuum, and the decoupled engine freewheels down before the clutch-out
+        // step lands the new gear (speed is held constant in the meantime).
+        if (_isShifting)
+            return (-ShiftRpmDecayRate, ShiftMapTarget, 0f);
 
         return _currentMode switch
         {
-            DrivingMode.Idle => (800f, 35f, 0f),
-            DrivingMode.RpmSweepUp => (
-                800f + 9200f * EaseInOut(sweepT),
-                35f + 55f * EaseInOut(sweepT),
-                40f * EaseInOut(sweepT)
+            // Exponential settle toward idle — handles both the normal idle phase
+            // and the rare "mode changed while RPM was still high" case.
+            DrivingMode.Idle => ((IdleRpm - _rpmState) * 0.5f, 35f, 0f),
+            // Full-throttle pull: TPS pins at WOT (100%) so dyno tools recognize
+            // a real pull, MAP rises to atmospheric as the engine revs out.
+            DrivingMode.Accelerate => (
+                ComputeAccelRpmRate(),
+                35f + 65f * Math.Clamp((_rpmState - IdleRpm) / (_shiftUpRpm - IdleRpm), 0f, 1f),
+                100f
             ),
-            DrivingMode.RpmHoldHigh => (10000f, 90f, 0f),
-            DrivingMode.RpmSweepDown => (
-                10000f - 9200f * EaseInOut(sweepT),
-                90f - 55f * EaseInOut(sweepT),
-                40f * (1f - EaseInOut(sweepT))
-            ),
-            DrivingMode.RpmHoldLow => (800f, 35f, 0f),
-            _ => (800f, 35f, 0f),
+            DrivingMode.CruiseHigh => (0f, 50f, 18f),
+            DrivingMode.Coast => (-CoastDecayRate, 30f, 0f),
+            _ => (0f, 35f, 0f),
         };
     }
 
-    private void UpdateGear(float rpm)
+    /// <summary>
+    /// Physical RPM climb rate (rpm/s) for the current gear under full throttle,
+    /// derived from a power-limited drivetrain model (110 whp default):
+    ///   wheel force = min(power / speed, traction ceiling)
+    ///   acceleration = (force − rolling − aero drag) / mass
+    ///   RPM rate = acceleration × 60 × totalRatio / tireCircumference
+    /// Low gears pull hard (traction-capped), high gears fade as drag eats the
+    /// power — exactly like accelerating a real car.
+    /// </summary>
+    private float ComputeAccelRpmRate()
+    {
+        if (_currentGear < 1 || _currentGear > _vehicleConfig.GearRatios.Length)
+            return 0f;
+
+        var totalRatio = _vehicleConfig.GearRatios[_currentGear - 1] * _vehicleConfig.FinalDriveRatio;
+        if (totalRatio <= 0 || _tireCircumferenceMeters <= 0)
+            return 0f;
+
+        var speedMs = _rpmState * (float)_tireCircumferenceMeters / (60f * (float)totalRatio);
+        var speedClamped = Math.Max(speedMs, 2f); // avoid the P/v launch singularity
+
+        var powerW = _wheelHorsepower * 745.7f;
+        var forceResist = 0.013f * _vehicleMassKg * 9.81f + 0.5f * AirDensity * DragArea * speedMs * speedMs;
+        var forceTraction = Math.Min(powerW / speedClamped, MaxLaunchAccel * _vehicleMassKg + forceResist);
+        var accel = Math.Max(0f, (forceTraction - forceResist) / _vehicleMassKg);
+
+        return accel * 60f * (float)totalRatio / (float)_tireCircumferenceMeters;
+    }
+
+    /// <summary>
+    /// Time-based gear changes. When a threshold is crossed the shift starts
+    /// (throttle closed — GetDriveTargets returns the shift targets) and the
+    /// gear lands ShiftDurationSeconds later: RPM steps so the held road speed
+    /// stays continuous (on an upshift RPM drops to the new-gear speed match,
+    /// on a downshift it jumps to it), exactly like a lift-shift in a real car.
+    /// </summary>
+    private void UpdateGear(double elapsed)
     {
         var maxGear = _vehicleConfig.GearRatios.Length;
         if (maxGear == 0) return;
 
-        if (rpm > ShiftUpRpm && _currentGear < maxGear)
-            _currentGear++;
-        else if (rpm < ShiftDownRpm && _currentGear > 1)
-            _currentGear--;
+        if (_isShifting)
+        {
+            if (elapsed - _shiftStartTime >= ShiftDurationSeconds)
+            {
+                _currentGear += _pendingGearChange;
+                _rpmState = SpeedToRpm(_shiftHoldSpeedKmh, _currentGear);
+                _isShifting = false;
+                _pendingGearChange = 0;
+                _logger.LogDebug("Shift complete to gear {Gear}: RPM {NewRpm:F0}, speed held {Speed:F0} km/h",
+                    _currentGear, _rpmState, _shiftHoldSpeedKmh);
+            }
+            return;
+        }
+
+        if (_rpmState >= _shiftUpRpm && _currentGear < maxGear)
+        {
+            _isShifting = true;
+            _pendingGearChange = 1;
+            _shiftStartTime = elapsed;
+            _shiftHoldSpeedKmh = RpmToSpeedKmh(_rpmState, _currentGear);
+            _logger.LogDebug("Shift UP started at RPM {Rpm:F0} — throttle closed for {Seconds:F0} s",
+                _rpmState, ShiftDurationSeconds);
+        }
+        else if (_rpmState <= _shiftDownRpm && _currentGear > 1)
+        {
+            _isShifting = true;
+            _pendingGearChange = -1;
+            _shiftStartTime = elapsed;
+            _shiftHoldSpeedKmh = RpmToSpeedKmh(_rpmState, _currentGear);
+            _logger.LogDebug("Shift DOWN started at RPM {Rpm:F0} — throttle closed for {Seconds:F0} s",
+                _rpmState, ShiftDurationSeconds);
+        }
     }
 
     private float RpmToSpeedKmh(float rpm, int gear)
@@ -335,7 +556,32 @@ public sealed class SensorSimulator
         return (float)(rpm * _tireCircumferenceMeters * 60.0 / (totalRatio * 1000.0));
     }
 
-    private static float EaseInOut(float t) => t * t * (3f - 2f * t);
+    private float SpeedToRpm(float speedKmh, int gear)
+    {
+        if (gear < 1 || gear > _vehicleConfig.GearRatios.Length)
+            return _rpmState;
+
+        var gearRatio = _vehicleConfig.GearRatios[gear - 1];
+        var totalRatio = gearRatio * _vehicleConfig.FinalDriveRatio;
+        return speedKmh * (float)totalRatio * 1000f / ((float)_tireCircumferenceMeters * 60f);
+    }
+
+    private static float NormalizeShiftUpRpm(double? shiftUpRpm)
+    {
+        if (shiftUpRpm is > 500f)
+            return Math.Min((float)shiftUpRpm.Value, 15000f);
+        return ShiftUpDefaultRpm;
+    }
+
+    /// <summary>
+    /// Coast downshift floor. Never allows a downshift whose ratio bump could push RPM
+    /// back past the upshift point: the floor is capped at half the shift-up RPM.
+    /// </summary>
+    private static float NormalizeShiftDownRpm(double? shiftDownRpm, float shiftUpRpm)
+    {
+        var floor = shiftDownRpm is > 500f ? (float)shiftDownRpm.Value : ShiftDownDefaultRpm;
+        return Math.Min(floor, shiftUpRpm * 0.5f);
+    }
 
     private float ComputeRpmVariation(double elapsed)
     {
@@ -354,10 +600,9 @@ public sealed class SensorSimulator
         return _currentMode switch
         {
             DrivingMode.Idle => idleHunt * 0.5f + noise,
-            DrivingMode.RpmSweepUp => noise * 0.5f,
-            DrivingMode.RpmHoldHigh => roadLoad * 0.3f + noise,
-            DrivingMode.RpmSweepDown => noise * 0.5f,
-            DrivingMode.RpmHoldLow => idleHunt * 0.3f + noise,
+            DrivingMode.Accelerate => noise * 0.5f,
+            DrivingMode.CruiseHigh => roadLoad * 0.3f + noise,
+            DrivingMode.Coast => noise * 0.5f,
             _ => noise,
         };
     }
@@ -398,7 +643,7 @@ public sealed class SensorSimulator
 
     private float ComputeBatteryVoltage()
     {
-        var rpmFactor = Math.Clamp((_smoothRpm - 500f) / 3000f, 0f, 1f);
+        var rpmFactor = Math.Clamp((_rpmState - 500f) / 3000f, 0f, 1f);
         return 12.5f + rpmFactor * 1.5f;
     }
 
@@ -443,10 +688,24 @@ public sealed class SensorSimulator
                     => ctx => ctx.Tps,
                 "%" or "Percent"
                     => ctx => 30f + 30f * (float)Math.Sin(ctx.Elapsed * 0.2),
+                "C" or "\u00B0C" or "degC" when link.Name.Contains("Intake", StringComparison.OrdinalIgnoreCase)
+                    || link.Name.Contains("IAT", StringComparison.OrdinalIgnoreCase)
+                    || link.Name.Contains("Inlet", StringComparison.OrdinalIgnoreCase)
+                    => ctx => ctx.IntakeAirTemp,
+                "C" or "\u00B0C" or "degC" when link.Name.Contains("Oil", StringComparison.OrdinalIgnoreCase)
+                    => ctx => ctx.OilTemp,
+                "C" or "\u00B0C" or "degC" when link.Name.Contains("Fuel", StringComparison.OrdinalIgnoreCase)
+                    => ctx => ctx.FuelTemp,
+                "C" or "\u00B0C" or "degC" when link.Name.Contains("EG", StringComparison.OrdinalIgnoreCase)
+                    || link.Name.Contains("Exhaust", StringComparison.OrdinalIgnoreCase)
+                    => ctx => ctx.EgtTemp,
                 "C" or "\u00B0C" or "degC"
                     => ctx => ctx.CoolantTemp,
+                "F" or "\u00B0F" or "degF" when link.Name.Contains("Intake", StringComparison.OrdinalIgnoreCase)
+                    || link.Name.Contains("IAT", StringComparison.OrdinalIgnoreCase)
+                    => ctx => ctx.IntakeAirTemp * 1.8f + 32f,
                 "F" or "\u00B0F" or "degF"
-                    => ctx => 176f + 27f * (float)Math.Sin(ctx.Elapsed * 0.05),
+                    => ctx => ctx.CoolantTemp * 1.8f + 32f,
                 "kPa" or "KPa" or "bar" or "PSI" or "psi" when link.Name.Contains("Oil", StringComparison.OrdinalIgnoreCase)
                     => ctx => ctx.OilPressure,
                 "kPa" or "KPa" or "bar" or "PSI" or "psi" when link.Name.Contains("Fuel", StringComparison.OrdinalIgnoreCase)
@@ -503,9 +762,11 @@ public sealed class SensorSimulator
             if (name.Contains("Coolant", StringComparison.OrdinalIgnoreCase) || name.Contains("CLT", StringComparison.OrdinalIgnoreCase))
                 return ctx => VoltageToRaw(2f + ctx.CoolantTemp / 100f * 3f);
             if (name.Contains("IAT", StringComparison.OrdinalIgnoreCase) || name.Contains("Intake", StringComparison.OrdinalIgnoreCase))
-                return _ => VoltageToRaw(2f + 30f / 100f * 3f);
+                return ctx => VoltageToRaw(2f + ctx.IntakeAirTemp / 100f * 3f);
             if (name.Contains("Battery", StringComparison.OrdinalIgnoreCase))
                 return ctx => VoltageToRaw(ctx.BatteryVoltage * 0.95f + 0.5f);
+            if (name.Contains("Oil Temp", StringComparison.OrdinalIgnoreCase))
+                return ctx => VoltageToRaw(2f + ctx.OilTemp / 100f * 3f);
             if (name.Contains("Oil", StringComparison.OrdinalIgnoreCase))
                 return ctx => VoltageToRaw(ctx.OilPressure * 0.02f);
             if (name.Contains("Fuel", StringComparison.OrdinalIgnoreCase))
@@ -847,6 +1108,10 @@ public sealed class SensorSimulator
         public int Gear { get; init; }
         public float BatteryVoltage { get; init; }
         public float CoolantTemp { get; init; }
+        public float IntakeAirTemp { get; init; }
+        public float OilTemp { get; init; }
+        public float FuelTemp { get; init; }
+        public float EgtTemp { get; init; }
         public float InjectorDuty { get; init; }
         public float InjectorPw { get; init; }
         public float Airflow { get; init; }

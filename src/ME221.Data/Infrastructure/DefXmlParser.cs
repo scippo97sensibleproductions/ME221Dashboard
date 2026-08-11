@@ -136,7 +136,7 @@ public static class DefXmlParser
                 }
             }
 
-            var flashing = (bool?)elem.Attribute("Flashing") ?? false;
+            var flashing = (bool?)elem.Attribute("Flashing");
 
             yield return new DataLinkFeedback
             {

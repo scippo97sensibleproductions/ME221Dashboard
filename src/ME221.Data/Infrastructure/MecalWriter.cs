@@ -128,8 +128,9 @@ public static class MecalWriter
             _ => "Default"
         };
 
-        var elem = new XElement(severityName,
-            new XAttribute("Flashing", fb.Flashing));
+        var elem = new XElement(severityName);
+        if (fb.Flashing.HasValue)
+            elem.Add(new XAttribute("Flashing", fb.Flashing.Value));
 
         var constraints = new XElement("Constraints");
 

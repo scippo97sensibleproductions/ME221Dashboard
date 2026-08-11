@@ -1,0 +1,33 @@
+{
+  "sensors": [
+    { "id": 1, "name": "Engine Speed", "category": "Engine", "unit": "rpm", "minValue": 0, "maxValue": 8000, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": 940, "name": "RPM", "category": "Engine", "unit": "rpm", "minValue": 0, "maxValue": 8000, "inEntityMap": true, "isSelected": true, "customization": null },
+    { "id": -3001, "name": "Gear", "category": "Derived", "unit": "", "minValue": -1, "maxValue": 10, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3002, "name": "True Speed", "category": "Derived", "unit": "km/h", "minValue": 0, "maxValue": 400, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3003, "name": "Boost Pressure", "category": "Derived", "unit": "kPa", "minValue": 0, "maxValue": 400, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3004, "name": "Speed Error", "category": "Derived", "unit": "km/h", "minValue": -50, "maxValue": 50, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3005, "name": "RPM to Shift", "category": "Derived", "unit": "rpm", "minValue": 0, "maxValue": 9000, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3006, "name": "Shift State", "category": "Derived", "unit": "", "minValue": -1, "maxValue": 1, "inEntityMap": true, "isSelected": false, "customization": null }
+  ],
+  "selectedCount": 1,
+  "totalCount": 259,
+  "gridRows": 4,
+  "gridColumns": 7,
+  "backgroundImagePath": null,
+  "vehicleConfig": {
+    "enabled": true,
+    "tireDiameterInches": 23,
+    "finalDriveRatio": 4.3,
+    "gearRatios": [3.6, 2.2, 1.5, 1.1, 0.85, 0.7],
+    "wheelSlipPercent": 3,
+    "rpmEntityId": 940,
+    "vssSpeedEntityId": null,
+    "mapEntityId": null,
+    "baroEntityId": null,
+    "gearEntityId": null,
+    "shifter": {
+      "shiftPointRpm": 7000,
+      "downshiftFloorRpm": 5000
+    }
+  }
+}

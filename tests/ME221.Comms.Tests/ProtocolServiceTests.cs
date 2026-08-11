@@ -124,9 +124,12 @@ public class ProtocolServiceTests
         await service.DisposeAsync();
 
         // DisposeAsync cancels pending requests via RequestCorrelator.CancelAll(),
-        // which completes the TCS as cancelled. WaitAsync on a cancelled TCS
-        // produces a Canceled task (not Faulted), not an exception.
-        sendTask.IsCompleted.Should().BeTrue();
+        // which completes the TCS as cancelled. The async method's continuation
+        // (RunContinuationsAsynchronously) completes on a pool thread, so the
+        // returned task settles a tick later — await it (bounded), instead of
+        // asserting IsCompleted immediately (racy under load).
+        var completed = await Task.WhenAny(sendTask, Task.Delay(TimeSpan.FromSeconds(5)));
+        completed.Should().BeSameAs(sendTask, "the pending request must be cancelled by DisposeAsync");
         sendTask.IsCanceled.Should().BeTrue();
     }
 }

@@ -39,6 +39,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<DashboardPackageService>();
         builder.Services.AddSingleton<IUpdateCheckerService, UpdateCheckerService>();
         builder.Services.AddSingleton<HybridBridgeService>();
+        builder.Services.AddSingleton<AppLifecycleBridge>();
 
 #if WINDOWS
         builder.Services.AddSingleton<IGpsService>(sp =>

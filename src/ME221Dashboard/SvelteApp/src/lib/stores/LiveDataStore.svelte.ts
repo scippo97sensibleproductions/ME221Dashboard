@@ -17,6 +17,10 @@ const STALE_MS = 2500;
 const RECONNECT_REENABLE_COOLDOWN_MS = 5000;
 const MAX_OP_HISTORY = 500;
 
+/** Staleness threshold for live frames (R16); the shift tick uses it as the
+ *  sole staleness authority. Exported for the tick's stale check. */
+export { STALE_MS };
+
 export interface OperatingPointSample {
   timestamp: number;
   values: Record<string, number | null>;

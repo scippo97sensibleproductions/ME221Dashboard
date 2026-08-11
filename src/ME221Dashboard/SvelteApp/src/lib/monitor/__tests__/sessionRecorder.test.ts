@@ -154,7 +154,7 @@ describe('SessionRecorder exports', () => {
     const csv = SessionRecorder.toCsv();
     const lines = csv.split('\n');
     expect(lines[0]).toBe('time_ms,"RPM, speed","Bad""Name"');
-    expect(lines[1]).toContain('0.0,10,0.0,20');
+    expect(lines[1]).toContain('0.0,10,20');
   });
 
   it('toCsv returns empty string when nothing recorded', () => {

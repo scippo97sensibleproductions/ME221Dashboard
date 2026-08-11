@@ -1,5 +1,7 @@
 <script lang="ts">
   import { IconMinus, IconPlus } from '@tabler/icons-svelte';
+  import ClampNotice from './gauges/ClampNotice.svelte';
+  import { LIVE_REJECT_AUTO_HIDE_MS } from './shift/shifterConfig';
 
   let {
     value,
@@ -9,6 +11,10 @@
     unit = '',
     disabled = false,
     onchange,
+    error = null,
+    onErrorAutoHide,
+    forceCommitOnNudge = false,
+    ondraft,
   }: {
     value: number;
     min?: number;
@@ -17,16 +23,40 @@
     unit?: string;
     disabled?: boolean;
     onchange: (v: number) => void;
+    /** Live-reject error text; rendered as the ClampNotice error variant and
+     *  auto-hidden after LIVE_REJECT_AUTO_HIDE_MS (R19). */
+    error?: string | null;
+    onErrorAutoHide?: () => void;
+    /** When true, a nudge click first force-commits the in-field text (running
+     *  the commit/reject), then nudges the resulting value (R19). */
+    forceCommitOnNudge?: boolean;
+    /** Raw draft text on every keystroke (dirty tracking, U8). */
+    ondraft?: (text: string) => void;
   } = $props();
 
   let draft = $state('0');
   let _lastEmitted: number | null = $state(null);
+  let _errorTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (_lastEmitted === null || value !== _lastEmitted) {
       draft = String(value);
       _lastEmitted = value;
     }
+  });
+
+  // Auto-hide the live-reject error (R19): 3 s after it appears.
+  $effect(() => {
+    if (error != null && onErrorAutoHide) {
+      if (_errorTimer) clearTimeout(_errorTimer);
+      _errorTimer = setTimeout(() => {
+        _errorTimer = null;
+        onErrorAutoHide();
+      }, LIVE_REJECT_AUTO_HIDE_MS);
+    }
+    return () => {
+      if (_errorTimer) { clearTimeout(_errorTimer); _errorTimer = null; }
+    };
   });
 
   function commit() {
@@ -42,7 +72,11 @@
   }
 
   function nudge(delta: number) {
-    const v = Math.max(min, Math.min(max, value + delta));
+    if (forceCommitOnNudge) {
+      commit();
+    }
+    const base = _lastEmitted ?? value;
+    const v = Math.max(min, Math.min(max, base + delta));
     _lastEmitted = v;
     draft = String(v);
     onchange(v);
@@ -81,7 +115,7 @@
     <div class="flex-1 min-w-0 flex items-center rounded-lg border border-gray-600 bg-gray-800 overflow-hidden">
       <input type="number" step={magSmall}
         value={draft}
-        oninput={(e) => { draft = (e.target as HTMLInputElement).value; }}
+        oninput={(e) => { draft = (e.target as HTMLInputElement).value; ondraft?.(draft); }}
         onblur={commit}
         onkeydown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         use:numberNoWheel
@@ -115,4 +149,8 @@
       >{opt.label}</button>
     {/each}
   </div>
+
+  {#if error}
+    <ClampNotice variant="error" message={error} />
+  {/if}
 </div>

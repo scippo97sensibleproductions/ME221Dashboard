@@ -119,6 +119,10 @@ public sealed class GaugeConfigEntry
     // WedgeBar
     public int WedgeSegmentCount { get; set; } = 32;
     public double WedgeRedlineStart { get; set; } = 0.8;
+    // Shift-light gauge: how far before the shift point the first segment lights (R13).
+    public double RampWidthRpm { get; set; } = 1500;
+    // Shift-light gauge: color-zone count for the bar (1..3, default 3).
+    public int ZoneCount { get; set; } = 3;
     // Chart overlays / style
     public List<ChartOverlayEntry>? ChartOverlays { get; set; }
     public int OverlayPillPosition { get; set; } // 0=topRight 1=topLeft 2=bottomRight 3=bottomLeft

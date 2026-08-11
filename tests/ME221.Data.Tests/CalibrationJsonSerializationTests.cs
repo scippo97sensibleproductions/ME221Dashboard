@@ -101,7 +101,7 @@ public class CalibrationJsonSerializationTests
         result.MeasurementUnitTypes.Should().Be(MeasurementUnitType.Celsius);
         result.TextValues.Should().ContainSingle(t => t.Text == "Cold");
         result.Feedbacks.Should().ContainSingle(f =>
-            f.Severity == DataLinkFeedbackSeverity.Warning && f.MinValue == 100f && f.MaxValue == 120f && f.Flashing);
+            f.Severity == DataLinkFeedbackSeverity.Warning && f.MinValue == 100f && f.MaxValue == 120f && f.Flashing == true);
     }
 
     [Fact]

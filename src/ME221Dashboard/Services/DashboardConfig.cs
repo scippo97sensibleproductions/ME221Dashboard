@@ -12,11 +12,16 @@ public sealed class DashboardConfig
     {
         ["default"] = new()
     };
+    [System.Obsolete("Migrated to per-dashboard Vehicle + VehicleSeedTemplate. Kept for deserialization of old configs.")]
     public VehicleConfig? Vehicle { get; set; }
+    public VehicleConfig? VehicleSeedTemplate { get; set; }
     public UserPreferences? Preferences { get; set; }
     public List<DataLinkWarningSetting> WarningSettings { get; set; } = [];
     public int WarningDelayMs { get; set; } = 500;
     public List<MonitoringPreset> MonitoringPresets { get; set; } = [];
+    public List<BatchLedgerEntry> BatchLedger { get; set; } = [];
+    public List<QueuedBanner> QueuedBanners { get; set; } = [];
+    public List<UndoExpiryNotice> QueuedUndoExpiryNotices { get; set; } = [];
 }
 
 public sealed class UserPreferences
@@ -51,12 +56,13 @@ public sealed class DashboardDefinition
     public bool LayoutLocked { get; set; }
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
+    public ShifterConfig? ShifterConfig { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("WarningSettings")]
     [System.Obsolete("Migrated to DashboardConfig.WarningSettings. Kept for deserialization of old configs.")]
     public List<DataLinkWarningSetting>? LegacyWarningSettings { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("WarningDelayMs")]
     [System.Obsolete("Migrated to DashboardConfig.WarningDelayMs. Kept for deserialization of old configs.")]
-    public int? LegacyWarningDelayMs { get; set; }
+    public double? LegacyWarningDelayMs { get; set; }
     public List<WarningHistoryEntry> WarningHistory { get; set; } = [];
 }
 
@@ -114,6 +120,12 @@ public sealed class VehicleConfig
     public int? MapEntityId { get; set; }
     public int? BaroEntityId { get; set; }
     public int? GearEntityId { get; set; }
+}
+
+public sealed class ShifterConfig
+{
+    public double ShiftPointRpm { get; set; }
+    public double DownshiftFloorRpm { get; set; }
 }
 
 public sealed class MonitoringPreset

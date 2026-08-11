@@ -24,6 +24,8 @@ public sealed class ReportingOrchestrator(
     {
         lock (_lock)
         {
+            sensorSimulator.SetDrivingModeHold(console.DrivingModeHold);
+            console.AttachSimulator(sensorSimulator);
             _timer?.Dispose();
             _tickCount = 0;
             var intervalMs = Math.Max(50, 1000 / frequencyHz);
@@ -55,6 +57,8 @@ public sealed class ReportingOrchestrator(
 
         sensorSimulator.Tick();
         _tickCount++;
+        sensorSimulator.ApplyOverrides();
+        console.AdvanceScript();
 
         var report = BuildReport();
         if (report is not null)
