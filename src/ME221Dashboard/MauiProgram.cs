@@ -47,6 +47,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorStreamService>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorLifecycleHooks>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorPinStore>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorClientService>();
 
 #if WINDOWS
         builder.Services.AddSingleton<IGpsService>(sp =>
