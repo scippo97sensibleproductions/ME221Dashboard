@@ -3,6 +3,7 @@ using System.Text.Json;
 using ME221.Comms;
 using ME221.Comms.Messages;
 using ME221.Data.Models;
+using ME221Dashboard.Services.Mirror;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Maui.Controls;
@@ -94,7 +95,9 @@ public partial class HybridBridgeService : IDisposable
         ILogger<HybridBridgeService>? logger = null,
         IGpsService? gps = null,
         IChannelFactory? channelFactory = null,
-        IUpdateCheckerService? updateChecker = null)
+        IUpdateCheckerService? updateChecker = null,
+        ApprovedDeviceStore? approvedDeviceStore = null,
+        DiscoveryResponderService? discoveryResponder = null)
     {
         _connection = connection;
         _liveData = liveData;
@@ -105,6 +108,8 @@ public partial class HybridBridgeService : IDisposable
         _gps = gps;
         _channelFactory = channelFactory;
         _updateChecker = updateChecker;
+        _approvedDeviceStore = approvedDeviceStore;
+        _discoveryResponder = discoveryResponder;
 
         _logger.LogInformation("GPS service: {GpsType}", _gps?.GetType().Name ?? "NULL (none registered)");
 

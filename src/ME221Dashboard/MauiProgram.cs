@@ -40,6 +40,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IUpdateCheckerService, UpdateCheckerService>();
         builder.Services.AddSingleton<HybridBridgeService>();
         builder.Services.AddSingleton<AppLifecycleBridge>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.ApprovedDeviceStore>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
 
 #if WINDOWS
         builder.Services.AddSingleton<IGpsService>(sp =>
@@ -74,6 +76,19 @@ public static class MauiProgram
         builder.Services.AddHybridWebViewDeveloperTools();
 #endif
 
-        return builder.Build();
+        var app = builder.Build();
+
+        // Idle discovery: A's UDP responder runs whenever the app runs (Product Contract).
+        try
+        {
+            app.Services.GetRequiredService<ME221Dashboard.Services.Mirror.DiscoveryResponderService>().Start();
+            Log.Information("DI: Discovery responder started");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Discovery responder failed to start");
+        }
+
+        return app;
     }
 }
