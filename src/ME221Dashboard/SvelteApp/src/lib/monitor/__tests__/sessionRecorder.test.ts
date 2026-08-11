@@ -214,3 +214,125 @@ describe('SessionRecorder exports', () => {
     expect(yaml).toContain('v: 25');
   });
 });
+
+describe('SessionRecorder companion feed (U10)', () => {
+  it('startCompanion records feed frames with A timestamps and no trimming', () => {
+    SessionRecorder.startCompanion([1]);
+    for (let seq = 1; seq <= 108_000; seq++) {
+      SessionRecorder.pushFeedFrame(seq, seq * 100, { '1': seq });
+    }
+    const data = SessionRecorder.getRecordedData();
+    expect(data.data[1]).toHaveLength(108_000);
+    expect(data.data[1][0]).toEqual({ t: 100, v: 1 });
+    expect(data.data[1][107_999]).toEqual({ t: 10_800_000, v: 108_000 });
+  });
+
+  it('records every key present in the feed when started with no sensor ids', () => {
+    SessionRecorder.startCompanion([]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10, '2': 20 });
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 11, '5': 55 });
+    const data = SessionRecorder.getRecordedData();
+    expect(data.sensorIds).toEqual([1, 2, 5]);
+    expect(data.data[1]).toEqual([{ t: 1000, v: 10 }, { t: 2000, v: 11 }]);
+    expect(data.data[2]).toEqual([{ t: 1000, v: 20 }]);
+    expect(data.data[5]).toEqual([{ t: 2000, v: 55 }]);
+  });
+
+  it('skips null values and sensors that never produced a value', () => {
+    SessionRecorder.startCompanion([]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10, '2': null });
+    const data = SessionRecorder.getRecordedData();
+    expect(data.sensorIds).toEqual([1]);
+    expect(data.data[1]).toEqual([{ t: 1000, v: 10 }]);
+    expect(data.data[2]).toBeUndefined();
+  });
+
+  it('marks missing sequence numbers as gap rows in data and exports', () => {
+    SessionRecorder.startCompanion([1, 2]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10, '2': 20 });
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 11, '2': 21 });
+    SessionRecorder.pushFeedFrame(4, 4000, { '1': 13, '2': 23 });
+    const data = SessionRecorder.getRecordedData();
+    expect(data.data[1]).toHaveLength(4);
+    expect(Number.isNaN(data.data[1][2].v)).toBe(true);
+    expect(data.data[1][2].t).toBe(4000);
+    expect(data.data[1][3]).toEqual({ t: 4000, v: 13 });
+    expect(data.data[2]).toHaveLength(4);
+    const lines = SessionRecorder.toCsv().split('\n');
+    expect(lines[3]).toBe('4000.0,GAP,GAP');
+    expect(SessionRecorder.toYaml()).toContain('v: GAP');
+    expect(SessionRecorder.toVirtualDynoCsv()).toContain('GAP');
+  });
+
+  it('ignores duplicate and out-of-order frames without marking gaps', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 99 });
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 20 });
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 88 });
+    expect(SessionRecorder.getRecordedData().data[1])
+      .toEqual([{ t: 1000, v: 10 }, { t: 2000, v: 20 }]);
+  });
+
+  it('finalize stops recording, sets a completion notice and clears it on the next start', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.finalize('Session ended');
+    expect(SessionRecorder.state).toBe('stopped');
+    expect(SessionRecorder.completionNotice).toBe('Session ended');
+    SessionRecorder.startCompanion([1]);
+    expect(SessionRecorder.completionNotice).toBeNull();
+  });
+
+  it('finalize without a reason uses the default notice', () => {
+    SessionRecorder.startCompanion([]);
+    SessionRecorder.finalize();
+    expect(SessionRecorder.completionNotice).toBe('Recording finalized');
+  });
+
+  it('newSegment finalizes and restarts with a fresh buffer (reconnect continuation)', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 11 });
+    SessionRecorder.newSegment();
+    expect(SessionRecorder.state).toBe('recording');
+    expect(SessionRecorder.segmentCount).toBe(1);
+    SessionRecorder.pushFeedFrame(3, 3000, { '1': 12 });
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 3000, v: 12 }]);
+  });
+
+  it('finalize followed by startCompanion behaves like newSegment', () => {
+    SessionRecorder.startCompanion([]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.finalize('Reconnect');
+    SessionRecorder.startCompanion([]);
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 20 });
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 2000, v: 20 }]);
+  });
+
+  it('start after companion recording resets companion state', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.pushFeedFrame(3, 3000, { '1': 30 });
+    expect(SessionRecorder.getRecordedData().data[1]).toHaveLength(3);
+    SessionRecorder.stop();
+    storeMock.liveDataStore.values = { 1: 50 };
+    SessionRecorder.start([1]);
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 0, v: 50 }]);
+    SessionRecorder.pushFeedFrame(4, 4000, { '1': 40 });
+    expect(SessionRecorder.getRecordedData().data[1]).toHaveLength(1);
+  });
+
+  it('idle periods produce no further gap markers', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.pushFeedFrame(3, 3000, { '1': 30 });
+    const gapCount = () => SessionRecorder.getRecordedData().data[1]
+      .filter(s => Number.isNaN(s.v)).length;
+    expect(gapCount()).toBe(1);
+    expect(SessionRecorder.getRecordedData().data[1]).toHaveLength(3);
+    SessionRecorder.pushFeedFrame(4, 4000, { '1': 40 });
+    expect(gapCount()).toBe(1);
+    expect(SessionRecorder.getRecordedData().data[1]).toHaveLength(4);
+  });
+});

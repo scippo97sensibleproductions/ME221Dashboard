@@ -31,6 +31,21 @@ describe('buildSessionCsv', () => {
     };
     expect(buildSessionCsv(s).split('\n')[0]).toBe('time_ms,"RPM, speed"');
   });
+
+  it('renders gap markers as GAP cells', () => {
+    const s = {
+      sensorIds: [1, 2],
+      sensorNames: { 1: 'RPM', 2: 'TPS' },
+      data: {
+        1: [{ t: 0, v: 100 }, { t: 2000, v: Number.NaN }, { t: 2000, v: 150 }],
+        2: [{ t: 0, v: 5 }, { t: 2000, v: Number.NaN }, { t: 2000, v: 6 }],
+      },
+    };
+    const lines = buildSessionCsv(s).split('\n');
+    expect(lines[1]).toBe('0.0,100,5');
+    expect(lines[2]).toBe('2000.0,GAP,GAP');
+    expect(lines[3]).toBe('2000.0,150,6');
+  });
 });
 
 describe('buildSessionVdCsv', () => {
@@ -63,5 +78,16 @@ describe('buildSessionVdCsv', () => {
     for (const line of lines.slice(2)) {
       expect(line.split(',').length).toBe(headerWidth);
     }
+  });
+
+  it('renders gap markers as GAP in VirtualDyno CSV too', () => {
+    const s = {
+      sensorIds: [1],
+      sensorNames: { 1: 'RPM' },
+      data: { 1: [{ t: 0, v: 100 }, { t: 2000, v: Number.NaN }] },
+    };
+    const lines = buildSessionVdCsv(s).split('\n');
+    expect(lines[2]).toBe('0.000,100');
+    expect(lines[3]).toBe('2.000,GAP');
   });
 });

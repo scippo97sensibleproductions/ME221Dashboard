@@ -42,6 +42,7 @@
   import SnapshotErrorScreen from './lib/mirror/SnapshotErrorScreen.svelte';
   import DisconnectedScreen from './lib/mirror/DisconnectedScreen.svelte';
   import ConfigUpdateNotice from './lib/mirror/ConfigUpdateNotice.svelte';
+  import MirrorRecordControl from './lib/mirror/MirrorRecordControl.svelte';
 
   // Update check guards — sessionStorage-backed: Vite hot reloads remount
   // App.svelte and reset in-memory flags, which would re-fire checkForUpdate()
@@ -875,6 +876,7 @@
   </div>
 
   {#if isMirrorMode}
+    <MirrorRecordControl />
     {#if mirrorStore.sessionState === 'Connected' && !mirrorStore.snapshotApplied}
       <SnapshotLoadScreen />
     {:else if mirrorStore.sessionState === 'Disconnected' && mirrorStore.sessionError === 'update made, reconnect required'}

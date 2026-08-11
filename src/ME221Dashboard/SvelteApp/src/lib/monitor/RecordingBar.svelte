@@ -20,6 +20,7 @@
   let tick = $state(0);
   let recorderState = $state<RecordingState>(SessionRecorder.state);
   let finalDurationMs = $state(0);
+  let notice = $state<string | null>(SessionRecorder.completionNotice);
   let timerInterval: ReturnType<typeof setInterval> | null = null;
 
   function startTimer() {
@@ -39,6 +40,7 @@
     if (SessionRecorder.state === 'recording') {
       startTimer();
     }
+    notice = SessionRecorder.completionNotice;
   });
 
   onDestroy(() => {
@@ -59,6 +61,7 @@
       startTimer();
     }
     recorderState = SessionRecorder.state;
+    notice = SessionRecorder.completionNotice;
   }
 
   function formatDuration(ms: number): string {
@@ -100,6 +103,10 @@
       00:00:00
     {/if}
   </div>
+
+  {#if recorderState === 'stopped' && notice}
+    <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400">{notice}</span>
+  {/if}
 
   <div class="text-[10px] font-bold uppercase tracking-wider">
     {#if recorderState === 'recording'}

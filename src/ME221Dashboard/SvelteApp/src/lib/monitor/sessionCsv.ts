@@ -27,6 +27,9 @@ const VD_NAME_MAP: Record<string, string> = {
 const escapeCsv = (s: string): string =>
   s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
 
+/** Gap rows (companion feed dropped a sequence number) render as 'GAP' (AE6). */
+const cellValue = (v: number): string => (Number.isNaN(v) ? 'GAP' : String(v));
+
 function mapVdName(raw: string): string {
   const lower = raw.toLowerCase().trim();
   if (VD_NAME_MAP[lower]) return VD_NAME_MAP[lower];
@@ -50,7 +53,7 @@ export function buildSessionCsv(session: CsvSessionSource): string {
       const s = session.data[id]?.[i];
       if (!s) { row.push(''); continue; }
       if (timeCell === '') timeCell = s.t.toFixed(1);
-      row.push(String(s.v));
+      row.push(cellValue(s.v));
     }
     if (timeCell === '') continue;
     lines.push([timeCell, ...row].join(','));
@@ -73,7 +76,7 @@ export function buildSessionVdCsv(session: CsvSessionSource): string {
       const s = session.data[id]?.[i];
       if (!s) { row.push(''); continue; }
       if (timeCell === '') timeCell = (s.t / 1000).toFixed(3);
-      row.push(String(s.v));
+      row.push(cellValue(s.v));
     }
     if (timeCell === '') continue;
     lines.push([timeCell, ...row].join(','));
