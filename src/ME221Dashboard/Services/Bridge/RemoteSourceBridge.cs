@@ -24,7 +24,7 @@ public partial class HybridBridgeService
     {
         _mirrorStore = store;
         _mirrorMode = true;
-        _mirrorCalibration = new MirrorCalibrationSource(_realCalibration, store, _logger);
+        _mirrorCalibration = new MirrorCalibrationSource(_realCalibration, store);
         _calibration = _mirrorCalibration;
         _logger.LogInformation("Companion mode active — writes gated, reads mirror-served");
     }

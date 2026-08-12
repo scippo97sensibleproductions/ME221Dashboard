@@ -28,6 +28,7 @@ public sealed class MirrorClientService : IDisposable
     private readonly Func<string> _deviceName;
     private readonly Func<string?> _localInstanceId;
     private readonly ILogger<MirrorClientService> _logger;
+    private readonly int? _portOverride;
     private string _clientId;
     private readonly MirrorSessionState _state = new();
     private ClientWebSocket? _socket;
@@ -45,12 +46,14 @@ public sealed class MirrorClientService : IDisposable
         Func<string>? deviceName = null,
         MirrorPinStore? pinStore = null,
         Func<string?>? localInstanceId = null,
+        int? portOverride = null,
         ILogger<MirrorClientService>? logger = null)
     {
         _appVersion = appVersion ?? (() => AppInfo.Current.VersionString);
         _deviceName = deviceName ?? (() => DeviceInfo.Current.Name);
         _pinStore = pinStore;
-        _localInstanceId = localInstanceId;
+        _localInstanceId = localInstanceId ?? (() => null);
+        _portOverride = portOverride;
         _logger = logger ?? NullLogger<MirrorClientService>.Instance;
         _clientId = Guid.NewGuid().ToString("N");
     }
@@ -168,7 +171,8 @@ public sealed class MirrorClientService : IDisposable
         connectCts.CancelAfter(ConnectTimeout);
         try
         {
-            await _socket.ConnectAsync(new Uri($"wss://{target.Address}:{MirrorProtocol.WssPort}/"), connectCts.Token).ConfigureAwait(false);
+            var port = _portOverride ?? MirrorProtocol.WssPort;
+            await _socket.ConnectAsync(new Uri($"wss://{target.Address}:{port}/"), connectCts.Token).ConfigureAwait(false);
             _helloAck = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             await SendHelloAsync(token).ConfigureAwait(false);
             _ = Task.Run(() => ReceiveLoopAsync(_cts.Token));

@@ -1,21 +1,18 @@
 using ME221.Comms;
 using ME221.Data.Models;
 using ME221Dashboard.Services.Mirror;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ME221Dashboard.Services;
 
 /// <summary>
 /// Companion-mode calibration source (U7, R9): while <see cref="MirrorSnapshotStore"/>
-/// holds an applied snapshot, reads answer from it and saves are dropped — B's local
-/// data ground is never touched. All existing read methods keep their exact JSON
-/// shapes because they read through the same ICalibrationService seam.
+/// holds an applied snapshot, reads answer from it. Writes delegate to the real
+/// service — the bridge's GateWrite blocks gated writes before they reach here, and
+/// B-local exception writes must persist on B (KTD-5).
 /// </summary>
 internal sealed class MirrorCalibrationSource(
     ICalibrationService inner,
-    MirrorSnapshotStore store,
-    ILogger<HybridBridgeService> logger)
+    MirrorSnapshotStore store)
     : ICalibrationService
 {
     public Task<CalibrationData> LoadAndParseAsync(Stream mefwStream) =>
