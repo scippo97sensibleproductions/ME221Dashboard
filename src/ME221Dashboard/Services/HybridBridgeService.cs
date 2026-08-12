@@ -194,6 +194,9 @@ public partial class HybridBridgeService : IDisposable
         try
         {
             if (_vehicleMigrationComplete) return;
+            // Companion mode: the config under read is A's snapshot — never
+            // migrate or persist it; B's own config migrates after exit.
+            if (_mirrorMode) return;
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
             if (config != null)
             {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ME221.Data.Models;
 using ME221Dashboard.Services.Mirror;
 using Microsoft.Extensions.Logging;
 
@@ -47,6 +48,19 @@ public partial class HybridBridgeService
         _logger.LogDebug("Write gated in companion mode: {Feature}", feature);
         return JsonSerializer.Serialize(new { success = false, error = "Read-only in companion mode" });
     }
+
+    /// <summary>
+    /// B's own persisted dashboard config — the mirror snapshot never leaks here.
+    /// B-local exception writes (presets, prefs, warning history/ledger/queued
+    /// notices, odometer) must read and write the real store, never the mirror,
+    /// or a save would persist A's snapshot over B's config.
+    /// </summary>
+    private Task<DashboardConfig?> GetLocalDashboardConfigAsync() =>
+        _realCalibration.GetPersistedDashboardConfigAsync();
+
+    /// <summary>Persist to B's own dashboard config, never the mirror snapshot.</summary>
+    private Task SaveLocalDashboardConfigAsync(DashboardConfig config) =>
+        _realCalibration.SaveDashboardConfigAsync(config);
 
     /// <summary>The established not-ready error for mirror-served reads before the snapshot applies (U7).</summary>
     internal string NotReadyJson() =>

@@ -130,7 +130,9 @@ public partial class HybridBridgeService
                 result.Add(record);
             }
 
-            if (anyMigration || anyDatalinkMigration)
+            // In companion mode the config is A's snapshot — the R18 migration
+            // must not persist it onto B's disk; B's own config migrates after exit.
+            if ((anyMigration || anyDatalinkMigration) && !_mirrorMode)
                 await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
 
             // R19 load-time removal notices: in-memory per calibration load (KTD6),
@@ -226,6 +228,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveWarningDatalink(string json)
     {
+        if (GateWrite("warningSettings") is { } gated) return gated;
         try
         {
             var payload = JsonSerializer.Deserialize<WarningDatalinkPayload>(json, SJsonOptions);
@@ -391,9 +394,9 @@ public partial class HybridBridgeService
         try
         {
             var ledger = JsonSerializer.Deserialize<List<BatchLedgerEntry>>(ledgerJson, SJsonOptions) ?? [];
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             config.BatchLedger = ledger;
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
             _logger.LogInformation("[WARN] SaveBatchLedger: saved {Count} entries", ledger.Count);
 
             return JsonSerializer.Serialize(new { success = true });
@@ -414,7 +417,7 @@ public partial class HybridBridgeService
     {
         try
         {
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             return JsonSerializer.Serialize(new { banners = config.QueuedBanners, undoExpiryNotices = config.QueuedUndoExpiryNotices }, SJsonOptions);
         }
         catch (Exception ex)
@@ -433,10 +436,10 @@ public partial class HybridBridgeService
         try
         {
             var payload = JsonSerializer.Deserialize<QueuedNoticesPayload>(json, SJsonOptions);
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             config.QueuedBanners = payload?.Banners ?? [];
             config.QueuedUndoExpiryNotices = payload?.UndoExpiryNotices ?? [];
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
             return JsonSerializer.Serialize(new { success = true });
         }
         catch (Exception ex)
@@ -475,14 +478,14 @@ public partial class HybridBridgeService
         try
         {
             var history = JsonSerializer.Deserialize<List<WarningHistoryEntry>>(historyJson, SJsonOptions) ?? [];
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             var activeName = config.ActiveDashboard ?? "default";
 
             if (!config.Dashboards.ContainsKey(activeName))
                 config.Dashboards[activeName] = new DashboardDefinition();
 
             config.Dashboards[activeName].WarningHistory = history;
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
             _logger.LogInformation("[WARN] SaveWarningHistory: saved {Count} entries", history.Count);
 
             return JsonSerializer.Serialize(new { success = true });

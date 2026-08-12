@@ -102,7 +102,7 @@ public partial class HybridBridgeService
         OdometerConfig state;
         try
         {
-            var configTask = _calibration.GetPersistedDashboardConfigAsync();
+            var configTask = GetLocalDashboardConfigAsync();
             configTask.Wait(TimeSpan.FromSeconds(1));
             var config = configTask.Result;
             if (config?.Dashboards.TryGetValue(dashboardName, out var def) == true && def.Odometer != null)
@@ -332,12 +332,12 @@ public partial class HybridBridgeService
     {
         try
         {
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false);
             if (config == null) return;
             if (config.Dashboards.TryGetValue(dashboardName, out var def))
             {
                 def.Odometer = state;
-                await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+                await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

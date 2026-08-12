@@ -10,15 +10,15 @@ public partial class HybridBridgeService
 
     private async Task<UserPreferences> GetPreferencesAsync()
     {
-        var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+        var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false);
         return config?.Preferences ?? new UserPreferences();
     }
 
     private async Task SavePreferencesAsync(UserPreferences prefs)
     {
-        var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+        var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
         config.Preferences = prefs;
-        await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+        await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
     }
 
     /// <summary>

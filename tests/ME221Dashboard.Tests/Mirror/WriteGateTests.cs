@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using ME221.Data.Models;
 using ME221Dashboard.Services;
 using ME221Dashboard.Services.Mirror;
 using Xunit;
@@ -45,6 +46,9 @@ public sealed class WriteGateTests
     [InlineData("SaveSensorSelection", "{\"dashboardName\":\"default\",\"selectedIds\":[]}")]
     [InlineData("SaveDashboardTables", "{\"dashboardName\":\"default\",\"tables\":[]}")]
     [InlineData("DeleteDashboardGauges", "default|[]")]
+    [InlineData("SaveDashboardLayout", "{\"dashboardName\":\"default\",\"gauges\":[]}")]
+    [InlineData("SaveDashboardViewState", "{\"dashboardName\":\"default\"}")]
+    [InlineData("SaveWarningDatalink", "{}")]
     [InlineData("SaveFile", "{}")]
     [InlineData("ImportYamlTable", null)]
     [InlineData("ImportCsvTable", null)]
@@ -77,6 +81,9 @@ public sealed class WriteGateTests
             "SaveSensorSelection" => _bridge.SaveSensorSelection(args!),
             "SaveDashboardTables" => _bridge.SaveDashboardTables(args!),
             "DeleteDashboardGauges" => _bridge.DeleteDashboardGauges(args!.Split('|')[0], args.Split('|')[1]),
+            "SaveDashboardLayout" => _bridge.SaveDashboardLayout(args!),
+            "SaveDashboardViewState" => _bridge.SaveDashboardViewState(args!),
+            "SaveWarningDatalink" => _bridge.SaveWarningDatalink(args!),
             "SaveFile" => _bridge.SaveFile(args!),
             "ImportYamlTable" => _bridge.ImportYamlTable(),
             "ImportCsvTable" => _bridge.ImportCsvTable(),
@@ -134,8 +141,56 @@ public sealed class WriteGateTests
         ledger.Should().NotContain("Read-only in companion mode");
         var notices = await _bridge.SaveWarningQueuedNotices("[]");
         notices.Should().NotContain("Read-only in companion mode");
-        var datalink = await _bridge.SaveWarningDatalink("{}");
-        datalink.Should().NotContain("Read-only in companion mode");
+    }
+
+    // ── KTD-5: mirroring must never overwrite B's own dashboard config ────────
+
+    [Fact]
+    public async Task MirrorSnapshotNeverLeaksIntoBLocalConfigViaWriters()
+    {
+        // B-local config carries a distinctive local dashboard; A's snapshot carries "default".
+        _calibration.Config.Dashboards["Local-B"] = new DashboardDefinition { Gauges = [new GaugeConfigEntry { Id = 99 }] };
+        _store.Apply(MirrorTestData.SampleSnapshot());
+
+        // B-local exception writes must target B's own store, never A's snapshot data.
+        await _bridge.SaveWarningHistory("[]");
+        await _bridge.SaveBatchLedger("[]");
+        await _bridge.SaveWarningQueuedNotices("{}");
+        await _bridge.CreateMonitoringPreset("{\"name\":\"P1\",\"datalinkIds\":[1]}");
+        await _bridge.SaveLastConnection("{\"type\":\"tcp\",\"host\":\"10.0.0.9\",\"port\":22100}");
+        await _bridge.SaveFavoriteTables("[1,2]");
+
+        // B's own dashboard is untouched and the B-local data landed on B's config…
+        _calibration.Config.Dashboards["Local-B"].Gauges.Should().ContainSingle(g => g.Id == 99);
+        _calibration.Config.MonitoringPresets.Should().ContainSingle(p => p.Name == "P1");
+        _calibration.Config.Preferences.FavoriteTableIds.Should().Equal([1, 2]);
+        // …and "default" may only exist as a B-local empty stub (created by SaveWarningHistory),
+        // never carrying A's snapshot content (gauge id 3 / table id 10).
+        if (_calibration.Config.Dashboards.TryGetValue("default", out var stub))
+        {
+            stub.Gauges.Should().BeEmpty();
+            stub.Tables.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task MirrorReadsNeverWriteToBLocalConfig()
+    {
+        // GetVehicleConfig runs EnsureVehicleMigrationAsync — in companion mode the
+        // migration must not mutate or persist A's snapshot onto B's disk.
+        _calibration.Config.Dashboards["Local-B"] = new DashboardDefinition();
+        _store.Apply(MirrorTestData.SampleSnapshot());
+
+        var vehicle = await _bridge.GetVehicleConfig();
+        vehicle.Should().NotContain("error");
+
+        // B's own dashboards survive; its fresh "default" template never gains A's
+        // snapshot content (gauge id 3 / table id 10), and no migration wrote
+        // A's config (migrated or not) onto B's disk.
+        _calibration.Config.Dashboards.Keys.Should().Contain("Local-B");
+        _calibration.Config.Dashboards["default"].Gauges.Should().BeEmpty();
+        _calibration.Config.Dashboards["default"].Tables.Should().BeEmpty();
+        _calibration.Config.VehicleSeedTemplate.Should().BeNull();
     }
 }
 

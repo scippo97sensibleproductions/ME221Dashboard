@@ -537,6 +537,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveDashboardLayout(string jsonPayload)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         _logger.LogInformation("SaveDashboardLayout called");
         try
         {
@@ -830,6 +831,7 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> SaveDashboardViewState(string jsonPayload)
     {
+        if (GateWrite("dashboards") is { } gated) return gated;
         try
         {
             var data = JsonNode.Parse(jsonPayload)!;

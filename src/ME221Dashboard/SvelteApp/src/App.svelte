@@ -251,6 +251,7 @@
   });
 
   function persistViewState() {
+    if (isMirrorMode) return;
     HybridBridge.saveDashboardViewState(activeDashboard, { headerVisible, sidebarVisible }).catch(() => {});
   }
 

@@ -20,7 +20,7 @@ public partial class HybridBridgeService
     {
         try
         {
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false);
             var presets = config?.MonitoringPresets ?? [];
             return JsonSerializer.Serialize(new { success = true, presets }, SJsonOptions);
         }
@@ -53,7 +53,7 @@ public partial class HybridBridgeService
             if (datalinkIds.Count == 0)
                 return JsonSerializer.Serialize(new { success = false, error = "At least one sensor must be selected" }, SJsonOptions);
 
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             config.MonitoringPresets ??= [];
 
             if (config.MonitoringPresets.Count >= MaxPresetsPerInstallation)
@@ -70,7 +70,7 @@ public partial class HybridBridgeService
             };
 
             config.MonitoringPresets.Add(preset);
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new { success = true, preset }, SJsonOptions);
         }
@@ -107,7 +107,7 @@ public partial class HybridBridgeService
             if (datalinkIds.Count == 0)
                 return JsonSerializer.Serialize(new { success = false, error = "At least one sensor must be selected" }, SJsonOptions);
 
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false) ?? new DashboardConfig();
             config.MonitoringPresets ??= [];
 
             var existing = config.MonitoringPresets.FirstOrDefault(p => p.Id == id);
@@ -120,7 +120,7 @@ public partial class HybridBridgeService
             existing.Name = name;
             existing.DatalinkIds = datalinkIds;
 
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new { success = true, preset = existing }, SJsonOptions);
         }
@@ -142,7 +142,7 @@ public partial class HybridBridgeService
             if (string.IsNullOrWhiteSpace(id))
                 return JsonSerializer.Serialize(new { success = false, error = "Preset ID is required" }, SJsonOptions);
 
-            var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
+            var config = await GetLocalDashboardConfigAsync().ConfigureAwait(false);
             if (config?.MonitoringPresets == null)
                 return JsonSerializer.Serialize(new { success = false, error = "No presets found" }, SJsonOptions);
 
@@ -150,7 +150,7 @@ public partial class HybridBridgeService
             if (removed == 0)
                 return JsonSerializer.Serialize(new { success = false, error = "Preset not found" }, SJsonOptions);
 
-            await _calibration.SaveDashboardConfigAsync(config).ConfigureAwait(false);
+            await SaveLocalDashboardConfigAsync(config).ConfigureAwait(false);
             return JsonSerializer.Serialize(new { success = true }, SJsonOptions);
         }
         catch (Exception ex)
