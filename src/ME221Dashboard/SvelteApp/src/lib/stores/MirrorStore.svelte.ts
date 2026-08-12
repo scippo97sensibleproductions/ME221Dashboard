@@ -99,12 +99,17 @@ class MirrorStore {
     }
     if (evt.state === 'Disconnected' || evt.state === 'Revoked' || evt.state === 'Stopped') {
       this.snapshotApplied = false;
+      this.#reassembler = null;
     }
   }
 
   #onChunk(chunk: SnapshotChunkMessage): void {
     if (!chunk) return;
-    this.#reassembler ??= new MirrorChunkReassembler(chunk.seq);
+    // A new sequence (retry attempt or a new session) starts a fresh assembly; a
+    // stale partial reassembler must never reject a restarted snapshot (KTD-2).
+    if (this.#reassembler === null || this.#reassembler.expectedIndex === 0 || chunk.seq !== this.#reassembler.seq) {
+      this.#reassembler = new MirrorChunkReassembler(chunk.seq);
+    }
     this.#reassembler.tryAdd(chunk);
   }
 

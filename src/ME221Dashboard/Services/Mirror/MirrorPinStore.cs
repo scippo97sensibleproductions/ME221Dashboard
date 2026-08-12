@@ -53,6 +53,29 @@ public sealed class MirrorPinStore(ILogger<MirrorPinStore>? logger = null)
         await MutateAsync(file => file.Pins.RemoveAll(p => p.InstanceId == instanceId)).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// B's stable device identity (R16): the client id must survive restarts or the
+    /// approved token never matches again (the server requires ClientId equality).
+    /// </summary>
+    public async Task<string> GetOrCreateClientIdAsync()
+    {
+        await _saveLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var file = await LoadAsync().ConfigureAwait(false);
+            if (string.IsNullOrEmpty(file.ClientId))
+            {
+                file.ClientId = Guid.NewGuid().ToString("N");
+                await WriteAsync(file).ConfigureAwait(false);
+            }
+            return file.ClientId;
+        }
+        finally
+        {
+            _saveLock.Release();
+        }
+    }
+
     private async Task MutateAsync(Action<CompanionPinsFile> mutate)
     {
         await _saveLock.WaitAsync().ConfigureAwait(false);
@@ -99,5 +122,7 @@ public sealed class MirrorPinStore(ILogger<MirrorPinStore>? logger = null)
 public sealed class CompanionPinsFile
 {
     public int Version { get; set; } = 1;
+    /// <summary>B's stable device identity across restarts (R16).</summary>
+    public string ClientId { get; set; } = "";
     public List<MirrorPinEntry> Pins { get; set; } = [];
 }

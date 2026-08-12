@@ -120,6 +120,19 @@ public static class MauiProgram
             Log.Error(ex, "Mirror lifecycle hooks failed to wire");
         }
 
+        // B-side ingestion: resolving the relay subscribes it to the mirror client's
+        // messages (snapshot apply, frame gating, event relay) and enters the bridge
+        // read-only branch when a snapshot lands (U8).
+        try
+        {
+            app.Services.GetRequiredService<ME221Dashboard.Services.Mirror.MirrorEventRelay>();
+            Log.Information("DI: Mirror event relay wired");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Mirror event relay failed to wire");
+        }
+
         return app;
     }
 }

@@ -22,10 +22,13 @@ public sealed record MirrorBeacon(string AppVersion, bool EcuConnected, string D
 /// </summary>
 public sealed class MirrorClientService : IDisposable
 {
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(10);
+
     private readonly Func<string> _appVersion;
     private readonly Func<string> _deviceName;
+    private readonly Func<string?> _localInstanceId;
     private readonly ILogger<MirrorClientService> _logger;
-    private readonly string _clientId = Guid.NewGuid().ToString("N");
+    private string _clientId;
     private readonly MirrorSessionState _state = new();
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _cts;
@@ -34,17 +37,22 @@ public sealed class MirrorClientService : IDisposable
     private string? _capturedThumbprint;
     private MirrorBeacon? _target;
     private MirrorPinStore? _pinStore;
+    private bool _reconnecting;
+    private TaskCompletionSource<bool>? _helloAck;
 
     public MirrorClientService(
         Func<string>? appVersion = null,
         Func<string>? deviceName = null,
         MirrorPinStore? pinStore = null,
+        Func<string?>? localInstanceId = null,
         ILogger<MirrorClientService>? logger = null)
     {
         _appVersion = appVersion ?? (() => AppInfo.Current.VersionString);
         _deviceName = deviceName ?? (() => DeviceInfo.Current.Name);
         _pinStore = pinStore;
+        _localInstanceId = localInstanceId;
         _logger = logger ?? NullLogger<MirrorClientService>.Instance;
+        _clientId = Guid.NewGuid().ToString("N");
     }
 
     /// <summary>Session state transitions, surfaced to Svelte as mirrorSessionState (KTD-7).</summary>
@@ -59,12 +67,32 @@ public sealed class MirrorClientService : IDisposable
     /// <summary>Bind the state machine to the subscriber once (wire in MauiProgram).</summary>
     public void Wire() => _state.Transitioned += (_, next) => StateChanged?.Invoke(_state);
 
+    /// <summary>Restore B's stable identity across restarts (R16): the client id must survive
+    /// app restarts or the approved token never matches again (server requires
+    /// ClientId equality) and every restart re-prompts approval.
+    /// </summary>
+    public bool NeedsClientIdRestore => _pinStore is not null;
+
+    public async Task RestoreClientIdAsync()
+    {
+        if (_pinStore is null) return;
+        try
+        {
+            _clientId = await _pinStore.GetOrCreateClientIdAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to restore the mirror client id");
+        }
+    }
+
     // ── Discovery (R1, R4) ───────────────────────────────────────────────────
 
     /// <summary>Broadcast a probe and collect beacons for ~<paramref name="timeoutMs"/>.</summary>
     public async Task<List<MirrorBeacon>> ScanAsync(int timeoutMs = 2000)
     {
         var found = new Dictionary<string, MirrorBeacon>(StringComparer.Ordinal);
+        var localId = _localInstanceId?.Invoke();
         using var udp = new UdpClient();
         udp.EnableBroadcast = true;
 
@@ -82,11 +110,14 @@ public sealed class MirrorClientService : IDisposable
                     var root = doc.RootElement;
                     if (!root.TryGetProperty("instanceId", out var idProp))
                         continue;
+                    var instanceId = idProp.GetString() ?? "";
+                    if (string.IsNullOrEmpty(instanceId) || instanceId == localId)
+                        continue; // self-discovery: never mirror our own instance
                     var beacon = new MirrorBeacon(
                         root.GetProperty("appVersion").GetString() ?? "",
                         root.GetProperty("ecuConnected").GetBoolean(),
                         root.GetProperty("displayName").GetString() ?? "ME221",
-                        idProp.GetString() ?? "",
+                        instanceId,
                         result.RemoteEndPoint.Address);
                     found[beacon.InstanceId] = beacon;
                 }
@@ -126,13 +157,43 @@ public sealed class MirrorClientService : IDisposable
         _pinnedThumbprint = pinnedThumbprint;
         _state.SelectDevice(target.DisplayName);
 
+        // Replace the previous socket/CTS (leak-safe on repeated reconnects).
+        _cts?.Dispose();
         _cts = new CancellationTokenSource();
+        try { _socket?.Dispose(); } catch { /* best effort */ }
         _socket = new ClientWebSocket();
         _socket.Options.RemoteCertificateValidationCallback = ValidateCertificate;
-        await _socket.ConnectAsync(new Uri($"wss://{target.Address}:{MirrorProtocol.WssPort}/"), CancellationToken.None).ConfigureAwait(false);
 
-        await SendHelloAsync(token).ConfigureAwait(false);
-        _ = Task.Run(() => ReceiveLoopAsync(_cts.Token));
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        connectCts.CancelAfter(ConnectTimeout);
+        try
+        {
+            await _socket.ConnectAsync(new Uri($"wss://{target.Address}:{MirrorProtocol.WssPort}/"), connectCts.Token).ConfigureAwait(false);
+            _helloAck = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await SendHelloAsync(token).ConfigureAwait(false);
+            _ = Task.Run(() => ReceiveLoopAsync(_cts.Token));
+        }
+        catch
+        {
+            try { _socket.Dispose(); } catch { /* best effort */ }
+            _socket = null;
+            throw;
+        }
+    }
+
+    /// <summary>Await the hello acknowledgment; false when refused/timed out (reconnect path).</summary>
+    public async Task<bool> WaitForHelloAckAsync(TimeSpan timeout)
+    {
+        var tcs = _helloAck;
+        if (tcs is null) return false;
+        try
+        {
+            return await tcs.Task.WaitAsync(timeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     private bool ValidateCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
@@ -183,11 +244,20 @@ public sealed class MirrorClientService : IDisposable
                     return;
                 }
 
-                var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                if (MirrorProtocol.Parse(json) is { } message)
+                // A single malformed frame must never kill the loop: parse and
+                // dispatch per-message, log and continue.
+                try
                 {
-                    HandleControlMessage(message);
-                    MessageReceived?.Invoke(message);
+                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    if (MirrorProtocol.Parse(json) is { } message)
+                    {
+                        HandleControlMessage(message);
+                        MessageReceived?.Invoke(message);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Malformed mirror message discarded");
                 }
             }
         }
@@ -201,12 +271,17 @@ public sealed class MirrorClientService : IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Mirror receive loop error");
+            if (_state.State is MirrorClientState.AwaitingApproval or MirrorClientState.Connected)
+                _ = ReconnectAsync();
         }
     }
 
     private void HandleServerClose()
     {
         _logger.LogInformation("Mirror server closed the connection");
+        // A Close frame is a link drop: reconnect while attempts remain (R13).
+        if (_state.State is MirrorClientState.Connected)
+            _ = ReconnectAsync();
     }
 
     /// <summary>Session-control messages drive the state machine (KTD-7).</summary>
@@ -219,17 +294,21 @@ public sealed class MirrorClientService : IDisposable
                 {
                     case "approved":
                         _state.ReconnectSucceeded();
+                        _helloAck?.TrySetResult(true);
                         break;
                     case "pending":
                         break; // awaiting approval; banner flow proceeds on A
                     case "refused":
                         _state.ApprovalDeniedOrTimeout();
+                        _helloAck?.TrySetResult(false);
                         break;
                     case "versionMismatch":
                         _state.BeaconMismatched();
+                        _helloAck?.TrySetResult(false);
                         break;
                     case "revoked":
                         _state.Revoked();
+                        _helloAck?.TrySetResult(false);
                         break;
                 }
                 break;
@@ -281,25 +360,35 @@ public sealed class MirrorClientService : IDisposable
 
     private async Task ReconnectAsync()
     {
-        if (_target is null)
+        if (_reconnecting || _target is null)
             return;
-
-        // R13: retry while attempts remain; revocation/cert-change stop auto-reconnect.
-        while (!_state.LinkDropped())
+        _reconnecting = true;
+        try
         {
-            await Task.Delay(2000).ConfigureAwait(false);
-            if (_target is null || _cts?.IsCancellationRequested != false)
-                return;
-            try
+            // R13: retry while attempts remain; revocation/cert-change stop auto-reconnect.
+            while (_state.LinkDropped())
             {
-                await ConnectAsync(_target, _state.Token, _pinnedThumbprint).ConfigureAwait(false);
-                _state.ReconnectSucceeded();
-                return;
+                await Task.Delay(2000).ConfigureAwait(false);
+                if (_target is null || _cts?.IsCancellationRequested == true)
+                    return;
+                try
+                {
+                    await ConnectAsync(_target, _state.Token, _pinnedThumbprint).ConfigureAwait(false);
+                    // Only declare success on an approved helloAck; a pending or
+                    // refused reply must not flip the state to Connected.
+                    if (await WaitForHelloAckAsync(ConnectTimeout).ConfigureAwait(false))
+                        return;
+                    _logger.LogWarning("Reconnect hello was not approved");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Reconnect attempt failed");
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Reconnect attempt failed");
-            }
+        }
+        finally
+        {
+            _reconnecting = false;
         }
     }
 
@@ -317,6 +406,8 @@ public sealed class MirrorClientService : IDisposable
         _cts?.Cancel();
         try { _socket?.Dispose(); } catch { /* best effort */ }
         _socket = null;
+        _cts?.Dispose();
+        _cts = null;
         _target = null;
         _state.DisconnectRequested();
     }

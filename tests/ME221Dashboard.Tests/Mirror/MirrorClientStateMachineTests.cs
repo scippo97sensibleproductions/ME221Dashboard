@@ -110,6 +110,29 @@ public sealed class MirrorClientStateMachineTests
         state.Error.Should().BeNull();
     }
 
+    [Fact]
+    public void ReconnectLoopConsumesOneAttemptPerDrop()
+    {
+        // Regression (review): the reconnect loop previously ran `while (!LinkDropped())`
+        // which skipped the first two drops entirely and looped forever after the third.
+        var (state, _) = Create();
+        state.SelectDevice();
+        state.Approved("tok");
+
+        // Drop 1 → retry permitted (attempt 1 counted).
+        state.LinkDropped().Should().BeTrue();
+        state.ReconnectAttempts.Should().Be(1);
+        state.State.Should().Be(MirrorClientState.Connected);
+
+        // Drop 2 → retry permitted (attempt 2 counted).
+        state.LinkDropped().Should().BeTrue();
+        state.ReconnectAttempts.Should().Be(2);
+
+        // Drop 3 → exhausted → Disconnected (the loop must terminate here).
+        state.LinkDropped().Should().BeFalse();
+        state.State.Should().Be(MirrorClientState.Disconnected);
+    }
+
     // ── Error paths ──────────────────────────────────────────────────────────
 
     [Fact]

@@ -13,6 +13,7 @@ public sealed class MirrorSnapshotStore
     private double _odometerValue;
     private bool _odometerKm = true;
     private readonly List<string> _recentLogs = new(200);
+    private readonly object _logLock = new();
 
     public bool HasSnapshot => _snapshot is not null;
     public long SnapshotSeq => _snapshot?.Seq ?? 0;
@@ -41,12 +42,22 @@ public sealed class MirrorSnapshotStore
 
     public void AppendLog(string json)
     {
-        _recentLogs.Add(json);
-        while (_recentLogs.Count > 200)
-            _recentLogs.RemoveAt(0);
+        lock (_logLock)
+        {
+            _recentLogs.Add(json);
+            while (_recentLogs.Count > 200)
+                _recentLogs.RemoveAt(0);
+        }
     }
 
-    public IReadOnlyList<string> RecentLogs => _recentLogs;
+    public IReadOnlyList<string> RecentLogs
+    {
+        get
+        {
+            lock (_logLock)
+                return _recentLogs.ToList();
+        }
+    }
 
     // ── Mirror-served reads ──────────────────────────────────────────────────
 

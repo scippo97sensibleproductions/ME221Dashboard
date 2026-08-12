@@ -36,7 +36,6 @@ public sealed class MirrorEventRelay : IDisposable
         _client.MessageReceived += OnMessage;
         _client.StateChanged += OnStateChanged;
         _client.Wire(); // bind the state machine's transitions to StateChanged
-        _bridge.EnterMirrorMode(store);
     }
 
     public long SnapshotSeq => _snapshotSeq;
@@ -81,7 +80,15 @@ public sealed class MirrorEventRelay : IDisposable
 
     private void HandleChunk(SnapshotChunkMessage chunk)
     {
-        _reassembler ??= new MirrorChunkReassembler(chunk.Seq);
+        // A new sequence (retry attempt or a new session) starts a fresh assembly;
+        // a stale partial reassembler must never reject a restarted snapshot (KTD-2).
+        if (_reassembler is null || _reassembler.ExpectedIndex == 0 || chunk.Seq != _reassembler.Seq)
+        {
+            if (_reassembler is not null && chunk.Seq != _reassembler.Seq)
+                _logger.LogDebug("New snapshot seq {Seq} — resetting the partial assembly", chunk.Seq);
+            _reassembler = new MirrorChunkReassembler(chunk.Seq);
+        }
+
         if (_reassembler.TryAdd(chunk))
         {
             // Ack every accepted chunk; out-of-order chunks are rejected and the
@@ -96,7 +103,14 @@ public sealed class MirrorEventRelay : IDisposable
 
     private async Task FinalizeSnapshotAsync(long seq)
     {
-        var json = _reassembler?.Reassemble();
+        if (_reassembler is null || _reassembler.Seq != seq)
+        {
+            _logger.LogWarning("Snapshot done seq {Seq} does not match the active assembly", seq);
+            _reassembler = null;
+            return;
+        }
+
+        var json = _reassembler.Reassemble();
         _reassembler = null;
         if (string.IsNullOrEmpty(json))
         {
@@ -122,6 +136,11 @@ public sealed class MirrorEventRelay : IDisposable
 
         _snapshotSeq = seq;
         _store.Apply(snapshot);
+
+        // Companion mode starts when the snapshot actually lands: the bridge's read
+        // branch and write gate engage here, not at relay construction (the app is
+        // also A, where writes must keep working).
+        _bridge.EnterMirrorMode(_store);
 
         // Relay the applied snapshot to Svelte in chunks so MirrorStore applies it
         // (KTD-2: all mirror traffic rides SendRawMessage, never InvokeDotNet).
@@ -214,7 +233,9 @@ public sealed class MirrorEventRelay : IDisposable
 
     private async Task SendNoticeAsync(string kind)
     {
-        RelayToSvelte("mirrorSessionState", new
+        // Flat event shape, matching OnStateChanged: MirrorStore reads state/error at
+        // the top level, never under a payload envelope.
+        var json = JsonSerializer.Serialize(new
         {
             @event = "mirrorSessionState",
             state = "Disconnected",
@@ -223,7 +244,9 @@ public sealed class MirrorEventRelay : IDisposable
                 "snapshotFailed" => "snapshot failed to apply",
                 _ => kind,
             },
-        });
+        }, HybridBridgeService.SJsonOptions);
+        SvelteMessageEmitted?.Invoke(json);
+        _bridge.SendRawMirrorJson(json);
         await Task.CompletedTask.ConfigureAwait(false);
     }
 

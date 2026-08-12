@@ -36,8 +36,8 @@ public sealed class MirrorStreamTests : IAsyncLifetime
 
     public ValueTask InitializeAsync()
     {
-        _port = GetFreePort();
-        _server.Start(_port);
+        _server.Start(port: 0); // port 0 → OS-assigned, no cross-test port races
+        _port = _server.BoundPort;
 
         var cal = new FakeCalibrationService { Config = new Services.DashboardConfig() };
         _bridge = TestBridge.Create(cal);
@@ -50,6 +50,7 @@ public sealed class MirrorStreamTests : IAsyncLifetime
             new MirrorSnapshotSerializer(cal, new FakeConnectionService(),
                 appVersion: () => "1.2.3", logger: NullLogger<MirrorSnapshotSerializer>.Instance),
             _bridge,
+            snapshotAckTimeout: TimeSpan.FromMilliseconds(200),
             logger: NullLogger<MirrorStreamService>.Instance);
 
         return ValueTask.CompletedTask;
@@ -61,15 +62,6 @@ public sealed class MirrorStreamTests : IAsyncLifetime
         _server.Dispose();
         try { Directory.Delete(_tempDir, recursive: true); } catch { /* best effort */ }
         return ValueTask.CompletedTask;
-    }
-
-    private static int GetFreePort()
-    {
-        using var tcp = new TcpListener(IPAddress.Loopback, 0);
-        tcp.Start();
-        var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-        tcp.Stop();
-        return port;
     }
 
     private async Task<ClientWebSocket> ConnectAsync()
@@ -199,14 +191,14 @@ public sealed class MirrorStreamTests : IAsyncLifetime
         var first = MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as HelloAckMessage;
         first!.Status.Should().Be("approved");
 
-        // Drain: expect close within a few ack timeouts (3 attempts × 3s).
+        // Drain: expect close within a few ack timeouts (3 attempts × 200ms).
         var gotClose = false;
-        using var cts = new CancellationTokenSource(15_000);
+        using var cts = new CancellationTokenSource(5000);
         try
         {
             while (true)
             {
-                var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(client, 15000));
+                var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(client, 5000));
                 if (msg is CloseMessage close)
                 {
                     close.Reason.Should().Be("snapshot failed");

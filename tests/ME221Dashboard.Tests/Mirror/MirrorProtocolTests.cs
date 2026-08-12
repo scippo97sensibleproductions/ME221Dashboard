@@ -70,6 +70,40 @@ public sealed class MirrorProtocolTests
         reassembler.Reassemble().Should().Be(json);
     }
 
+    [Fact]
+    public void NewSequenceRestartsAPartialAssembly()
+    {
+        // A retry attempt re-frames with a fresh seq: a receiver that partially
+        // assembled the previous attempt must accept the restart (KTD-2 retry).
+        var json = MirrorProtocol.Serialize(MirrorTestData.SampleSnapshot());
+        var attempt1 = MirrorChunkFramer.CreateChunks(json, seq: 10, chunkSize: 128);
+
+        var reassembler = new MirrorChunkReassembler(10);
+        reassembler.TryAdd(attempt1[0]).Should().BeTrue();
+
+        // The relay replaces the reassembler when the seq changes (MirrorEventRelay
+        // behavior); the new instance starts clean and accepts the retry.
+        var attempt2 = MirrorChunkFramer.CreateChunks(json, seq: 11, chunkSize: 128);
+        var restarted = new MirrorChunkReassembler(11);
+        foreach (var chunk in attempt2)
+            restarted.TryAdd(chunk).Should().BeTrue();
+        restarted.Reassemble().Should().Be(json);
+    }
+
+    [Fact]
+    public void OversizedSnapshotIsRejectedByTheCap()
+    {
+        var reassembler = new MirrorChunkReassembler(1);
+        var huge = new SnapshotChunkMessage
+        {
+            Seq = 1,
+            Index = 0,
+            Total = 1,
+            Payload = Convert.ToBase64String(new byte[MirrorChunkReassembler.MaxSnapshotBytes + 1]),
+        };
+        reassembler.TryAdd(huge).Should().BeFalse("payload exceeds the 64MB safety cap");
+    }
+
     // ── Error paths ──────────────────────────────────────────────────────────
 
     [Fact]

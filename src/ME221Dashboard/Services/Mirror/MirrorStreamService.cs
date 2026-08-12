@@ -25,8 +25,7 @@ public sealed class MirrorStreamService : IDisposable
         public bool SnapshotComplete { get; set; }
         public bool SendingFrame { get; set; }
         public Dictionary<string, float?>? PendingFrame;
-        public Dictionary<string, float?>? PendingRecord;
-        public bool HasPendingRecord;
+        public readonly Queue<Dictionary<string, float?>> RecordQueue = new();
         public CancellationTokenSource? SnapshotCts;
         public readonly HashSet<int> AckedChunks = [];
     }
@@ -90,7 +89,21 @@ public sealed class MirrorStreamService : IDisposable
             state = new ViewerState(session);
             _viewers[session] = state;
         }
-        await SendSnapshotAsync(state).ConfigureAwait(false);
+        try
+        {
+            await SendSnapshotAsync(state).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // async void entry point: an unhandled exception here crashes the process.
+            _logger.LogError(ex, "Snapshot send failed for {Device}", session.DeviceName);
+            try
+            {
+                await session.SendAsync(new CloseMessage { Reason = "snapshot failed" }).ConfigureAwait(false);
+            }
+            catch { /* best effort */ }
+            session.Close();
+        }
     }
 
     private void OnSessionClosed(MirrorServerSession session)
@@ -100,7 +113,12 @@ public sealed class MirrorStreamService : IDisposable
         {
             state = _viewers.Remove(session, out var s) ? s : null;
         }
-        state?.SnapshotCts?.Cancel();
+        if (state is not null)
+        {
+            state.SnapshotCts?.Cancel();
+            state.SnapshotCts?.Dispose();
+            state.SnapshotCts = null;
+        }
     }
 
     private void OnMessageReceived(MirrorServerSession session, object message)
@@ -122,13 +140,12 @@ public sealed class MirrorStreamService : IDisposable
 
     private async Task SendSnapshotAsync(ViewerState state)
     {
-        var snapshotSeq = Interlocked.Increment(ref _nextSnapshotSeq);
-        state.SnapshotSeq = snapshotSeq;
+        state.SnapshotCts = new CancellationTokenSource();
 
         MirrorSnapshot snapshot;
         try
         {
-            snapshot = await _serializer.BuildAsync(snapshotSeq).ConfigureAwait(false);
+            snapshot = await _serializer.BuildAsync(0).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -139,17 +156,34 @@ public sealed class MirrorStreamService : IDisposable
         }
 
         var json = MirrorProtocol.Serialize(snapshot);
-        var chunks = MirrorChunkFramer.CreateChunks(json, snapshotSeq);
         var attempts = new SnapshotAttemptTracker();
-        state.SnapshotCts = new CancellationTokenSource();
+        var snapshotSeq = 0L;
 
-        while (!_disposed && !state.SnapshotCts.IsCancellationRequested)
+        while (!_disposed && state.SnapshotCts?.IsCancellationRequested != true)
         {
+            // Every attempt is a fresh sequence: a receiver that partially assembled
+            // the previous attempt must see a different seq and restart its assembly
+            // (KTD-2 whole-snapshot retry). The same payload is re-framed per attempt.
+            snapshotSeq = Interlocked.Increment(ref _nextSnapshotSeq);
+            state.SnapshotSeq = snapshotSeq;
+            var chunks = MirrorChunkFramer.CreateChunks(json, snapshotSeq);
+
             lock (_lock)
                 state.AckedChunks.Clear();
             var delivered = await SendChunksWithAckAsync(state, chunks, snapshotSeq).ConfigureAwait(false);
             if (delivered)
-                break;
+            {
+                await state.Session.SendAsync(new SnapshotDoneMessage { Seq = snapshotSeq }).ConfigureAwait(false);
+                lock (_lock)
+                {
+                    state.SnapshotComplete = true;
+                    state.NextFrameSeq = snapshotSeq;
+                    state.NextRecordSeq = snapshotSeq;
+                }
+                _logger.LogInformation("Snapshot sent to {Device} (seq {Seq}, {Chunks} chunks)",
+                    state.Session.DeviceName, snapshotSeq, chunks.Count);
+                return;
+            }
 
             if (!attempts.RecordFailure())
             {
@@ -162,19 +196,6 @@ public sealed class MirrorStreamService : IDisposable
             _logger.LogWarning("Snapshot attempt {Attempt} failed for {Device}; retrying",
                 attempts.Attempts, state.Session.DeviceName);
         }
-
-        if (_disposed || state.SnapshotCts.IsCancellationRequested)
-            return;
-
-        await state.Session.SendAsync(new SnapshotDoneMessage { Seq = snapshotSeq }).ConfigureAwait(false);
-        lock (_lock)
-        {
-            state.SnapshotComplete = true;
-            state.NextFrameSeq = snapshotSeq;
-            state.NextRecordSeq = snapshotSeq;
-        }
-        _logger.LogInformation("Snapshot sent to {Device} (seq {Seq}, {Chunks} chunks)",
-            state.Session.DeviceName, snapshotSeq, chunks.Count);
     }
 
     private async Task<bool> SendChunksWithAckAsync(ViewerState state, List<SnapshotChunkMessage> chunks, long seq)
@@ -225,11 +246,11 @@ public sealed class MirrorStreamService : IDisposable
 
         foreach (var state in targets)
         {
-            // Recording feed: never skipped (KTD-9). Frame: latest-wins per viewer.
+            // Recording feed: never skipped (KTD-9) — every update is queued even if
+            // the viewer loop is mid-send. Frame: latest-wins per viewer.
             lock (_lock)
             {
-                state.PendingRecord = values;
-                state.HasPendingRecord = true;
+                state.RecordQueue.Enqueue(values);
                 state.PendingFrame = values;
                 if (state.SendingFrame)
                     continue; // a send is in flight; the newest frame replaces the pending one
@@ -247,18 +268,13 @@ public sealed class MirrorStreamService : IDisposable
             {
                 Dictionary<string, float?>? record;
                 Dictionary<string, float?>? frame;
-                bool hasPendingRecord;
                 long ts;
                 lock (_lock)
                 {
-                    record = state.PendingRecord;
-                    hasPendingRecord = state.HasPendingRecord;
-                    state.PendingRecord = null;
-                    state.HasPendingRecord = false;
-
+                    record = state.RecordQueue.Count > 0 ? state.RecordQueue.Dequeue() : null;
                     frame = state.PendingFrame;
                     state.PendingFrame = null;
-                    if (frame is null && !hasPendingRecord)
+                    if (frame is null && record is null)
                     {
                         state.SendingFrame = false;
                         return;
@@ -266,7 +282,7 @@ public sealed class MirrorStreamService : IDisposable
                     ts = _lastFrameTs;
                 }
 
-                if (hasPendingRecord && record is not null)
+                if (record is not null)
                 {
                     var recordSeq = Interlocked.Increment(ref state.NextRecordSeq);
                     await state.Session.SendAsync(new RecordFeedMessage

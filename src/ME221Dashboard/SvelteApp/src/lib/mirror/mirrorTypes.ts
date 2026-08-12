@@ -156,8 +156,11 @@ export interface MirrorSnapshot {
 
 /** Ordered snapshot chunk collector on the JS side (KTD-2, R6). */
 export class MirrorChunkReassembler {
+  static readonly MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024;
+
   private readonly _seq: number;
   private _bytes: Uint8Array[] = [];
+  private _byteCount = 0;
   private _expectedIndex = 0;
   private _total = 0;
   private _complete = false;
@@ -166,8 +169,16 @@ export class MirrorChunkReassembler {
     this._seq = seq;
   }
 
+  get seq(): number {
+    return this._seq;
+  }
+
   get isComplete(): boolean {
     return this._complete;
+  }
+
+  get expectedIndex(): number {
+    return this._expectedIndex;
   }
 
   get totalChunks(): number {
@@ -177,9 +188,11 @@ export class MirrorChunkReassembler {
   tryAdd(chunk: SnapshotChunkMessage): boolean {
     if (this._complete || chunk.seq !== this._seq || chunk.total <= 0) return false;
     if (chunk.index !== this._expectedIndex) return false;
+    if (this._byteCount + chunk.payload.length > MirrorChunkReassembler.MAX_SNAPSHOT_BYTES) return false;
     this._total = chunk.total;
     const payload = Uint8Array.from(atob(chunk.payload), (c) => c.charCodeAt(0));
     this._bytes.push(payload);
+    this._byteCount += payload.length;
     this._expectedIndex++;
     this._complete = this._expectedIndex === chunk.total;
     return true;

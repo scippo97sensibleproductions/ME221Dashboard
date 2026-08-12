@@ -29,17 +29,11 @@ internal sealed class MirrorCalibrationSource(
     public Task<DashboardConfig?> GetPersistedDashboardConfigAsync() =>
         Task.FromResult(store.HasSnapshot ? store.DashboardConfig : null);
 
-    public Task SaveCalibrationAsync(CalibrationData calibration)
-    {
-        logger.LogWarning("SaveCalibrationAsync blocked in companion mode");
-        return Task.CompletedTask;
-    }
+    public Task SaveCalibrationAsync(CalibrationData calibration) =>
+        inner.SaveCalibrationAsync(calibration);
 
-    public Task SaveDashboardConfigAsync(DashboardConfig config)
-    {
-        logger.LogWarning("SaveDashboardConfigAsync blocked in companion mode");
-        return Task.CompletedTask;
-    }
+    public Task SaveDashboardConfigAsync(DashboardConfig config) =>
+        inner.SaveDashboardConfigAsync(config);
 
     public Task<(string Product, string Model, string Version)> GetEcuInfoAsync(ProtocolService protocol) =>
         inner.GetEcuInfoAsync(protocol);

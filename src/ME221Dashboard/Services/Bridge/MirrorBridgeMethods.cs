@@ -128,6 +128,7 @@ public partial class HybridBridgeService
             return JsonSerializer.Serialize(new { success = false, error = "Mirror client not available" });
 
         var beacons = await _mirrorClient.ScanAsync().ConfigureAwait(false);
+        var myVersion = AppInfo.Current.VersionString;
         return JsonSerializer.Serialize(new
         {
             success = true,
@@ -137,15 +138,10 @@ public partial class HybridBridgeService
                 displayName = b.DisplayName,
                 appVersion = b.AppVersion,
                 ecuConnected = b.EcuConnected,
-                compatible = b.AppVersion == GetAppVersion() || _clientVersionMatches(b.AppVersion),
+                compatible = b.AppVersion == myVersion,
                 address = b.Address.ToString(),
             }),
         });
-    }
-
-    private bool _clientVersionMatches(string beaconVersion)
-    {
-        try { return beaconVersion == AppInfo.Current.VersionString; } catch { return false; }
     }
 
     /// <summary>Called from JS: window.HybridWebView.InvokeDotNet('MirrorConnect', [instanceId]) — hello + token (R2, R16).</summary>
@@ -153,6 +149,10 @@ public partial class HybridBridgeService
     {
         if (_mirrorClient is null)
             return JsonSerializer.Serialize(new { success = false, error = "Mirror client not available" });
+
+        // Restore B's stable identity (R16) before the hello carries the token;
+        // GetOrCreate persists on first run and returns the same id thereafter.
+        await _mirrorClient.RestoreClientIdAsync().ConfigureAwait(false);
 
         var pin = _mirrorPinStore is null ? null : await _mirrorPinStore.GetAsync(instanceId).ConfigureAwait(false);
         var beacon = (await _mirrorClient.ScanAsync(1500).ConfigureAwait(false)).FirstOrDefault(b => b.InstanceId == instanceId);
@@ -190,10 +190,12 @@ public partial class HybridBridgeService
             return JsonSerializer.Serialize(new { success = false, error = "Mirror services not available" });
 
         // Regenerating the certificate invalidates old pins; clearing the store
-        // invalidates every token (R20). Sessions end with a close.
+        // invalidates every token (R20). Sessions end with a close, and the running
+        // listener reloads the fresh certificate so new handshakes use it.
         _mirrorCertificates!.Regenerate();
         await _approvedDeviceStore.ResetAsync().ConfigureAwait(false);
         await _mirrorServer.DisconnectAllAsync("pairing reset").ConfigureAwait(false);
+        _mirrorServer.ReloadCertificate();
         return JsonSerializer.Serialize(new { success = true });
     }
 

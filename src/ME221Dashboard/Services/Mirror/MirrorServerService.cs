@@ -47,8 +47,16 @@ public sealed class MirrorServerService : IDisposable
 
     public bool IsRunning => _server is not null;
     public int BoundPort { get; private set; }
-    public int ViewerCount => _sessions.Values.Count(s => s.Status == MirrorSessionStatus.Approved);
-    public int PendingCount => _sessions.Values.Count(s => s.Status == MirrorSessionStatus.PendingApproval);
+
+    private int CountByStatus(MirrorSessionStatus status)
+    {
+        lock (_gate)
+            return _sessions.Values.Count(s => s.Status == status);
+    }
+
+    public int ViewerCount => CountByStatus(MirrorSessionStatus.Approved);
+    public int PendingCount => CountByStatus(MirrorSessionStatus.PendingApproval);
+    public int AwaitingHelloCount => CountByStatus(MirrorSessionStatus.AwaitingHello);
 
     /// <summary>All live sessions (viewer list for the bridge, U5).</summary>
     public IReadOnlyList<MirrorServerSession> Viewers()
@@ -113,6 +121,15 @@ public sealed class MirrorServerService : IDisposable
         _logger.LogInformation("Mirror server stopped");
     }
 
+    /// <summary>Reload the TLS certificate after a pairing-reset regenerated it (R20).</summary>
+    public void ReloadCertificate()
+    {
+        if (_server is null)
+            return;
+        _server.Certificate = _certificates.GetOrCreate();
+        _logger.LogInformation("Mirror server certificate reloaded");
+    }
+
     public void Dispose() => Stop();
 
     // ── Approval control (called from the bridge, U5) ────────────────────────
@@ -122,41 +139,51 @@ public sealed class MirrorServerService : IDisposable
     {
         MirrorServerSession? session;
         lock (_gate)
-            session = _sessions.Values.FirstOrDefault(s => s.ClientId == clientId && s.Status == MirrorSessionStatus.PendingApproval);
-
-        if (session is null)
-            return;
-
-        if (ViewerCount >= MirrorProtocol.ConnectionCap)
         {
-            await session.SendAsync(new ApprovalDecisionMessage { Approved = false }).ConfigureAwait(false);
-            session.Close();
-            return;
+            session = _sessions.Values.FirstOrDefault(s => s.ClientId == clientId && s.Status == MirrorSessionStatus.PendingApproval);
+            if (session is null)
+                return;
+
+            // Cap check and status mutation under the same lock — no TOCTOU window.
+            if (CountByStatusLocked(MirrorSessionStatus.Approved) >= MirrorProtocol.ConnectionCap)
+            {
+                session.Status = MirrorSessionStatus.Closed;
+                SendSafely(session, new ApprovalDecisionMessage { Approved = false });
+                session.Close();
+                return;
+            }
+            session.Status = MirrorSessionStatus.Approved;
         }
 
         var entry = await _store.AddAsync(clientId, session.DeviceName).ConfigureAwait(false);
         lock (_gate)
         {
-            session.Status = MirrorSessionStatus.Approved;
             session.Token = entry.Token;
         }
 
-        await session.SendAsync(new ApprovalDecisionMessage { Approved = true, Token = entry.Token }).ConfigureAwait(false);
+        await SendSafelyAsync(session, new ApprovalDecisionMessage { Approved = true, Token = entry.Token }).ConfigureAwait(false);
         _logger.LogInformation("Viewer '{Device}' approved", session.DeviceName);
         SessionApproved?.Invoke(session);
     }
+
+    private int CountByStatusLocked(MirrorSessionStatus status) =>
+        _sessions.Values.Count(s => s.Status == status);
 
     /// <summary>Deny the pending session (R2).</summary>
     public async Task DenyDeviceAsync(string clientId)
     {
         MirrorServerSession? session;
         lock (_gate)
+        {
             session = _sessions.Values.FirstOrDefault(s => s.ClientId == clientId && s.Status == MirrorSessionStatus.PendingApproval);
+            if (session is null)
+                return;
+            // Mark closed under the lock so the 60s auto-deny task and the banner
+            // deny cannot both send on the same session.
+            session.Status = MirrorSessionStatus.Closed;
+        }
 
-        if (session is null)
-            return;
-
-        await session.SendAsync(new ApprovalDecisionMessage { Approved = false }).ConfigureAwait(false);
+        await SendSafelyAsync(session, new ApprovalDecisionMessage { Approved = false }).ConfigureAwait(false);
         await CloseGracefullyAsync(session).ConfigureAwait(false);
     }
 
@@ -165,12 +192,14 @@ public sealed class MirrorServerService : IDisposable
     {
         MirrorServerSession? session;
         lock (_gate)
+        {
             session = _sessions.Values.FirstOrDefault(s => s.ClientId == clientId && s.Status == MirrorSessionStatus.Approved);
+            if (session is null)
+                return;
+            session.Status = MirrorSessionStatus.Closed;
+        }
 
-        if (session is null)
-            return;
-
-        await session.SendAsync(new RevokedMessage { Reason = "revoked" }).ConfigureAwait(false);
+        await SendSafelyAsync(session, new RevokedMessage { Reason = "revoked" }).ConfigureAwait(false);
         await CloseGracefullyAsync(session).ConfigureAwait(false);
     }
 
@@ -183,10 +212,23 @@ public sealed class MirrorServerService : IDisposable
 
         foreach (var session in sessions)
         {
-            await session.SendAsync(new ConfigUpdateMessage { Reason = reason }).ConfigureAwait(false);
+            await SendSafelyAsync(session, new ConfigUpdateMessage { Reason = reason }).ConfigureAwait(false);
             await CloseGracefullyAsync(session).ConfigureAwait(false);
         }
         _logger.LogInformation("Config update '{Reason}': ended {Count} viewer sessions", reason, sessions.Count);
+    }
+
+    /// <summary>Send with no unobserved exceptions; closed/dead sockets are tolerated.</summary>
+    private static async Task SendSafelyAsync(MirrorServerSession session, object message)
+    {
+        try { await session.SendAsync(message).ConfigureAwait(false); }
+        catch (Exception) { /* session is closing */ }
+    }
+
+    private static void SendSafely(MirrorServerSession session, object message)
+    {
+        try { session.SendAsync(message).ConfigureAwait(false); }
+        catch (Exception) { /* session is closing */ }
     }
 
     /// <summary>
@@ -211,11 +253,35 @@ public sealed class MirrorServerService : IDisposable
         var ip = socket.ConnectionInfo.ClientIpAddress ?? "unknown";
         var session = new MirrorServerSession(socket, ip);
 
+        // Unauthenticated pre-hello connections are capped and expire: without this,
+        // raw connections that never send a hello grow _sessions without bound and
+        // never time out (the per-IP rate limit only runs after a hello parses).
+        lock (_gate)
+        {
+            if (CountByStatusLocked(MirrorSessionStatus.AwaitingHello) >= MirrorProtocol.PreHelloCap)
+            {
+                _logger.LogWarning("Pre-hello connection cap reached; rejecting {Ip}", ip);
+                socket.Close();
+                return;
+            }
+            _sessions[socket.ConnectionInfo.Id.ToString()] = session;
+        }
+
         socket.OnMessage = text => _ = HandleMessageAsync(session, text);
         socket.OnClose = () => OnSessionClosed(session);
 
-        lock (_gate)
-            _sessions[socket.ConnectionInfo.Id.ToString()] = session;
+        // A socket that never sends a hello is closed after a short window.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(MirrorProtocol.PreHelloTimeout).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (session.Status != MirrorSessionStatus.AwaitingHello)
+                    return;
+                _sessions.Remove(socket.ConnectionInfo.Id.ToString());
+            }
+            try { socket.Close(); } catch { /* best effort */ }
+        });
     }
 
     private async Task HandleMessageAsync(MirrorServerSession session, string text)
@@ -251,7 +317,7 @@ public sealed class MirrorServerService : IDisposable
         {
             lock (_gate)
             {
-                if (ViewerCount >= MirrorProtocol.ConnectionCap)
+                if (CountByStatusLocked(MirrorSessionStatus.Approved) >= MirrorProtocol.ConnectionCap)
                 {
                     session.Close();
                     return;
@@ -259,7 +325,7 @@ public sealed class MirrorServerService : IDisposable
                 session.Status = MirrorSessionStatus.Approved;
                 session.Token = approved.Token;
             }
-            await session.SendAsync(new HelloAckMessage { Status = "approved" }).ConfigureAwait(false);
+            await SendSafelyAsync(session, new HelloAckMessage { Status = "approved" }).ConfigureAwait(false);
             _logger.LogInformation("Viewer '{Device}' reconnected", session.DeviceName);
             SessionApproved?.Invoke(session);
             return;
@@ -274,7 +340,7 @@ public sealed class MirrorServerService : IDisposable
 
         lock (_gate)
         {
-            if (PendingCount >= MirrorProtocol.PendingCap)
+            if (CountByStatusLocked(MirrorSessionStatus.PendingApproval) >= MirrorProtocol.PendingCap)
             {
                 session.Close();
                 return;
@@ -282,11 +348,12 @@ public sealed class MirrorServerService : IDisposable
             session.Status = MirrorSessionStatus.PendingApproval;
         }
 
-        await session.SendAsync(new HelloAckMessage { Status = "pending" }).ConfigureAwait(false);
+        await SendSafelyAsync(session, new HelloAckMessage { Status = "pending" }).ConfigureAwait(false);
         _logger.LogInformation("Viewer '{Device}' ({Ip}) requests approval", session.DeviceName, session.ClientIp);
         ApprovalRequested?.Invoke(session);
 
-        // Auto-deny after 60 s (R2).
+        // Auto-deny after 60 s (R2). DenyDeviceAsync marks the session closed under
+        // the lock, so a racing banner deny cannot double-send.
         _ = Task.Run(async () =>
         {
             await Task.Delay(MirrorProtocol.ApprovalTimeout).ConfigureAwait(false);
@@ -303,6 +370,11 @@ public sealed class MirrorServerService : IDisposable
         lock (_gate)
         {
             var now = DateTime.UtcNow;
+            // Prune stale entries so the dictionary cannot grow without bound.
+            var stale = _unapprovedAttempts.Where(kvp => kvp.Value.Count == 0 || now - kvp.Value[^1] > MirrorProtocol.PerIpWindow).Select(kvp => kvp.Key).ToList();
+            foreach (var key in stale)
+                _unapprovedAttempts.Remove(key);
+
             if (!_unapprovedAttempts.TryGetValue(ip, out var attempts))
             {
                 _unapprovedAttempts[ip] = [now];

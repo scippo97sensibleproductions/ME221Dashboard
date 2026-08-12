@@ -29,8 +29,8 @@ public sealed class MirrorServerTests : IAsyncLifetime
 
     public ValueTask InitializeAsync()
     {
-        _port = GetFreePort();
-        _server.Start(_port);
+        _server.Start(port: 0); // port 0 → OS-assigned, no cross-test port races
+        _port = _server.BoundPort;
         return ValueTask.CompletedTask;
     }
 
@@ -199,8 +199,8 @@ public sealed class MirrorServerTests : IAsyncLifetime
 
         using var server2 = new MirrorServerService(_store, _certificates, appVersion: () => "1.2.3",
             logger: NullLogger<MirrorServerService>.Instance);
-        var port2 = GetFreePort();
-        server2.Start(port2);
+        server2.Start(port: 0); // port 0 → OS-assigned, no cross-test port races
+        var port2 = server2.BoundPort;
 
         var devices = await _store.GetAllAsync();
         devices.Should().BeEmpty("the certificate loss invalidated all device tokens");

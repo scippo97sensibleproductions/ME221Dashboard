@@ -37,6 +37,10 @@ public static class MirrorProtocol
     public const int PerIpAttemptLimit = 3;
     public const int PerIpWindowSeconds = 60;
 
+    /// <summary>Raw connections that never send a hello: cap per A and expiry window.</summary>
+    public const int PreHelloCap = 16;
+    public static readonly TimeSpan PreHelloTimeout = TimeSpan.FromSeconds(15);
+
     /// <summary>Stale-data threshold for the live feed (R11: 50 frame cadences at 40 ms).</summary>
     public const int StaleAfterMs = 2000;
 
@@ -125,22 +129,28 @@ public static class MirrorChunkFramer
 /// </summary>
 public sealed class MirrorChunkReassembler
 {
+    /// <summary>Safety cap: a snapshot larger than this is rejected as hostile.</summary>
+    public const int MaxSnapshotBytes = 64 * 1024 * 1024;
+
     private readonly long _seq;
     private readonly List<byte> _bytes = [];
     private int _expectedIndex;
 
     public MirrorChunkReassembler(long seq) => _seq = seq;
 
+    public long Seq => _seq;
     public int ExpectedIndex => _expectedIndex;
     public bool IsComplete { get; private set; }
     public int TotalChunks { get; private set; }
 
-    /// <summary>True when the chunk was accepted; false when rejected (out of order, duplicate, wrong seq, already complete).</summary>
+    /// <summary>True when the chunk was accepted; false when rejected (out of order, duplicate, wrong seq, already complete, or over the size cap).</summary>
     public bool TryAdd(SnapshotChunkMessage chunk)
     {
         if (IsComplete || chunk.Seq != _seq || chunk.Total <= 0)
             return false;
         if (chunk.Index != _expectedIndex)
+            return false;
+        if (_bytes.Count + chunk.Payload.Length > MaxSnapshotBytes)
             return false;
         TotalChunks = chunk.Total;
         var payload = Convert.FromBase64String(chunk.Payload);

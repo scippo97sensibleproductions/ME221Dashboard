@@ -114,4 +114,29 @@ describe('mirror chunk reassembly (KTD-2)', () => {
     expect(mirrorSequencing.nextFrameSequence(42)).toBe(43);
     expect(mirrorSequencing.isFrameAfterSnapshot(43, 42)).toBe(true);
   });
+
+  it('a new sequence restarts a partial assembly (retry attempt)', () => {
+    const chunks = toChunks(json, 10, 64);
+    const reassembler = new MirrorChunkReassembler(10);
+    expect(reassembler.tryAdd(chunks[0])).toBe(true);
+
+    // The store replaces the reassembler when the seq changes; the fresh instance
+    // accepts the retried snapshot from index 0.
+    const retry = toChunks(json, 11, 64);
+    const restarted = new MirrorChunkReassembler(11);
+    for (const chunk of retry) expect(restarted.tryAdd(chunk)).toBe(true);
+    expect(restarted.reassemble()).toBe(json);
+  });
+
+  it('rejects oversized snapshots at the cap', () => {
+    const reassembler = new MirrorChunkReassembler(1);
+    const huge = {
+      msg: 'snapshotChunk' as const,
+      seq: 1,
+      index: 0,
+      total: 1,
+      payload: btoa('x'.repeat(MirrorChunkReassembler.MAX_SNAPSHOT_BYTES + 1)),
+    };
+    expect(reassembler.tryAdd(huge)).toBe(false);
+  });
 });

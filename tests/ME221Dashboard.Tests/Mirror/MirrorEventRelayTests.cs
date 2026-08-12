@@ -154,4 +154,22 @@ public sealed class MirrorEventRelayTests
         _emitted.Should().Contain(m => m.Contains("mirrorSessionState"));
         _emitted.Should().Contain(m => m.Contains("\"Connected\""));
     }
+
+    [Fact]
+    public async Task SnapshotFailureNoticeIsFlatNotEnveloped()
+    {
+        // Regression (review): the notice was previously wrapped in {event,payload},
+        // but MirrorStore reads state/error at the top level — the failure screen
+        // never rendered.
+        var chunks = MirrorChunkFramer.CreateChunks("{\"broken\":", seq: 5, chunkSize: 128);
+        foreach (var chunk in chunks)
+            _relay.InjectMessage(chunk);
+        await _relay.FinalizeForTest(5);
+
+        _emitted.Should().Contain(m =>
+            m.Contains("\"event\":\"mirrorSessionState\"") &&
+            m.Contains("\"state\":\"Disconnected\"") &&
+            m.Contains("snapshot failed to apply"));
+        _emitted.Should().NotContain(m => m.Contains("\"mirrorSessionState\"") && m.Contains("\"payload\""));
+    }
 }

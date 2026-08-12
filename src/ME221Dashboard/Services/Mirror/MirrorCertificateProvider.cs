@@ -46,14 +46,12 @@ public sealed class MirrorCertificateProvider(ILogger<MirrorCertificateProvider>
         return _cached;
     }
 
-    /// <summary>Pairing-reset (R20): regenerate the certificate; old pins and tokens are invalidated.</summary>
+    /// <summary>Pairing-reset (R20): regenerate the certificate; old pins and tokens are invalidated.
+    /// The previous in-memory instance is left alive — a running Fleck listener may still
+    /// reference it for in-flight handshakes; the caller reloads via GetOrCreate.</summary>
     public X509Certificate2 Regenerate()
     {
-        if (_cached is not null)
-        {
-            _cached.Dispose();
-            _cached = null;
-        }
+        _cached = null; // drop the reference; the old instance stays alive for in-flight TLS
 
         try
         {
