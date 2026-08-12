@@ -152,6 +152,14 @@ public sealed class RemoteReadTests
         _bridge = TestBridge.Create(_calibration);
     }
 
+    private static (bool Success, string? Error) ParseJson(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        return (root.TryGetProperty("success", out var s) && s.GetBoolean(),
+                root.TryGetProperty("error", out var e) ? e.GetString() : null);
+    }
+
     [Fact]
     public async Task TableReadsAnswerFromSnapshotNeverBLocal()
     {
@@ -244,16 +252,47 @@ public sealed class RemoteReadTests
 
         // A path absent from the snapshot does not fall back to B's disk.
         var missing = await _bridge.GetImageBase64("C:\\definitely-missing-me221.png");
-        missing.Should().Contain("File not found");
+        missing.Should().Contain("Image not in snapshot");
     }
 
     [Fact]
-    public async Task ReadsBeforeSnapshotApplyReturnNotReady()
+    public async Task ReadsBeforeSnapshotApplyReturnNotReadyError()
     {
         _bridge.EnterMirrorMode(_store); // store is empty
 
+        // Table/driver data reads (the mirror-branched surface) return the not-ready
+        // error; list-style reads return an empty success shape.
+        var batch = await _bridge.ReadTableDataBatch("[1]");
+        ParseJson(batch).Error.Should().Be("Snapshot not applied yet");
+
+        var driver = await _bridge.ReadDriverData("{\"driverId\":1}");
+        ParseJson(driver).Error.Should().Be("Snapshot not applied yet");
+
         var tables = await _bridge.GetTableDefinitions();
-        tables.Should().NotBeNull();
+        tables.Should().Contain("\"tables\":[]", "list reads degrade to an empty shape");
+    }
+
+    [Fact]
+    public async Task MirrorModeImageReadNeverFallsBackToBLocalDisk()
+    {
+        // R9: an image absent from the snapshot must error, even if B has a file at
+        // that path — the mirror read must never touch B's filesystem.
+        var tmp = Path.Combine(Path.GetTempPath(), "me221-imgleak-" + Guid.NewGuid().ToString("N") + ".png");
+        await File.WriteAllBytesAsync(tmp, [1, 2, 3]);
+
+        try
+        {
+            _store.Apply(MirrorTestData.SampleSnapshot()); // no Images entries
+            _bridge.EnterMirrorMode(_store);
+
+            var json = await _bridge.GetImageBase64(tmp);
+            json.Should().Contain("\"success\":false");
+            json.Should().Contain("Image not in snapshot");
+        }
+        finally
+        {
+            try { File.Delete(tmp); } catch { /* best effort */ }
+        }
     }
 
     [Fact]

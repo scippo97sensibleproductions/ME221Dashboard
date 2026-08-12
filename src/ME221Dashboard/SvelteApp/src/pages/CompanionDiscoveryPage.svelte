@@ -118,7 +118,7 @@
 
     {#if !forcedSearching && sessionState === 'AwaitingApproval'}
       <div class="flex flex-col items-center justify-center gap-4 py-20">
-        <span class="inline-block h-8 w-8 animate-spin rounded-full border-2 border-gray-500 border-t-teal-400"></span>
+        <span class="inline-block h-8 w-8 animate-spin rounded-full border-2" style="border-color: var(--metro-border); border-top-color: var(--metro-teal);"></span>
         <p class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-teal);">Waiting for approval on host</p>
         <p class="text-[13px]" style="color: var(--metro-text-secondary);">{mirrorStore.displayName ?? 'ME221'}</p>
         <button class="metro-btn-secondary flex items-center gap-2" onclick={cancelApproval}>
@@ -170,7 +170,7 @@
       </div>
     {:else if scanning}
       <div class="flex flex-col items-center justify-center gap-4 py-20">
-        <span class="inline-block h-8 w-8 animate-spin rounded-full border-2 border-gray-500 border-t-teal-400"></span>
+        <span class="inline-block h-8 w-8 animate-spin rounded-full border-2" style="border-color: var(--metro-border); border-top-color: var(--metro-teal);"></span>
         <p class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-teal);">Searching for Hosts</p>
         <p class="text-[13px]" style="color: var(--metro-text-secondary);">Looking for ME221 dashboards on your network</p>
       </div>

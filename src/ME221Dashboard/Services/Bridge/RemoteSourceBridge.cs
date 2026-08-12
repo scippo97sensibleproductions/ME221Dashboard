@@ -47,4 +47,8 @@ public partial class HybridBridgeService
         _logger.LogDebug("Write gated in companion mode: {Feature}", feature);
         return JsonSerializer.Serialize(new { success = false, error = "Read-only in companion mode" });
     }
+
+    /// <summary>The established not-ready error for mirror-served reads before the snapshot applies (U7).</summary>
+    internal string NotReadyJson() =>
+        JsonSerializer.Serialize(new { success = false, error = "Snapshot not applied yet" });
 }

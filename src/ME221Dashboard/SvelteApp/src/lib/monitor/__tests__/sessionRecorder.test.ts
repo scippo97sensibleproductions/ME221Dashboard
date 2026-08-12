@@ -337,8 +337,7 @@ describe('SessionRecorder companion feed (U10)', () => {
   });
 });
 
-describe('SessionRecorder ECU disconnect finalization (U12, R21)', () => {
-  it('an ECU disconnect while recording finalizes the file with a completion notice', () => {
+describe('SessionRecorder ECU disconnect finalization (U12, R21)', () => {  it('an ECU disconnect while recording finalizes the file with a completion notice', () => {
     SessionRecorder.startCompanion([1]);
     SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
 
@@ -385,5 +384,24 @@ describe('SessionRecorder ECU disconnect finalization (U12, R21)', () => {
 
     expect(SessionRecorder.segmentCount).toBe(2);
     expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 3000, v: 30 }]);
+  });
+
+  it('newSegment resumes a normal (non-companion) recording with its rAF tick', () => {
+    // Regression (review): newSegment unconditionally switched into companion feed
+    // mode, stalling A-side recordings after an ECU reconnect.
+    SessionRecorder.start([1]);
+    storeMock.liveDataStore.values = { 1: 50 };
+    tick(0);
+    SessionRecorder.newSegment();
+    expect(SessionRecorder.state).toBe('recording');
+    expect(SessionRecorder.segmentCount).toBe(1);
+
+    storeMock.liveDataStore.values = { 1: 60 };
+    tick(1000);
+    const data = SessionRecorder.getRecordedData().data[1];
+    expect(data.some(s => s.v === 60)).toBe(true); // rAF tick loop resumed after reconnect
+    // A companion feed frame must NOT be consumed in normal mode.
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 99 });
+    expect(SessionRecorder.getRecordedData().data[1].some(s => s.v === 99)).toBe(false);
   });
 });

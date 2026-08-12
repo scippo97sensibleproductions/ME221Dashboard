@@ -80,8 +80,13 @@ public partial class HybridBridgeService
         try
         {
             // Companion mode (KTD-4): answer from the snapshot's stored values; no ECU read.
-            if (_mirrorMode && _mirrorStore?.GetTable(tableId) is { } snapshotTable)
+            if (_mirrorMode)
             {
+                if (_mirrorStore?.HasSnapshot != true)
+                    return NotReadyJson();
+                if (_mirrorStore.GetTable(tableId) is not { } snapshotTable)
+                    return JsonSerializer.Serialize(new { success = false, error = $"Table {tableId} not found" });
+
                 return JsonSerializer.Serialize(new
                 {
                     success = true,
@@ -160,6 +165,8 @@ public partial class HybridBridgeService
             // Companion mode (KTD-4): answer from snapshot values.
             if (_mirrorMode && _mirrorStore is { } store)
             {
+                if (!store.HasSnapshot)
+                    return NotReadyJson();
                 var snapshotResults = new Dictionary<int, object>();
                 foreach (var tableId in ids)
                 {

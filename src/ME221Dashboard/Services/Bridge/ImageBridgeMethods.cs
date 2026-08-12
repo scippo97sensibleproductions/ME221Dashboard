@@ -92,9 +92,14 @@ public partial class HybridBridgeService
     /// </summary>
     public async Task<string> GetImageBase64(string path)
     {
-        // Companion mode: serve from the snapshot's embedded bytes, never B's filesystem (R9).
-        if (_mirrorMode && _mirrorStore?.GetImageBase64(path) is { } mirrored)
+        // Companion mode: serve from the snapshot's embedded bytes only — B's
+        // filesystem must never be read for mirrored content (R9). A snapshot-absent
+        // path is an error, never a fallback to local disk.
+        if (_mirrorMode)
         {
+            if (string.IsNullOrEmpty(path) || _mirrorStore?.GetImageBase64(path) is not { } mirrored)
+                return JsonSerializer.Serialize(new { success = false, error = "Image not in snapshot" });
+
             var ext = Path.GetExtension(path).ToLowerInvariant();
             var mime = ext switch
             {

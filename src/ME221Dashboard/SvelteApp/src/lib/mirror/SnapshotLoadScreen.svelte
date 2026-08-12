@@ -8,7 +8,7 @@
   role="status"
   aria-label="Loading snapshot"
 >
-  <span class="inline-block h-8 w-8 animate-spin rounded-full border-2 border-gray-500 border-t-teal-400"></span>
+  <span class="inline-block h-8 w-8 animate-spin rounded-full border-2" style="border-color: var(--metro-border); border-top-color: var(--metro-teal);"></span>
   <p class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-teal);">Loading Snapshot</p>
   <p class="text-[13px]" style="color: var(--metro-text-secondary);">Synchronizing host state</p>
 </div>

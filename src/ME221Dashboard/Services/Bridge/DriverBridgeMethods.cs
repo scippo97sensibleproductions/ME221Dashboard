@@ -80,8 +80,13 @@ public partial class HybridBridgeService
             var driverId = (ushort)(payload?["driverId"]?.GetValue<ushort>() ?? 0);
 
             // Companion mode (KTD-4): answer from the snapshot's stored config.
-            if (_mirrorMode && _mirrorStore?.GetDriver(driverId) is { } snapshotDriver)
+            if (_mirrorMode)
             {
+                if (_mirrorStore?.HasSnapshot != true)
+                    return NotReadyJson();
+                if (_mirrorStore.GetDriver(driverId) is not { } snapshotDriver)
+                    return JsonSerializer.Serialize(new { error = $"Driver {driverId} not found" });
+
                 var values = snapshotDriver.Configs.Select(c => c.Value).ToArray();
                 return JsonSerializer.Serialize(new
                 {

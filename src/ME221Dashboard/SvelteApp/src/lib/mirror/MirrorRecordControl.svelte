@@ -123,7 +123,7 @@
       class="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors
         {recorderState === 'recording'
           ? 'bg-metro-red text-white hover:bg-[#C50F1F]'
-          : 'bg-metro-teal text-white hover:bg-[#008B8B]'}"
+          : 'bg-metro-teal text-white hover:opacity-80'}"
       onclick={toggle}
       title={recorderState === 'recording' ? 'Stop companion recording' : 'Start companion recording'}
     >

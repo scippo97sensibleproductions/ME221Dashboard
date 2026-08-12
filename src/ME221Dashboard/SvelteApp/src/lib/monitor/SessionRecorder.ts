@@ -137,14 +137,21 @@ class SessionRecorderClass {
     this.#completionNotice = { reason: reason ?? 'Recording finalized' };
   }
 
-  /** Reconnect continuation (R18): finalize the current segment and start a
-   *  fresh one without keeping the old samples. */
+  /** Reconnect continuation (R18/R21): finalize the current segment and start a
+   *  fresh one without keeping the old samples — in the mode the recording was in. */
   newSegment(): void {
     // R21: a reconnect starts a new recording segment — whether the previous
     // segment was stopped by a finalize (ECU disconnect) or is still live.
     this.finalize(); // no-op when already stopped
-    this.#segmentCount++;
-    this.startCompanion(this.#recordAllFeed ? [] : this.#recordedSensorIds, this.#sensorNames);
+    const nextSegment = this.#segmentCount + 1;
+    if (this.#companionMode) {
+      this.startCompanion(this.#recordAllFeed ? [] : this.#recordedSensorIds, this.#sensorNames);
+    } else {
+      // Normal (rAF-sampled) recordings must resume their tick loop, not switch
+      // into companion feed mode — a plain reconnect would otherwise stall them.
+      this.start(this.#recordedSensorIds, this.#sensorNames);
+    }
+    this.#segmentCount = nextSegment; // start()/startCompanion() reset it; restore the count
   }
 
   #tick = (): void => {
