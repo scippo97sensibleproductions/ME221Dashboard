@@ -351,6 +351,40 @@ public sealed class RemoteReadTests
     }
 
     [Fact]
+    public async Task DefinitionsOnlySnapshotRendersTablesEmptyNotFailing()
+    {
+        // Real calibrations store structure only (KTD-4) — table value arrays are
+        // null until the ECU is read. Such a snapshot must answer the table load
+        // with empty arrays (the plan's "empty tables render as empty, not missing"),
+        // never a failure that trips the editor's load guard.
+        var snapshot = MirrorTestData.SampleSnapshot();
+        snapshot.Calibration.Tables.Clear();
+        snapshot.Calibration.Tables.Add(new TableDefinition
+        {
+            Id = 10,
+            Name = "Ignition",
+            Category = "Timing",
+            ViewInTree = true,
+            Enabled = true,
+            TableType = "T1x16",
+            Cols = 4,
+            Rows = 1,
+            Input0LinkId = 2,
+            OutputLinkId = 10,
+            Input0Name = "RPM",
+            OutputName = "deg",
+            IncrementValue = 1,
+        });
+        _store.Apply(snapshot);
+        _bridge.EnterMirrorMode(_store);
+
+        var data = await _bridge.ReadTableData(10);
+        data.Should().Contain("\"success\":true");
+        data.Should().Contain("\"input0\":[]");
+        data.Should().Contain("\"output\":[]");
+    }
+
+    [Fact]
     public async Task ExitMirrorModeRestoresLocalData()
     {
         _store.Apply(MirrorTestData.SampleSnapshot());

@@ -94,9 +94,9 @@ public partial class HybridBridgeService
                     rows = snapshotTable.Rows,
                     cols = snapshotTable.Cols,
                     tableType = snapshotTable.TableType,
-                    input0 = snapshotTable.Input0,
-                    input1 = snapshotTable.Input1,
-                    output = snapshotTable.Output,
+                    input0 = snapshotTable.Input0 ?? [],
+                    input1 = snapshotTable.Input1 ?? [],
+                    output = snapshotTable.Output ?? [],
                 }, SJsonOptions);
             }
 
@@ -175,9 +175,9 @@ public partial class HybridBridgeService
                     {
                         success = true,
                         enabled = t.Enabled,
-                        input0 = t.Input0,
-                        input1 = t.Input1,
-                        output = t.Output,
+                        input0 = t.Input0 ?? [],
+                        input1 = t.Input1 ?? [],
+                        output = t.Output ?? [],
                     };
                 }
                 return JsonSerializer.Serialize(new { results = snapshotResults }, SJsonOptions);
