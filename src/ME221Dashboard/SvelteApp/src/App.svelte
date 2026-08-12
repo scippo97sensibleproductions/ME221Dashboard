@@ -94,6 +94,7 @@
   let selectedTableId = $state<number>(0);
   let selectedDriverId = $state<number>(0);
   import { liveDataStore } from './lib/stores/LiveDataStore.svelte';
+  import { SessionRecorder } from './lib/monitor/SessionRecorder';
 
   // Remove local gpsLocation — use liveDataStore.gps instead
   let gpsLocation = $derived(liveDataStore.gps);
@@ -715,11 +716,18 @@
     // App.svelte still monitors connection changes for reconnect logic
     const unsubscribe = HybridBridge.onMessage((event: BridgeEvent) => {
       if (event.event === 'connectionStateChanged') {
+        // R21: an ECU disconnect while recording finalizes the session file with a
+        // completion notice; a reconnect starts a new recording segment.
         if (event.state !== 'Connected') {
           warningEvaluator.reset();
           shiftEvaluator.reset();
           shiftLightAnnouncer.reset();
           warningToasts.reset();
+          if (SessionRecorder.state === 'recording') {
+            SessionRecorder.finalize('ECU disconnected — session finalized');
+          }
+        } else if (SessionRecorder.state === 'recording') {
+          SessionRecorder.newSegment();
         }
         handleConnectionChange({ state: event.state, error: event.error });
       } else if (event.event === 'appBackgrounded') {

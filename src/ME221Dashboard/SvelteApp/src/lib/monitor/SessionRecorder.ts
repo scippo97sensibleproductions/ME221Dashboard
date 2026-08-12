@@ -140,8 +140,9 @@ class SessionRecorderClass {
   /** Reconnect continuation (R18): finalize the current segment and start a
    *  fresh one without keeping the old samples. */
   newSegment(): void {
-    if (this.#state !== 'recording') return;
-    this.finalize();
+    // R21: a reconnect starts a new recording segment — whether the previous
+    // segment was stopped by a finalize (ECU disconnect) or is still live.
+    this.finalize(); // no-op when already stopped
     this.#segmentCount++;
     this.startCompanion(this.#recordAllFeed ? [] : this.#recordedSensorIds, this.#sensorNames);
   }

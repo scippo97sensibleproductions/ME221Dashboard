@@ -336,3 +336,54 @@ describe('SessionRecorder companion feed (U10)', () => {
     expect(SessionRecorder.getRecordedData().data[1]).toHaveLength(4);
   });
 });
+
+describe('SessionRecorder ECU disconnect finalization (U12, R21)', () => {
+  it('an ECU disconnect while recording finalizes the file with a completion notice', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+
+    // App.svelte's connectionStateChanged hook: disconnected → finalize.
+    SessionRecorder.finalize('ECU disconnected — session finalized');
+
+    expect(SessionRecorder.state).toBe('stopped');
+    expect(SessionRecorder.completionNotice).toBe('ECU disconnected — session finalized');
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 1000, v: 10 }]);
+  });
+
+  it('a reconnect while recording starts a new segment', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.finalize('ECU disconnected — session finalized');
+
+    // App.svelte's connectionStateChanged hook: connected → new segment.
+    SessionRecorder.newSegment();
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 20 });
+
+    expect(SessionRecorder.state).toBe('recording');
+    expect(SessionRecorder.segmentCount).toBe(1);
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 2000, v: 20 }]);
+  });
+
+  it('a disconnect while not recording is a no-op', () => {
+    SessionRecorder.reset();
+    // The hook guards on state === 'recording'; even if finalize were called it
+    // must not fabricate a notice for an idle recorder.
+    SessionRecorder.finalize('ECU disconnected — session finalized');
+    expect(SessionRecorder.completionNotice).toBeNull();
+    expect(SessionRecorder.state).toBe('idle');
+  });
+
+  it('repeated disconnects produce one segment per connected period', () => {
+    SessionRecorder.startCompanion([1]);
+    SessionRecorder.pushFeedFrame(1, 1000, { '1': 10 });
+    SessionRecorder.finalize('ECU disconnected — session finalized');
+    SessionRecorder.newSegment();
+    SessionRecorder.pushFeedFrame(2, 2000, { '1': 20 });
+    SessionRecorder.finalize('ECU disconnected — session finalized');
+    SessionRecorder.newSegment();
+    SessionRecorder.pushFeedFrame(3, 3000, { '1': 30 });
+
+    expect(SessionRecorder.segmentCount).toBe(2);
+    expect(SessionRecorder.getRecordedData().data[1]).toEqual([{ t: 3000, v: 30 }]);
+  });
+});
