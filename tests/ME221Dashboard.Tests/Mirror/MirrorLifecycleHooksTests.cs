@@ -136,6 +136,25 @@ public sealed class MirrorLifecycleHooksTests : IAsyncLifetime
         msg!.Reason.Should().Be("warningSettings");
     }
 
+    [Fact]
+    public async Task EcuTableWriteDoesNotEndSessions()
+    {
+        // R19/KTD-6: ECU table writes are excluded from the config-update trigger set.
+        var entry = await _store.AddAsync("client-1", "Tablet");
+        using var client = await ConnectApprovedAsync(entry.Token);
+
+        var writes = 0;
+        _bridge.SnapshotScopedWrite += _ => writes++;
+
+        await _bridge.WriteTableData("{\"tableId\":10,\"input0\":[],\"input1\":[],\"output\":[]}");
+        writes.Should().Be(0, "an ECU table write must not notify the mirror server");
+
+        // The viewer is still alive and the R19 hook still fires for real changes.
+        await _bridge.SaveWarningSettings("[]");
+        writes.Should().Be(1);
+        (MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as ConfigUpdateMessage)!.Reason.Should().Be("warningSettings");
+    }
+
     // ── Error paths ──────────────────────────────────────────────────────────
 
     [Fact]

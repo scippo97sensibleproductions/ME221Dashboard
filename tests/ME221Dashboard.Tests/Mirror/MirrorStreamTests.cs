@@ -159,6 +159,62 @@ public sealed class MirrorStreamTests : IAsyncLifetime
     // ── Edge cases ───────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task SlowConsumerReceivesFewerFramesButNeverBlocksOthers()
+    {
+        // AE5/R12: with a burst of updates faster than one viewer can drain, that
+        // viewer's frames coalesce (latest-wins) while the recording feed keeps every
+        // update, and a second viewer stays uncongested.
+        var entry1 = await _store.AddAsync("client-1", "Tablet");
+        var entry2 = await _store.AddAsync("client-2", "Phone");
+
+        using var slow = await ConnectAsync();
+        await CompleteHandshakeAsync(slow, entry1.Token, "client-1");
+
+        using var fast = await ConnectAsync();
+        await CompleteHandshakeAsync(fast, entry2.Token, "client-2");
+
+        // Fire a burst of updates with no delay: the slow viewer (which is not
+        // reading) cannot drain them, so its frames must coalesce.
+        for (var i = 1; i <= 40; i++)
+        {
+            _liveData.Set(1, i);
+            _liveData.Raise(1);
+        }
+
+        // Fast viewer reads promptly: it must see live frames without waiting on the
+        // slow viewer's drain.
+        var fastFrames = new List<FrameMessage>();
+        using (var cts = new CancellationTokenSource(5000))
+        {
+            while (fastFrames.Count < 3)
+            {
+                var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(fast, 5000));
+                if (msg is FrameMessage frame)
+                    fastFrames.Add(frame);
+            }
+        }
+        fastFrames.Should().HaveCountGreaterThanOrEqualTo(3, "the fast viewer is not blocked by the slow viewer");
+
+        // Slow viewer drains: fewer frames than updates (coalesced), but every
+        // recordFeed update arrived with no gaps.
+        var slowFrames = new List<FrameMessage>();
+        var slowRecords = new List<RecordFeedMessage>();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (DateTime.UtcNow < deadline && slowRecords.Count < 40)
+        {
+            var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(slow, 5000));
+            if (msg is FrameMessage frame) slowFrames.Add(frame);
+            if (msg is RecordFeedMessage record) slowRecords.Add(record);
+        }
+
+        slowFrames.Count.Should().BeLessThan(40, "a slow consumer receives coalesced frames, not one per update (latest-wins)");
+        slowRecords.Count.Should().Be(40, "the recording feed never skips (KTD-9)");
+        var seqs = slowRecords.Select(r => r.Seq).OrderBy(s => s).ToList();
+        for (var i = 1; i < seqs.Count; i++)
+            seqs[i].Should().Be(seqs[i - 1] + 1);
+    }
+
+    [Fact]
     public async Task ViewerJoiningMidRecordingGetsItsOwnFullSnapshot()
     {
         var entry1 = await _store.AddAsync("client-1", "Tablet");

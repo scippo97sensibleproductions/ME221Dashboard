@@ -81,6 +81,28 @@ public sealed class MirrorEventRelayTests
         _relay.SnapshotApplied.Should().BeFalse("an out-of-order chunk must fail the whole snapshot");
     }
 
+    [Fact]
+    public async Task CachedStateResumeRefreshesToTheNewSnapshotSequence()
+    {
+        // R6: on reconnect the full snapshot is resent and B resumes from cached state,
+        // refreshing in the background — a new seq must replace the old without a
+        // closed window.
+        var first = MirrorProtocol.Serialize(MirrorTestData.SampleSnapshot());
+        foreach (var chunk in MirrorChunkFramer.CreateChunks(first, seq: 10, chunkSize: 256))
+            _relay.InjectMessage(chunk);
+        await _relay.FinalizeForTest(10);
+        _relay.SnapshotApplied.Should().BeTrue();
+
+        var second = MirrorProtocol.Serialize(MirrorTestData.SampleSnapshot());
+        foreach (var chunk in MirrorChunkFramer.CreateChunks(second, seq: 20, chunkSize: 256))
+            _relay.InjectMessage(chunk);
+        await _relay.FinalizeForTest(20);
+
+        _relay.SnapshotApplied.Should().BeTrue("cached state stays rendered while the fresh snapshot applies");
+        _relay.SnapshotSeq.Should().Be(20);
+        _store.HasSnapshot.Should().BeTrue();
+    }
+
     // ── Frame gating (R11) ───────────────────────────────────────────────────
 
     [Fact]

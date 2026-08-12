@@ -160,6 +160,50 @@ public sealed class MirrorServerTests : IAsyncLifetime
         ack!.Status.Should().Be("versionMismatch");
     }
 
+    [Fact]
+    public async Task PendingFloodNeverExceedsThePendingCapAndApprovedViewersStayUnblocked()
+    {
+        // Two unapproved devices fill the pending cap; a third unapproved hello is
+        // closed without a helloAck (PendingCap), while an approved device can still
+        // reconnect on top of pending sessions.
+        var pending = new List<ClientWebSocket>();
+        for (var i = 1; i <= 2; i++)
+        {
+            var client = await ConnectAsync();
+            await SendJsonAsync(client, new HelloMessage { AppVersion = "1.2.3", DeviceName = $"P{i}", ClientId = $"p{i}" });
+            (MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as HelloAckMessage)!.Status.Should().Be("pending");
+            pending.Add(client);
+        }
+
+        try
+        {
+            using var third = await ConnectAsync();
+            await SendJsonAsync(third, new HelloMessage { AppVersion = "1.2.3", DeviceName = "P3", ClientId = "p3" });
+            await AssertClosedAsync(third);
+
+            // The approved device reconnects despite the pending flood.
+            var entry = await _store.AddAsync("client-1", "Tablet");
+            using var approved = await ConnectAsync();
+            await SendJsonAsync(approved, new HelloMessage { AppVersion = "1.2.3", DeviceName = "Tablet", Token = entry.Token, ClientId = "client-1" });
+            (MirrorProtocol.Parse(await ReceiveJsonAsync(approved)) as HelloAckMessage)!.Status.Should().Be("approved");
+        }
+        finally
+        {
+            foreach (var c in pending) c.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ValidTokenWithMismatchedClientIdFallsThroughToPending()
+    {
+        // R16: the token is bound to a device; a different client id does not reuse it.
+        var entry = await _store.AddAsync("client-1", "Tablet");
+        using var client = await ConnectAsync();
+        await SendJsonAsync(client, new HelloMessage { AppVersion = "1.2.3", DeviceName = "Impostor", Token = entry.Token, ClientId = "other-client" });
+
+        (MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as HelloAckMessage)!.Status.Should().Be("pending");
+    }
+
     // ── Error paths ──────────────────────────────────────────────────────────
 
     [Fact]
