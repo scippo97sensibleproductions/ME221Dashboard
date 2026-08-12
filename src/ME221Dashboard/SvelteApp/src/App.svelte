@@ -447,6 +447,17 @@
     }
   });
 
+  // Terminal session states (refused / revoked / re-pair) are shown on the
+  // companion discovery page; route back there if they arrive while the user
+  // sits elsewhere (e.g. a revoke lands mid-session on the dashboard).
+  $effect(() => {
+    if (!isMirrorMode) return;
+    const s = mirrorStore.sessionState;
+    if ((s === 'Refused' || s === 'Revoked' || s === 'RePair') && currentPage !== 'companion') {
+      navigateTo('companion');
+    }
+  });
+
   function navigateTo(page: string, params?: Record<string, unknown>) {
     // Dirty-form gate: stash the target and let the dialog resolve it
     // (Stay clears the stash; Discard/Save-and-leave execute it).

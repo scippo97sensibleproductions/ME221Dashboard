@@ -59,7 +59,9 @@
       const result = await HybridBridge.mirrorConnect(device.instanceId);
       if (result.success) {
         lastConnectDevice = device;
-        onNavigate('dashboard');
+        // Stay on this page: the state screens (waiting / refused / revoked) live here.
+        // The page navigates to the dashboard only once the host approves (Connected).
+        forcedSearching = false;
       } else {
         connectError = result.error ?? 'Connection failed';
       }
@@ -69,6 +71,11 @@
       connectingId = null;
     }
   }
+
+  // Approved: leave the discovery page for the live dashboard (approval flow, AE1).
+  $effect(() => {
+    if (mirrorStore.sessionState === 'Connected') onNavigate('dashboard');
+  });
 
   async function cancelApproval() {
     try {
@@ -88,7 +95,11 @@
 
   onMount(() => {
     mirrorStore.start();
-    scan();
+    // A state screen (waiting/refused/revoked/re-pair) takes precedence over an
+    // auto-scan when the page re-mounts mid-session; only scan on a fresh visit.
+    if (!['AwaitingApproval', 'Refused', 'Revoked', 'RePair', 'Connected'].includes(mirrorStore.sessionState)) {
+      scan();
+    }
   });
 
   onDestroy(() => {
