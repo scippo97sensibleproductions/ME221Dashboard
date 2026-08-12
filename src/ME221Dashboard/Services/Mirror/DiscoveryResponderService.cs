@@ -62,7 +62,10 @@ public sealed class DiscoveryResponderService : IDisposable
         AcquireMulticastLock();
 #endif
 
-        _logger.LogInformation("Discovery responder listening on UDP {Port}", BoundPort);
+        _logger.LogInformation(
+            "Discovery responder listening on UDP {Port}; local addresses: {Addresses}",
+            BoundPort,
+            string.Join(", ", LocalIpv4Addresses()));
     }
 
     public void Stop()
@@ -88,8 +91,14 @@ public sealed class DiscoveryResponderService : IDisposable
             try
             {
                 var result = await _client!.ReceiveAsync(ct).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "Discovery: probe datagram received from {Remote} ({Count} bytes): {Payload}",
+                    result.RemoteEndPoint, result.Buffer.Length,
+                    Encoding.UTF8.GetString(result.Buffer));
                 if (result.Buffer.Length > 0 && Encoding.UTF8.GetString(result.Buffer).Contains("me221", StringComparison.Ordinal))
                     await RespondBeaconAsync(result.RemoteEndPoint).ConfigureAwait(false);
+                else
+                    _logger.LogInformation("Discovery: datagram ignored (not a probe)");
             }
             catch (OperationCanceledException)
             {
@@ -120,6 +129,9 @@ public sealed class DiscoveryResponderService : IDisposable
             };
             var json = JsonSerializer.Serialize(beacon);
             var bytes = Encoding.UTF8.GetBytes(json);
+            _logger.LogInformation(
+                "Discovery: responding to {Remote} with beacon (instance {InstanceId}, ecuConnected {Ecu}, app {AppVersion})",
+                remote, instanceId, beacon.ecuConnected, beacon.appVersion);
             await _client!.SendAsync(bytes, bytes.Length, remote).ConfigureAwait(false);
             _logger.LogDebug("Discovery beacon sent to {Remote}", remote);
         }
@@ -129,16 +141,39 @@ public sealed class DiscoveryResponderService : IDisposable
         }
     }
 
+    private static List<string> LocalIpv4Addresses()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Where(i => i.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                .SelectMany(i => i.GetIPProperties().UnicastAddresses)
+                .Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork)
+                .Select(u => u.Address.ToString())
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
 #if ANDROID
     private void AcquireMulticastLock()
     {
         try
         {
             var wifi = (Android.Net.Wifi.WifiManager?)Android.App.Application.Context.GetSystemService(Android.Content.Context.WifiService);
-            _multicastLock = wifi?.CreateMulticastLock("me221-discovery");
-            _multicastLock?.SetReferenceCounted(false);
-            _multicastLock?.Acquire();
-            _logger.LogDebug("Android multicast lock acquired");
+            if (wifi is null)
+            {
+                _logger.LogWarning("Android: WifiManager unavailable — broadcast/multicast reception may be filtered");
+                return;
+            }
+            _multicastLock = wifi.CreateMulticastLock("me221-discovery");
+            _multicastLock.SetReferenceCounted(false);
+            _multicastLock.Acquire();
+            _logger.LogInformation("Android: multicast lock acquired (held={Held})", _multicastLock.IsHeld);
         }
         catch (Exception ex)
         {

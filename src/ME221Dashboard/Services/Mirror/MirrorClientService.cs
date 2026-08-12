@@ -102,6 +102,10 @@ public sealed class MirrorClientService : IDisposable
         var probe = Encoding.UTF8.GetBytes(DiscoveryResponderService.ProbePayload);
         var cts = new CancellationTokenSource(timeoutMs);
 
+        _logger.LogInformation(
+            "Discovery: scanning for hosts (timeout {Timeout}ms, local instance {LocalInstance}, local addresses {Addresses})",
+            timeoutMs, localId ?? "(null)", string.Join(", ", LocalIpv4Addresses()));
+
         var receive = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)
@@ -109,13 +113,22 @@ public sealed class MirrorClientService : IDisposable
                 try
                 {
                     var result = await udp.ReceiveAsync(cts.Token).ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "Discovery: beacon datagram received from {Remote} ({Count} bytes): {Payload}",
+                        result.RemoteEndPoint, result.Buffer.Length,
+                        Encoding.UTF8.GetString(result.Buffer));
                     using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(result.Buffer));
                     var root = doc.RootElement;
                     if (!root.TryGetProperty("instanceId", out var idProp))
                         continue;
                     var instanceId = idProp.GetString() ?? "";
-                    if (string.IsNullOrEmpty(instanceId) || instanceId == localId)
+                    if (string.IsNullOrEmpty(instanceId))
+                        continue;
+                    if (instanceId == localId)
+                    {
+                        _logger.LogInformation("Discovery: ignoring SELF beacon {InstanceId} from {Remote}", instanceId, result.RemoteEndPoint);
                         continue; // self-discovery: never mirror our own instance
+                    }
                     var beacon = new MirrorBeacon(
                         root.GetProperty("appVersion").GetString() ?? "",
                         root.GetProperty("ecuConnected").GetBoolean(),
@@ -123,6 +136,9 @@ public sealed class MirrorClientService : IDisposable
                         instanceId,
                         result.RemoteEndPoint.Address);
                     found[beacon.InstanceId] = beacon;
+                    _logger.LogInformation(
+                        "Discovery: host {InstanceId} found at {Remote} (app {AppVersion}, ecu {Ecu}, name {Name})",
+                        instanceId, result.RemoteEndPoint, beacon.AppVersion, beacon.EcuConnected, beacon.DisplayName);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) when (ex is not ObjectDisposedException)
@@ -135,6 +151,7 @@ public sealed class MirrorClientService : IDisposable
         try
         {
             await udp.SendAsync(probe, probe.Length, new IPEndPoint(IPAddress.Broadcast, MirrorProtocol.DiscoveryPort)).ConfigureAwait(false);
+            _logger.LogInformation("Discovery: probe sent to {Target}:{Port}", IPAddress.Broadcast, MirrorProtocol.DiscoveryPort);
             await Task.Delay(timeoutMs).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -147,7 +164,26 @@ public sealed class MirrorClientService : IDisposable
         }
 
         await receive.ConfigureAwait(false);
+        _logger.LogInformation("Discovery: scan complete, {Count} host(s) found", found.Count);
         return found.Values.ToList();
+    }
+
+    private static List<string> LocalIpv4Addresses()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Where(i => i.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                .SelectMany(i => i.GetIPProperties().UnicastAddresses)
+                .Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork)
+                .Select(u => u.Address.ToString())
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     // ── Connect (R15, R16) ───────────────────────────────────────────────────
