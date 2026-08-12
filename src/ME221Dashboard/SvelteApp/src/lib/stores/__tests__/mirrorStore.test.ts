@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { mirrorStore } from '../MirrorStore.svelte';
@@ -83,5 +83,60 @@ describe('mirror store (snapshot apply)', () => {
 
     mirrorStore.dispatchForTest({ event: 'mirrorSessionState', state: 'Revoked' } as never);
     expect(mirrorStore.snapshotApplied).toBe(false);
+  });
+
+  it('propagates the config-update reconnect error and clears the snapshot', () => {
+    // R19: 'update made, reconnect required' ends the session with a notice.
+    mirrorStore.dispatchForTest({ event: 'mirrorSessionState', state: 'Connected' } as never);
+    mirrorStore.dispatchForTest({
+      event: 'mirrorSessionState',
+      state: 'Disconnected',
+      error: 'update made, reconnect required',
+    } as never);
+
+    expect(mirrorStore.sessionState).toBe('Disconnected');
+    expect(mirrorStore.sessionError).toBe('update made, reconnect required');
+    expect(mirrorStore.snapshotApplied).toBe(false);
+    expect(mirrorStore.isMirroring).toBe(false);
+  });
+
+  it('marks the feed stale after the 2s window and clears on a fresh frame', () => {
+    let now = 0;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.useFakeTimers();
+    try {
+      mirrorStore.dispatchForTest({ event: 'mirrorSessionState', state: 'Connected' } as never);
+      mirrorStore.dispatchForTest({ event: 'liveDataUpdate', values: {} } as never);
+      expect(mirrorStore.isStale).toBe(false);
+
+      now = 2100;
+      vi.advanceTimersByTime(2100);
+      expect(mirrorStore.isStale).toBe(true);
+
+      now = 2200;
+      mirrorStore.dispatchForTest({ event: 'liveDataUpdate', values: { 1: 100 } } as never);
+      expect(mirrorStore.isStale).toBe(false);
+      vi.advanceTimersByTime(100);
+      expect(mirrorStore.isStale).toBe(false);
+    } finally {
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('never arms the stale timer outside Connected', () => {
+    let now = 0;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    vi.useFakeTimers();
+    try {
+      mirrorStore.dispatchForTest({ event: 'mirrorSessionState', state: 'AwaitingApproval' } as never);
+      mirrorStore.dispatchForTest({ event: 'liveDataUpdate', values: {} } as never);
+      now = 2100;
+      vi.advanceTimersByTime(2100);
+      expect(mirrorStore.isStale).toBe(false);
+    } finally {
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

@@ -134,14 +134,21 @@ class MirrorStore {
 
   #onFrame(): void {
     this.#lastFrameAt = performance.now();
-    if (!this.isStale) this.#armStaleTimer();
+    if (this.isStale) {
+      // A fresh frame clears the stale state and re-arms the next check.
+      this.isStale = false;
+    }
+    this.#armStaleTimer();
   }
 
   #armStaleTimer(): void {
     this.#clearStaleTimer();
     this.#staleTimer = setTimeout(() => {
       if (this.sessionState !== 'Connected') return;
-      this.isStale = performance.now() - this.#lastFrameAt > STALE_AFTER_MS;
+      const now = performance.now();
+      // >= because the timer fires exactly at STALE_AFTER_MS when the feed stops;
+      // a strict > would never flip at the boundary.
+      this.isStale = now - this.#lastFrameAt >= STALE_AFTER_MS;
       // Keep checking while connected: re-arm once so a fresh frame clears it.
       if (this.isStale) this.#armStaleTimer();
     }, STALE_AFTER_MS);
