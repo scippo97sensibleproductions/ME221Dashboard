@@ -15,10 +15,17 @@
 
   function statusColor(state: string): 'success' | 'warning' | 'danger' | 'gray' {
     if (state === 'Connected') return 'success';
+    if (state === 'Mirroring') return 'success';
     if (state === 'Connecting') return 'warning';
     if (state === 'Error') return 'danger';
     return 'gray';
   }
+
+  // In companion mode the ECU connection state stays Disconnected while the
+  // mirror session is live — surface the mirror session instead (KTD-7).
+  let badgeState = $derived(
+    isConnected && connectionState.state !== 'Connected' ? 'Mirroring' : connectionState.state,
+  );
 </script>
 
 {#if currentPage !== 'splash' && headerVisible}
@@ -33,7 +40,7 @@
       {/if}
     </div>
     <div class="flex items-center gap-2">
-      <Badge color={statusColor(connectionState.state)}>{connectionState.state}</Badge>
+      <Badge color={statusColor(badgeState)}>{badgeState}</Badge>
       <button
         class="flex h-7 w-7 items-center justify-center transition-colors duration-150"
         style="color: var(--metro-text-secondary);"

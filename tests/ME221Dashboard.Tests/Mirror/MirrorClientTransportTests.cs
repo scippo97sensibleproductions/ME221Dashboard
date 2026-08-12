@@ -180,4 +180,29 @@ public sealed class MirrorClientTransportTests : IAsyncLifetime
         _client.Disconnect();
         _client.State.State.Should().Be(MirrorClientState.Stopped);
     }
+
+    [Fact]
+    public async Task HostDeathExhaustsToDisconnectedNotAwaitingApproval()
+    {
+        // Connect and approve, then kill A. The reconnect loop must run through its
+        // attempts and land in Disconnected — never stranded in AwaitingApproval
+        // (which previously happened: the reconnect path re-selected the device and
+        // the exhaustion guard stopped counting from the non-Connected state).
+        await _client.RestoreClientIdAsync();
+        await _client.ConnectAsync(Beacon(), token: null, pinnedThumbprint: null);
+        await Task.Delay(200);
+        var clientId = await _pins.GetOrCreateClientIdAsync();
+        await ApproveFromServerAsync(clientId, "Tablet");
+        await Task.Delay(500);
+        _client.State.State.Should().Be(MirrorClientState.Connected);
+
+        _server.Dispose(); // A dies
+
+        var deadline = DateTime.UtcNow.AddSeconds(25);
+        while (_client.State.State is not (MirrorClientState.Disconnected or MirrorClientState.Revoked or MirrorClientState.RePair) && DateTime.UtcNow < deadline)
+            await Task.Delay(200);
+
+        _client.State.State.Should().Be(MirrorClientState.Disconnected, "the session must exhaust its reconnect attempts after the host dies");
+        _client.State.State.Should().NotBe(MirrorClientState.AwaitingApproval, "a dead host must not leave the session in the approval-wait zombie state");
+    }
 }

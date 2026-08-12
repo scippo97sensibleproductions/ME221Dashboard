@@ -236,12 +236,17 @@ public sealed class MirrorClientService : IDisposable
     // ── Connect (R15, R16) ───────────────────────────────────────────────────
 
     /// <summary>Connect to a discovered A; if a token is held it is presented (R2 reconnect).</summary>
-    public async Task ConnectAsync(MirrorBeacon target, string? token, string? pinnedThumbprint)
+    public async Task ConnectAsync(MirrorBeacon target, string? token, string? pinnedThumbprint, bool fromReconnect = false)
     {
         _target = target;
         _serverHost = target.InstanceId; // pins and tokens bind to the instance, not the IP
         _pinnedThumbprint = pinnedThumbprint;
-        _state.SelectDevice(target.DisplayName);
+        // Only a user-initiated connect selects the device (→ AwaitingApproval). A
+        // reconnect must NOT leave Connected: LinkDropped() only counts drops while
+        // Connected, so resetting here would strand the session in AwaitingApproval
+        // and kill the exhaustion path after a host death (R13).
+        if (!fromReconnect)
+            _state.SelectDevice(target.DisplayName);
 
         // Replace the previous socket/CTS (leak-safe on repeated reconnects).
         _cts?.Dispose();
@@ -460,7 +465,7 @@ public sealed class MirrorClientService : IDisposable
                     return;
                 try
                 {
-                    await ConnectAsync(_target, _state.Token, _pinnedThumbprint).ConfigureAwait(false);
+                    await ConnectAsync(_target, _state.Token, _pinnedThumbprint, fromReconnect: true).ConfigureAwait(false);
                     // Only declare success on an approved helloAck; a pending or
                     // refused reply must not flip the state to Connected.
                     if (await WaitForHelloAckAsync(ConnectTimeout).ConfigureAwait(false))

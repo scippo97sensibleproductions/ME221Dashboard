@@ -82,6 +82,20 @@ public sealed class MirrorClientStateMachineTests
     }
 
     [Fact]
+    public void HostDeathDuringApprovalExhaustsToDisconnected()
+    {
+        // Regression: a host dying mid-approval must NOT strand the session in
+        // AwaitingApproval — the reconnect counter works from AwaitingApproval too.
+        var (state, _) = Create();
+        state.SelectDevice();
+
+        state.LinkDropped().Should().BeTrue("attempt 1 → retry remains");
+        state.LinkDropped().Should().BeTrue("attempt 2 → retry remains");
+        state.LinkDropped().Should().BeFalse("attempt 3 → exhausted");
+        state.State.Should().Be(MirrorClientState.Disconnected);
+    }
+
+    [Fact]
     public void ManualRetryAfterExhaustionReturnsToSearch()
     {
         var (state, _) = Create();

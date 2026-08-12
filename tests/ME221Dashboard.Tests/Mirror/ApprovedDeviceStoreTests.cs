@@ -218,7 +218,7 @@ public sealed class DiscoveryResponderEcuStateTests : IDisposable
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(reply.Buffer));
         doc.RootElement.GetProperty("ecuConnected").GetBoolean().Should().BeTrue();
         doc.RootElement.GetProperty("appVersion").GetString().Should().Be("1.0.0");
-        doc.RootElement.GetProperty("displayName").GetString().Should().Be("ME221");
+        doc.RootElement.GetProperty("displayName").GetString().Should().NotBeNullOrWhiteSpace("fresh installs default to the platform device name, never a generic placeholder");
         doc.RootElement.GetProperty("instanceId").GetString().Should().NotBeNullOrWhiteSpace();
     }
 }

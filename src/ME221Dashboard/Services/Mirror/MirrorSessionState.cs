@@ -74,10 +74,12 @@ public sealed class MirrorSessionState
 
     // ── Session (F3) ─────────────────────────────────────────────────────────
 
-    /// <summary>Link drop: auto-reconnect while attempts remain (R13).</summary>
+    /// <summary>Link drop: auto-reconnect while attempts remain (R13). Counts from
+    /// Connected (live session) and AwaitingApproval (host died mid-approval) so
+    /// both exhaust to Disconnected instead of stranding the session.</summary>
     public bool LinkDropped()
     {
-        if (State is not MirrorClientState.Connected)
+        if (State is not (MirrorClientState.Connected or MirrorClientState.AwaitingApproval))
             return false;
 
         ReconnectAttempts++;
