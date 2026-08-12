@@ -122,6 +122,22 @@ public sealed class ApprovedDeviceStore(ILogger<ApprovedDeviceStore>? logger = n
         }
     }
 
+    /// <summary>Beacon display name for a fresh install: the platform device name so two
+    /// hosts on one network are distinguishable; ME221 is the fallback when the
+    /// platform name is unavailable (e.g. unit test hosts).</summary>
+    private static string DefaultDisplayName()
+    {
+        try
+        {
+            var name = DeviceInfo.Current.Name;
+            return string.IsNullOrWhiteSpace(name) || name == "unknown" ? "ME221" : name;
+        }
+        catch
+        {
+            return "ME221"; // non-MAUI host (tests) — DeviceInfo has no platform impl
+        }
+    }
+
     private async Task<CompanionViewersFile> LoadAsync()
     {
         try
@@ -135,7 +151,21 @@ public sealed class ApprovedDeviceStore(ILogger<ApprovedDeviceStore>? logger = n
                 throw new JsonException("companion-viewers.json deserialized to null");
 
             file.InstanceId = string.IsNullOrEmpty(file.InstanceId) ? Guid.NewGuid().ToString("N") : file.InstanceId;
-            file.DisplayName = string.IsNullOrEmpty(file.DisplayName) ? "ME221" : file.DisplayName;
+            if (string.IsNullOrEmpty(file.DisplayName) || file.DisplayName == "ME221")
+            {
+                // Migrate legacy installs (which seeded the generic "ME221") to the
+                // platform device name so hosts are identifiable in discovery.
+                var migrated = DefaultDisplayName();
+                file.DisplayName = migrated;
+                try
+                {
+                    await WriteAsync(file).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogWarning(ex, "Failed to persist the migrated display name");
+                }
+            }
             return file;
         }
         catch (JsonException ex)
@@ -154,7 +184,7 @@ public sealed class ApprovedDeviceStore(ILogger<ApprovedDeviceStore>? logger = n
 
     private CompanionViewersFile CreateFresh()
     {
-        var file = new CompanionViewersFile { InstanceId = Guid.NewGuid().ToString("N"), DisplayName = "ME221" };
+        var file = new CompanionViewersFile { InstanceId = Guid.NewGuid().ToString("N"), DisplayName = DefaultDisplayName() };
         WriteAsync(file).GetAwaiter().GetResult();
         return file;
     }

@@ -48,7 +48,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorLifecycleHooks>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.DiscoveryResponderService>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorPinStore>();
-        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorClientService>();
+        builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorClientService>(sp =>
+            new ME221Dashboard.Services.Mirror.MirrorClientService(
+                pinStore: sp.GetRequiredService<ME221Dashboard.Services.Mirror.MirrorPinStore>(),
+                localInstanceId: () =>
+                    sp.GetRequiredService<ME221Dashboard.Services.Mirror.ApprovedDeviceStore>()
+                        .GetOrCreateInstanceIdAsync()));
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorSnapshotStore>();
         builder.Services.AddSingleton<ME221Dashboard.Services.Mirror.MirrorEventRelay>();
 

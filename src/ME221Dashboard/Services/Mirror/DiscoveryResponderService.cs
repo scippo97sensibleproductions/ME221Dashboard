@@ -119,6 +119,13 @@ public sealed class DiscoveryResponderService : IDisposable
     {
         try
         {
+            // KTD-8 / discovery gate: a host without an ECU has nothing to transmit,
+            // so it does not advertise at all (no beacon for idle devices).
+            if (!_ecuConnected())
+            {
+                _logger.LogInformation("Discovery: ignoring probe from {Remote} (no ECU connected)", remote);
+                return;
+            }
             var instanceId = await _store.GetOrCreateInstanceIdAsync().ConfigureAwait(false);
             var beacon = new
             {

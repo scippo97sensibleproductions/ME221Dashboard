@@ -26,7 +26,7 @@ public sealed class MirrorClientService : IDisposable
 
     private readonly Func<string> _appVersion;
     private readonly Func<string> _deviceName;
-    private readonly Func<string?> _localInstanceId;
+    private readonly Func<Task<string?>> _localInstanceId;
     private readonly ILogger<MirrorClientService> _logger;
     private readonly int? _portOverride;
     private string _clientId;
@@ -45,14 +45,14 @@ public sealed class MirrorClientService : IDisposable
         Func<string>? appVersion = null,
         Func<string>? deviceName = null,
         MirrorPinStore? pinStore = null,
-        Func<string?>? localInstanceId = null,
+        Func<Task<string?>>? localInstanceId = null,
         int? portOverride = null,
         ILogger<MirrorClientService>? logger = null)
     {
         _appVersion = appVersion ?? (() => AppInfo.Current.VersionString);
         _deviceName = deviceName ?? (() => DeviceInfo.Current.Name);
         _pinStore = pinStore;
-        _localInstanceId = localInstanceId ?? (() => null);
+        _localInstanceId = localInstanceId ?? (() => Task.FromResult<string?>(null));
         _portOverride = portOverride;
         _logger = logger ?? NullLogger<MirrorClientService>.Instance;
         _clientId = Guid.NewGuid().ToString("N");
@@ -91,11 +91,11 @@ public sealed class MirrorClientService : IDisposable
 
     // ── Discovery (R1, R4) ───────────────────────────────────────────────────
 
-    /// <summary>Broadcast a probe and collect beacons for ~<paramref name="timeoutMs"/>.</summary>
+    /// <summary>Probe every local interface's directed broadcast and collect beacons for ~<paramref name="timeoutMs"/>.</summary>
     public async Task<List<MirrorBeacon>> ScanAsync(int timeoutMs = 2000)
     {
         var found = new Dictionary<string, MirrorBeacon>(StringComparer.Ordinal);
-        var localId = _localInstanceId?.Invoke();
+        var localId = await (_localInstanceId?.Invoke() ?? Task.FromResult<string?>(null)).ConfigureAwait(false);
         using var udp = new UdpClient();
         udp.EnableBroadcast = true;
 
@@ -129,6 +129,11 @@ public sealed class MirrorClientService : IDisposable
                         _logger.LogInformation("Discovery: ignoring SELF beacon {InstanceId} from {Remote}", instanceId, result.RemoteEndPoint);
                         continue; // self-discovery: never mirror our own instance
                     }
+                    if (!root.TryGetProperty("ecuConnected", out var ecuProp) || !ecuProp.GetBoolean())
+                    {
+                        _logger.LogInformation("Discovery: ignoring idle host {InstanceId} from {Remote} (no ECU connected)", instanceId, result.RemoteEndPoint);
+                        continue; // only mirror hosts that have an ECU to transmit
+                    }
                     var beacon = new MirrorBeacon(
                         root.GetProperty("appVersion").GetString() ?? "",
                         root.GetProperty("ecuConnected").GetBoolean(),
@@ -150,8 +155,15 @@ public sealed class MirrorClientService : IDisposable
 
         try
         {
-            await udp.SendAsync(probe, probe.Length, new IPEndPoint(IPAddress.Broadcast, MirrorProtocol.DiscoveryPort)).ConfigureAwait(false);
-            _logger.LogInformation("Discovery: probe sent to {Target}:{Port}", IPAddress.Broadcast, MirrorProtocol.DiscoveryPort);
+            // 255.255.255.255 routes out a single default interface; on multi-homed
+            // hosts (WSL, VPNs, dockers) the probe never reaches the Wi-Fi subnet.
+            // Send a directed broadcast per up IPv4 interface instead.
+            var targets = DirectedBroadcastTargets();
+            foreach (var target in targets)
+            {
+                await udp.SendAsync(probe, probe.Length, new IPEndPoint(target, MirrorProtocol.DiscoveryPort)).ConfigureAwait(false);
+                _logger.LogInformation("Discovery: probe sent to {Target}:{Port}", target, MirrorProtocol.DiscoveryPort);
+            }
             await Task.Delay(timeoutMs).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -166,6 +178,41 @@ public sealed class MirrorClientService : IDisposable
         await receive.ConfigureAwait(false);
         _logger.LogInformation("Discovery: scan complete, {Count} host(s) found", found.Count);
         return found.Values.ToList();
+    }
+
+    /// <summary>Directed broadcast address per up IPv4 interface (address | ~mask), deduped, loopback excluded.</summary>
+    private List<IPAddress> DirectedBroadcastTargets()
+    {
+        var targets = new HashSet<IPAddress>();
+        try
+        {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Where(i => i.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up))
+            {
+                foreach (var unicast in ni.GetIPProperties().UnicastAddresses
+                    .Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork))
+                {
+                    var addr = unicast.Address.GetAddressBytes();
+                    var mask = unicast.IPv4Mask?.GetAddressBytes();
+                    if (mask is null || addr.Length != 4)
+                        continue;
+                    for (var i = 0; i < 4; i++)
+                        addr[i] = (byte)(addr[i] | (byte)~mask[i]);
+                    var target = new IPAddress(addr);
+                    if (!IPAddress.IsLoopback(target))
+                        targets.Add(target);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fall back to the limited broadcast; nothing else to enumerate.
+            targets.Add(IPAddress.Broadcast);
+            _logger.LogWarning(ex, "Failed to enumerate interfaces for directed broadcast");
+        }
+        if (targets.Count == 0)
+            targets.Add(IPAddress.Broadcast);
+        return targets.ToList();
     }
 
     private static List<string> LocalIpv4Addresses()

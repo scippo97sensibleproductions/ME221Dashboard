@@ -139,25 +139,19 @@ public sealed class DiscoveryResponderTests : IDisposable
     }
 
     [Fact]
-    public async Task BeaconAdvertisesVersionNameAndInstance()
+    public async Task IdleHostDoesNotAdvertise()
     {
+        // A host without an ECU must not appear in discovery at all.
         using var probe = new UdpClient();
         probe.EnableBroadcast = true;
-        var sent = await probe.SendAsync(
+        await probe.SendAsync(
             Encoding.UTF8.GetBytes(DiscoveryResponderService.ProbePayload),
             DiscoveryResponderService.ProbePayload.Length,
             new IPEndPoint(IPAddress.Loopback, _responder.BoundPort));
 
-        sent.Should().Be(DiscoveryResponderService.ProbePayload.Length);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        var reply = await probe.ReceiveAsync(cts.Token);
-
-        using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(reply.Buffer));
-        doc.RootElement.GetProperty("appVersion").GetString().Should().Be("9.9.9");
-        doc.RootElement.GetProperty("ecuConnected").GetBoolean().Should().BeFalse();
-        doc.RootElement.GetProperty("displayName").GetString().Should().Be("ME221");
-        doc.RootElement.GetProperty("instanceId").GetString().Should().NotBeNullOrWhiteSpace();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        var act = async () => await probe.ReceiveAsync(cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]
@@ -223,5 +217,8 @@ public sealed class DiscoveryResponderEcuStateTests : IDisposable
         var reply = await probe.ReceiveAsync(cts.Token);
         using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(reply.Buffer));
         doc.RootElement.GetProperty("ecuConnected").GetBoolean().Should().BeTrue();
+        doc.RootElement.GetProperty("appVersion").GetString().Should().Be("1.0.0");
+        doc.RootElement.GetProperty("displayName").GetString().Should().Be("ME221");
+        doc.RootElement.GetProperty("instanceId").GetString().Should().NotBeNullOrWhiteSpace();
     }
 }
