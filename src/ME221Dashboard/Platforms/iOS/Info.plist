@@ -8,6 +8,8 @@
     <string>ME221 Dashboard</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>ME221 Dashboard needs access to your local network to discover and mirror companion devices, and to be discoverable by them.</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSRequiresIPhoneOS</key>

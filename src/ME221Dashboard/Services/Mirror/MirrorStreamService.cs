@@ -36,6 +36,7 @@ public sealed class MirrorStreamService : IDisposable
     private readonly LogCapture _logCapture;
     private readonly MirrorSnapshotSerializer _serializer;
     private readonly ILogger<MirrorStreamService> _logger;
+    private readonly TimeSpan _snapshotAckTimeout;
     private readonly Dictionary<MirrorServerSession, ViewerState> _viewers = new();
     private readonly Lock _lock = new();
     private long _nextSnapshotSeq;
@@ -48,12 +49,14 @@ public sealed class MirrorStreamService : IDisposable
         LogCapture logCapture,
         MirrorSnapshotSerializer serializer,
         HybridBridgeService bridge,
+        TimeSpan? snapshotAckTimeout = null,
         ILogger<MirrorStreamService>? logger = null)
     {
         _server = server;
         _liveData = liveData;
         _logCapture = logCapture;
         _serializer = serializer;
+        _snapshotAckTimeout = snapshotAckTimeout ?? MirrorProtocol.SnapshotAckTimeout;
         _logger = logger ?? NullLogger<MirrorStreamService>.Instance;
 
         _server.SessionApproved += OnSessionApproved;
@@ -183,7 +186,7 @@ public sealed class MirrorStreamService : IDisposable
 
             await state.Session.SendAsync(chunk).ConfigureAwait(false);
 
-            var deadline = DateTime.UtcNow + MirrorProtocol.SnapshotAckTimeout;
+            var deadline = DateTime.UtcNow + _snapshotAckTimeout;
             while (!_disposed && state.SnapshotCts?.IsCancellationRequested != true)
             {
                 lock (_lock)
@@ -240,7 +243,7 @@ public sealed class MirrorStreamService : IDisposable
     {
         try
         {
-            while (!_disposed && !state.SnapshotCts.IsCancellationRequested)
+            while (!_disposed && state.SnapshotCts?.IsCancellationRequested != true)
             {
                 Dictionary<string, float?>? record;
                 Dictionary<string, float?>? frame;

@@ -21,7 +21,6 @@ public sealed class MirrorEventRelay : IDisposable
     private MirrorChunkReassembler? _reassembler;
     private long _snapshotSeq;
     private bool _gateOpen;
-    private bool _disposed;
 
     public MirrorEventRelay(
         MirrorClientService client,
@@ -51,7 +50,6 @@ public sealed class MirrorEventRelay : IDisposable
 
     public void Dispose()
     {
-        _disposed = true;
         _client.MessageReceived -= OnMessage;
         _client.StateChanged -= OnStateChanged;
         _bridge.ExitMirrorMode();
