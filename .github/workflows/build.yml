@@ -129,6 +129,12 @@ jobs:
     name: macOS (Catalyst)
     needs: build-svelte
     runs-on: macos-latest
+    # .NET 11 for Mac Catalyst requires Xcode 27, but no runner image ships it
+    # yet (Xcode 27 is still an Apple public preview). Keep building so real
+    # regressions stay visible in the job summary, but do not fail the workflow
+    # on the toolchain gap. Tracking latest-stable Xcode makes this self-heal
+    # as soon as the image gains an Xcode the workload accepts.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
