@@ -80,11 +80,38 @@ public static class VehicleConfigMigration
             || a.VssSpeedEntityId != b.VssSpeedEntityId
             || a.MapEntityId != b.MapEntityId
             || a.BaroEntityId != b.BaroEntityId
-            || a.GearEntityId != b.GearEntityId)
+            || a.GearEntityId != b.GearEntityId
+            || a.FuelFlowEntityId != b.FuelFlowEntityId
+            || a.InjectorDutyEntityId != b.InjectorDutyEntityId
+            || a.InjectorFlowCcPerMin != b.InjectorFlowCcPerMin
+            || a.CylinderCount != b.CylinderCount
+            || a.FuelEfficiencyUnit != b.FuelEfficiencyUnit
+            || a.FuelSpeedSource != b.FuelSpeedSource
+            || !RtcEqual(a.Rtc, b.Rtc))
         {
             return false;
         }
         return a.GearRatios.SequenceEqual(b.GearRatios ?? []);
+    }
+
+    /// <summary>
+    /// Clock mapping equality. A missing block compares equal to an all-default
+    /// block, so adding the RTC mapping to an older config never marks the seed
+    /// template as changed.
+    /// </summary>
+    private static bool RtcEqual(RtcConfig? a, RtcConfig? b)
+    {
+        var left = a ?? new RtcConfig();
+        var right = b ?? new RtcConfig();
+        return left.StatusEntityId == right.StatusEntityId
+            && left.DayEntityId == right.DayEntityId
+            && left.MonthEntityId == right.MonthEntityId
+            && left.YearEntityId == right.YearEntityId
+            && left.HourEntityId == right.HourEntityId
+            && left.MinuteEntityId == right.MinuteEntityId
+            && left.SecondEntityId == right.SecondEntityId
+            && left.Hour12 == right.Hour12
+            && left.ShowSeconds == right.ShowSeconds;
     }
 
     public static VehicleConfig Clone(VehicleConfig vc)
@@ -101,6 +128,13 @@ public static class VehicleConfigMigration
             MapEntityId = vc.MapEntityId,
             BaroEntityId = vc.BaroEntityId,
             GearEntityId = vc.GearEntityId,
+            FuelFlowEntityId = vc.FuelFlowEntityId,
+            InjectorDutyEntityId = vc.InjectorDutyEntityId,
+            InjectorFlowCcPerMin = vc.InjectorFlowCcPerMin,
+            CylinderCount = vc.CylinderCount,
+            FuelEfficiencyUnit = vc.FuelEfficiencyUnit,
+            FuelSpeedSource = vc.FuelSpeedSource,
+            Rtc = vc.Rtc?.Clone(),
         };
     }
 }

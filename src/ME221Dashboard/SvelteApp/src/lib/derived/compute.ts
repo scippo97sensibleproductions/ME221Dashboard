@@ -1,5 +1,7 @@
 import { DerivedEntityId } from './types';
-import type { VehicleConfig } from './types';
+import type { FuelEfficiencyUnit, VehicleConfig } from './types';
+import { defaultRtcConfig } from './types';
+import { rtcClockSeconds, rtcDateStamp } from './rtc';
 
 export interface ComputationInputs {
   entityValues: Record<string, number | null>;
@@ -14,6 +16,9 @@ export interface ComputationResult {
   [DerivedEntityId.Boost]: number | null;
   [DerivedEntityId.SpeedError]: number | null;
   [DerivedEntityId.RpmToShift]: number | null;
+  [DerivedEntityId.FuelEfficiency]: number | null;
+  [DerivedEntityId.EcuClock]: number | null;
+  [DerivedEntityId.EcuDate]: number | null;
 }
 
 /**
@@ -39,6 +44,69 @@ function safeEntity(values: Record<string, number | null>, id: number | null): n
 
 function tireCircumferenceMeters(diameterInches: number): number {
   return diameterInches * 0.0254 * Math.PI;
+}
+
+/** US gallon in liters — the gallon basis of the MPG unit. */
+const GALLON_LITERS = 3.785411784;
+/** Mile in kilometers — speed conversion for the MPG unit. */
+const KM_PER_MILE = 1.609344;
+
+/**
+ * Resolve the instantaneous fuel flow (L/hr) from the configured sources.
+ * The direct flow channel wins; otherwise duty % of the total injector
+ * capacity (per-injector cc/min × cylinder count) is used. Null whenever
+ * neither source is mapped/valid so the efficiency entity goes inert.
+ */
+export function fuelFlowLph(config: VehicleConfig, entityValues: Record<string, number | null>): number | null {
+  const direct = safeEntity(entityValues, config.fuelFlowEntityId);
+  if (direct !== null && direct > 0) return direct;
+
+  return dutyFuelFlowLph(config, entityValues);
+}
+
+/**
+ * Fuel usage from injector duty: duty % of the total injector capacity is
+ * actually flowing. Total capacity = per-injector cc/min × cylinders, which is
+ * inherently 100 % duty flow; × 60 / 1000 converts cc/min to L/hr.
+ */
+export function dutyFuelFlowLph(config: VehicleConfig, entityValues: Record<string, number | null>): number | null {
+  const duty = safeEntity(entityValues, config.injectorDutyEntityId);
+  if (duty === null || duty <= 0) return null;
+  if (config.injectorFlowCcPerMin <= 0 || config.cylinderCount <= 0) return null;
+  const capacityCcPerMin = config.injectorFlowCcPerMin * config.cylinderCount;
+  return (duty / 100) * capacityCcPerMin * 60 / 1000;
+}
+
+/**
+ * Convert a fuel flow (L/hr) and speed (km/h) pair into the configured output
+ * unit. A zero/negative flow is treated as unknown (indistinguishable from a
+ * dropped channel); below 1 km/h there is no distance anchor, so both null.
+ */
+export function computeFuelEfficiency(
+  flowLph: number | null,
+  speedKmh: number | null,
+  unit: FuelEfficiencyUnit,
+): number | null {
+  if (flowLph === null || speedKmh === null || flowLph <= 0 || speedKmh < 1) return null;
+  if (unit === 'kmL') return speedKmh / flowLph;
+  if (unit === 'mpg') return (speedKmh / KM_PER_MILE) / (flowLph / GALLON_LITERS);
+  return (flowLph / speedKmh) * 100;
+}
+
+/**
+ * Speed (km/h) feeding the consumption figures, honouring the configured
+ * source. Shared by the instantaneous entity and the trip accumulator so both
+ * integrate the same number.
+ */
+export function selectFuelSpeedKmh(
+  config: VehicleConfig,
+  vssSpeedKmh: number | null,
+  gpsSpeedKmh: number | null,
+  trueSpeedKmh: number | null,
+): number | null {
+  if (config.fuelSpeedSource === 'gps') return gpsSpeedKmh;
+  if (config.fuelSpeedSource === 'trueSpeed') return trueSpeedKmh;
+  return vssSpeedKmh ?? gpsSpeedKmh;
 }
 
 export function computeDerived(inputs: ComputationInputs): ComputationResult {
@@ -112,12 +180,23 @@ export function computeDerived(inputs: ComputationInputs): ComputationResult {
     speedError = inputs.gpsSpeedKmh - trueSpeed;
   }
 
+  // Fuel efficiency shares the odometer speed-source convention, with two extra
+  // configurable options: always-GPS, or the derived True Speed chain.
+  const fuelSpeed = selectFuelSpeedKmh(config, vssSpeed, inputs.gpsSpeedKmh, trueSpeed);
+  const fuelFlow = fuelFlowLph(config, inputs.entityValues);
+  const fuelEfficiency = computeFuelEfficiency(fuelFlow, fuelSpeed, config.fuelEfficiencyUnit);
+
+  const rtc = config.rtc ?? defaultRtcConfig();
+
   return {
     [DerivedEntityId.Gear]: gear,
     [DerivedEntityId.TrueSpeed]: trueSpeed,
     [DerivedEntityId.Boost]: boost,
     [DerivedEntityId.SpeedError]: speedError,
     [DerivedEntityId.RpmToShift]: computeRpmToShift(rpm, config.shifter?.shiftPointRpm),
+    [DerivedEntityId.FuelEfficiency]: fuelEfficiency,
+    [DerivedEntityId.EcuClock]: rtcClockSeconds(inputs.entityValues, rtc),
+    [DerivedEntityId.EcuDate]: rtcDateStamp(inputs.entityValues, rtc),
   };
 }
 
@@ -136,6 +215,12 @@ export function formatDerivedValue(entityId: number, rawValue: number | null): s
     if (rawValue === -1) return 'DOWN';
     if (rawValue === 1) return 'SHIFT';
     return 'CRUISE';
+  }
+  if (entityId === DerivedEntityId.FuelEfficiency) {
+    return rawValue.toFixed(1);
+  }
+  if (entityId === DerivedEntityId.AverageFuelEfficiency) {
+    return rawValue.toFixed(1);
   }
   return String(rawValue);
 }

@@ -4,7 +4,7 @@ import type { AvailableSensor } from './HybridBridgeTypes';
  * Ranked sensor search shared by the add-gauge popup and the chart-overlay picker.
  *
  * Why ranked + uncapped: the C# `GetAvailableSensors` payload appends the derived
- * entities (−3001..−3006) AFTER every calibration link, so a plain filter capped
+ * entities (−3001..−3010) AFTER every calibration link, so a plain filter capped
  * at N results in array order starves them — searching "rpm" matched dozens of
  * rpm-unit links first and "RPM to Shift"/"Shift State" never surfaced. Name
  * matches rank above category/unit/id matches, and there is no result cap (the

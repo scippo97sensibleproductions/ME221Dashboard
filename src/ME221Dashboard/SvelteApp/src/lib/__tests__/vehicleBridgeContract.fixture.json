@@ -7,7 +7,11 @@
     { "id": -3003, "name": "Boost Pressure", "category": "Derived", "unit": "kPa", "minValue": 0, "maxValue": 400, "inEntityMap": true, "isSelected": false, "customization": null },
     { "id": -3004, "name": "Speed Error", "category": "Derived", "unit": "km/h", "minValue": -50, "maxValue": 50, "inEntityMap": true, "isSelected": false, "customization": null },
     { "id": -3005, "name": "RPM to Shift", "category": "Derived", "unit": "rpm", "minValue": 0, "maxValue": 9000, "inEntityMap": true, "isSelected": false, "customization": null },
-    { "id": -3006, "name": "Shift State", "category": "Derived", "unit": "", "minValue": -1, "maxValue": 1, "inEntityMap": true, "isSelected": false, "customization": null }
+    { "id": -3006, "name": "Shift State", "category": "Derived", "unit": "", "minValue": -1, "maxValue": 1, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3007, "name": "Fuel Efficiency", "category": "Derived", "unit": "km/L", "minValue": 0, "maxValue": 50, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3008, "name": "ECU Clock", "category": "Derived", "unit": "", "minValue": 0, "maxValue": 86400, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3009, "name": "ECU Date", "category": "Derived", "unit": "", "minValue": 0, "maxValue": 99991231, "inEntityMap": true, "isSelected": false, "customization": null },
+    { "id": -3010, "name": "Avg Fuel Efficiency", "category": "Derived", "unit": "km/L", "minValue": 0, "maxValue": 50, "inEntityMap": true, "isSelected": false, "customization": null }
   ],
   "selectedCount": 1,
   "totalCount": 259,
@@ -25,6 +29,23 @@
     "mapEntityId": null,
     "baroEntityId": null,
     "gearEntityId": null,
+    "fuelFlowEntityId": 35,
+    "injectorDutyEntityId": null,
+    "injectorFlowCcPerMin": 0,
+    "cylinderCount": 4,
+    "fuelEfficiencyUnit": "kmL",
+    "fuelSpeedSource": "auto",
+    "rtc": {
+      "statusEntityId": 2220,
+      "dayEntityId": 2221,
+      "monthEntityId": 2222,
+      "yearEntityId": 2223,
+      "hourEntityId": 2224,
+      "minuteEntityId": 2225,
+      "secondEntityId": 2226,
+      "hour12": false,
+      "showSeconds": true
+    },
     "shifter": {
       "shiftPointRpm": 7000,
       "downshiftFloorRpm": 5000

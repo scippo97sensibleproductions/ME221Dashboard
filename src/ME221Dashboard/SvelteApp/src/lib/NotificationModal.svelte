@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Modal, Button } from 'flowbite-svelte';
   import {
     ExclamationCircleOutline,
     CheckCircleOutline,
     InfoCircleOutline,
   } from 'flowbite-svelte-icons';
+  import MetroModal from './ui/MetroModal.svelte';
 
   export type NotificationType = 'error' | 'success' | 'warning' | 'info';
 
@@ -20,56 +20,32 @@
     message?: string;
   } = $props();
 
-  const config: Record<NotificationType, {
-    icon: typeof ExclamationCircleOutline;
-    iconClass: string;
-    btnClass: string;
-  }> = {
-    error: {
-      icon: ExclamationCircleOutline,
-      iconClass: 'text-red-400',
-      btnClass: '!bg-red-600 !text-white hover:!bg-red-500 border-red-600',
-    },
-    warning: {
-      icon: ExclamationCircleOutline,
-      iconClass: 'text-amber-400',
-      btnClass: '!bg-amber-600 !text-white hover:!bg-amber-500 border-amber-600',
-    },
-    success: {
-      icon: CheckCircleOutline,
-      iconClass: 'text-green-400',
-      btnClass: '!bg-green-600 !text-white hover:!bg-green-500 border-green-600',
-    },
-    info: {
-      icon: InfoCircleOutline,
-      iconClass: 'text-blue-400',
-      btnClass: '!bg-blue-600 !text-white hover:!bg-blue-500 border-blue-600',
-    },
+  const APPEARANCE: Record<NotificationType, { accent: string; color: string }> = {
+    error: { accent: 'var(--metro-red)', color: 'var(--metro-red)' },
+    warning: { accent: 'var(--metro-yellow)', color: 'var(--metro-yellow)' },
+    success: { accent: 'var(--metro-green)', color: 'var(--metro-green)' },
+    info: { accent: 'var(--metro-blue)', color: 'var(--metro-blue)' },
   };
 
-  let c = $derived(config[type]);
+  const appearance = $derived(APPEARANCE[type]);
 </script>
 
-<Modal form bind:open size="xs" placement="center" outsideclose={true} class="backdrop:bg-gray-900/80">
-  <div class="text-center">
-    {#if type === 'error' || type === 'warning'}
-      <ExclamationCircleOutline class="mx-auto mb-4 h-14 w-14 {c.iconClass}" />
-    {:else if type === 'success'}
-      <CheckCircleOutline class="mx-auto mb-4 h-14 w-14 {c.iconClass}" />
+<MetroModal bind:open title={title || 'Notice'} size="xs" accent={appearance.accent}>
+  <div class="flex flex-col items-center gap-3">
+    {#if type === 'success'}
+      <CheckCircleOutline class="h-12 w-12" style="color: {appearance.color}" />
+    {:else if type === 'info'}
+      <InfoCircleOutline class="h-12 w-12" style="color: {appearance.color}" />
     {:else}
-      <InfoCircleOutline class="mx-auto mb-4 h-14 w-14 {c.iconClass}" />
-    {/if}
-
-    {#if title}
-      <h3 class="mb-3 text-lg font-semibold text-white">{title}</h3>
+      <ExclamationCircleOutline class="h-12 w-12" style="color: {appearance.color}" />
     {/if}
 
     {#if message}
-      <p class="mb-6 text-sm leading-relaxed text-gray-300">{message}</p>
+      <p class="text-center text-[13px] leading-relaxed" style="color: var(--metro-text-secondary)">{message}</p>
     {/if}
-
-    <Button type="submit" value="dismiss" color="alternative" class={c.btnClass}>
-      Dismiss
-    </Button>
   </div>
-</Modal>
+
+  {#snippet footer()}
+    <button type="button" class="metro-btn-primary" onclick={() => open = false}>Dismiss</button>
+  {/snippet}
+</MetroModal>

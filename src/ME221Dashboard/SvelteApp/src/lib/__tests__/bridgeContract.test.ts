@@ -142,7 +142,7 @@ describe('vehicle bridge contract (golden fixture — derived entities)', () => 
     expect(shiftState.maxValue).toBe(1);
   });
 
-  it('lists all six derived entities (drift guard: TS metadata equals fixture literals)', () => {
+  it('lists every derived entity (drift guard: TS metadata equals fixture literals)', () => {
     const derivedInFixture = fixture.sensors.filter(s => s.category === 'Derived');
     const fixtureEntries = new Map(derivedInFixture.map(s => [s.id, s]));
 
@@ -167,11 +167,23 @@ describe('vehicle bridge contract (golden fixture — derived entities)', () => 
     const vc = fixture.vehicleConfig;
     expect(vc).toBeDefined();
     expect(Object.keys(vc).sort()).toEqual([
-      'baroEntityId', 'enabled', 'finalDriveRatio', 'gearEntityId', 'gearRatios',
-      'mapEntityId', 'rpmEntityId', 'shifter', 'tireDiameterInches', 'vssSpeedEntityId',
-      'wheelSlipPercent',
+      'baroEntityId', 'cylinderCount', 'enabled', 'finalDriveRatio', 'fuelEfficiencyUnit',
+      'fuelFlowEntityId', 'fuelSpeedSource', 'gearEntityId', 'gearRatios',
+      'injectorDutyEntityId', 'injectorFlowCcPerMin', 'mapEntityId', 'rpmEntityId',
+      'rtc', 'shifter', 'tireDiameterInches', 'vssSpeedEntityId', 'wheelSlipPercent',
     ]);
     expect(vc.shifter).toEqual({ shiftPointRpm: 7000, downshiftFloorRpm: 5000 });
+    expect(vc.rtc).toEqual({
+      statusEntityId: 2220,
+      dayEntityId: 2221,
+      monthEntityId: 2222,
+      yearEntityId: 2223,
+      hourEntityId: 2224,
+      minuteEntityId: 2225,
+      secondEntityId: 2226,
+      hour12: false,
+      showSeconds: true,
+    });
   });
 
   it('null-vs-absent semantics: the shifter block is always present so the default spread keeps explicit zeros', () => {

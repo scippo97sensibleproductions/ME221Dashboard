@@ -14,11 +14,24 @@ public partial class HybridBridgeService
     /// Resolve the effective vehicle config for a dashboard: the dashboard's own Vehicle,
     /// else the seed template, else fresh defaults. Reads never write back to the global slot.
     /// </summary>
-    private static VehicleConfig ResolveVehicle(DashboardConfig config, string dashboardName)
+    private static VehicleConfig ResolveVehicle(DashboardConfig? config, string dashboardName)
     {
-        if (config.Dashboards?.TryGetValue(dashboardName, out var def) == true && def?.Vehicle != null)
+        if (config?.Dashboards?.TryGetValue(dashboardName, out var def) == true && def?.Vehicle != null)
             return def.Vehicle;
-        return config.VehicleSeedTemplate ?? new VehicleConfig();
+        return config?.VehicleSeedTemplate ?? new VehicleConfig();
+    }
+
+    /// <summary>
+    /// Metadata for a derived entity, with the fuel-efficiency entity's label and
+    /// nominal range following the dashboard's configured output unit. Shared by
+    /// the sensor picker and the saved-gauge lookup so both read the same unit.
+    /// </summary>
+    private static (string Name, string Unit, double Min, double Max) ResolveDerivedMeta(int id, string? fuelUnit)
+    {
+        if (!S_derivedDefaults.TryGetValue(id, out var meta)) return default;
+        if (id != FuelEfficiencyEntityId && id != AverageFuelEfficiencyEntityId) return meta;
+        var range = FuelEfficiencyUnits.Range(fuelUnit);
+        return (meta.Name, FuelEfficiencyUnits.Label(fuelUnit), range.Min, range.Max);
     }
 
     /// <summary>Active dashboard name: the in-process authority when it still exists in
@@ -103,6 +116,12 @@ public partial class HybridBridgeService
                 MapEntityId = node["mapEntityId"]?.GetValue<int>(),
                 BaroEntityId = node["baroEntityId"]?.GetValue<int>(),
                 GearEntityId = node["gearEntityId"]?.GetValue<int>(),
+                FuelFlowEntityId = node["fuelFlowEntityId"]?.GetValue<int>(),
+                InjectorDutyEntityId = node["injectorDutyEntityId"]?.GetValue<int>(),
+                InjectorFlowCcPerMin = node["injectorFlowCcPerMin"]?.GetValue<double>() ?? 0,
+                CylinderCount = node["cylinderCount"]?.GetValue<int>() ?? 4,
+                FuelEfficiencyUnit = FuelEfficiencyUnits.Normalize(node["fuelEfficiencyUnit"]?.GetValue<string>()),
+                FuelSpeedSource = FuelEfficiencyUnits.NormalizeSpeedSource(node["fuelSpeedSource"]?.GetValue<string>()),
             };
 
             var config = await _calibration.GetPersistedDashboardConfigAsync().ConfigureAwait(false);
@@ -117,6 +136,13 @@ public partial class HybridBridgeService
                 config.Dashboards[name] = new DashboardDefinition();
 
             var def = config.Dashboards[name];
+
+            // Partial-payload contract: an absent rtc block preserves the existing
+            // mapping, mirroring the shifter block below.
+            vc.Rtc = node["rtc"] is JsonObject rtcNode
+                ? ParseRtc(rtcNode)
+                : def.Vehicle?.Rtc ?? new RtcConfig();
+
             def.Vehicle = vc;
 
             // Partial-payload contract: absent shifter block preserves the existing value.
@@ -209,6 +235,24 @@ public partial class HybridBridgeService
         }
     }
 
+    /// <summary>
+    /// Read the optional rtc block from a vehicle-config payload.
+    /// Trusted-client contract: values are persisted as-is (the UI bounds the
+    /// choices); only the display defaults are filled in.
+    /// </summary>
+    private static RtcConfig ParseRtc(JsonObject node) => new()
+    {
+        StatusEntityId = node["statusEntityId"]?.GetValue<int>(),
+        DayEntityId = node["dayEntityId"]?.GetValue<int>(),
+        MonthEntityId = node["monthEntityId"]?.GetValue<int>(),
+        YearEntityId = node["yearEntityId"]?.GetValue<int>(),
+        HourEntityId = node["hourEntityId"]?.GetValue<int>(),
+        MinuteEntityId = node["minuteEntityId"]?.GetValue<int>(),
+        SecondEntityId = node["secondEntityId"]?.GetValue<int>(),
+        Hour12 = node["hour12"]?.GetValue<bool>() ?? false,
+        ShowSeconds = node["showSeconds"]?.GetValue<bool>() ?? true,
+    };
+
     private static string SerializeVehicleConfig(VehicleConfig vc, ShifterConfig? shifter)
     {
         return JsonSerializer.Serialize(new
@@ -223,6 +267,24 @@ public partial class HybridBridgeService
             mapEntityId = vc.MapEntityId,
             baroEntityId = vc.BaroEntityId,
             gearEntityId = vc.GearEntityId,
+            fuelFlowEntityId = vc.FuelFlowEntityId,
+            injectorDutyEntityId = vc.InjectorDutyEntityId,
+            injectorFlowCcPerMin = vc.InjectorFlowCcPerMin,
+            cylinderCount = vc.CylinderCount,
+            fuelEfficiencyUnit = FuelEfficiencyUnits.Normalize(vc.FuelEfficiencyUnit),
+            fuelSpeedSource = FuelEfficiencyUnits.NormalizeSpeedSource(vc.FuelSpeedSource),
+            rtc = new
+            {
+                statusEntityId = vc.Rtc?.StatusEntityId,
+                dayEntityId = vc.Rtc?.DayEntityId,
+                monthEntityId = vc.Rtc?.MonthEntityId,
+                yearEntityId = vc.Rtc?.YearEntityId,
+                hourEntityId = vc.Rtc?.HourEntityId,
+                minuteEntityId = vc.Rtc?.MinuteEntityId,
+                secondEntityId = vc.Rtc?.SecondEntityId,
+                hour12 = vc.Rtc?.Hour12 ?? false,
+                showSeconds = vc.Rtc?.ShowSeconds ?? true,
+            },
             shifter = new
             {
                 shiftPointRpm = shifter?.ShiftPointRpm ?? 0,

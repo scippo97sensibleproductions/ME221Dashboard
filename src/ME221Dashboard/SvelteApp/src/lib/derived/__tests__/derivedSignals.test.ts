@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeDerived, formatDerivedValue } from '../compute';
 import { autoDetectMapping } from '../autoDetect';
-import { DerivedEntityId, defaultDerivedConfig } from '../types';
+import { DerivedEntityId, defaultDerivedConfig, defaultRtcConfig } from '../types';
 import type { VehicleConfig as BridgeVehicleConfig } from '../../HybridBridgeTypes';
 import type { VehicleConfig as DerivedVehicleConfig } from '../types';
 
@@ -115,7 +115,100 @@ describe('computeDerived — speed error', () => {  it('compares GPS against VSS
       [DerivedEntityId.Boost]: null,
       [DerivedEntityId.SpeedError]: null,
       [DerivedEntityId.RpmToShift]: null,
+      [DerivedEntityId.FuelEfficiency]: null,
+      [DerivedEntityId.EcuClock]: null,
+      [DerivedEntityId.EcuDate]: null,
     });
+  });
+});
+
+describe('computeDerived — fuel efficiency', () => {
+  const fuelCfg = {
+    ...cfg,
+    fuelFlowEntityId: 35,
+    injectorDutyEntityId: 4 as number | null,
+    injectorFlowCcPerMin: 440,
+    cylinderCount: 4,
+  };
+
+  it('km/L = speed ÷ flow', () => {
+    const r = computeDerived({
+      entityValues: val({ '2': 100, '35': 10 }),
+      config: { ...fuelCfg, fuelEfficiencyUnit: 'kmL' as const },
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(10, 5);
+  });
+
+  it('L/100km inverts to flow ÷ speed × 100', () => {
+    const r = computeDerived({
+      entityValues: val({ '2': 100, '35': 10 }),
+      config: { ...fuelCfg, fuelEfficiencyUnit: 'l100km' as const },
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(10, 5);
+  });
+
+  it('MPG uses US gallons (100 km/h at 10 L/hr ≈ 23.5 mpg)', () => {
+    const r = computeDerived({
+      entityValues: val({ '2': 100, '35': 10 }),
+      config: { ...fuelCfg, fuelEfficiencyUnit: 'mpg' as const },
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(23.52, 1);
+  });
+
+  it('falls back to injector duty × injector flow × cylinders when no flow channel', () => {
+    // 20 % of 4 × 440 cc/min = 352 cc/min = 21.12 L/hr at 100 km/h → 4.73 km/L
+    const r = computeDerived({
+      entityValues: val({ '2': 100, '4': 20 }),
+      config: { ...fuelCfg, fuelFlowEntityId: null, fuelEfficiencyUnit: 'kmL' as const },
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(100 / 21.12, 3);
+  });
+
+  it('uses GPS speed when the speed source says so', () => {
+    const r = computeDerived({
+      entityValues: val({ '2': 50, '35': 10 }),
+      config: { ...fuelCfg, fuelSpeedSource: 'gps' as const, fuelEfficiencyUnit: 'kmL' as const },
+      gpsSpeedKmh: 100,
+      gpsValid: true,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(10, 5);
+  });
+
+  it('uses the derived True Speed chain when configured', () => {
+    // 3000 rpm, gear 3 → 51.23 km/h from the geometry chain; 10 L/hr → 5.12 km/L
+    const r = computeDerived({
+      entityValues: val({ '1': 3000, '5': 3, '35': 10 }),
+      config: { ...fuelCfg, fuelSpeedSource: 'trueSpeed' as const, fuelEfficiencyUnit: 'kmL' as const },
+      gpsSpeedKmh: 200,
+      gpsValid: true,
+    });
+    expect(r[DerivedEntityId.FuelEfficiency]).toBeCloseTo(51.23 / 10, 1);
+  });
+
+  it('is null while stationary and without any fuel source', () => {
+    const stationary = computeDerived({
+      entityValues: val({ '2': 0, '35': 10 }),
+      config: cfg,
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(stationary[DerivedEntityId.FuelEfficiency]).toBeNull();
+
+    const noFuel = computeDerived({
+      entityValues: val({ '2': 100 }),
+      config: cfg,
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+    expect(noFuel[DerivedEntityId.FuelEfficiency]).toBeNull();
   });
 });
 
@@ -158,6 +251,45 @@ describe('formatDerivedValue — shift state labels', () => {
 
   it('formats null as ---', () => {
     expect(formatDerivedValue(DerivedEntityId.ShiftState, null)).toBe('---');
+  });
+});
+
+describe('computeDerived — ECU clock and date', () => {
+  const rtcCfg = {
+    ...defaultDerivedConfig(),
+    rtc: {
+      ...defaultRtcConfig(),
+      hourEntityId: 2224,
+      minuteEntityId: 2225,
+      secondEntityId: 2226,
+      dayEntityId: 2221,
+      monthEntityId: 2222,
+      yearEntityId: 2223,
+    },
+  };
+
+  it('folds the mapped clock channels into the derived entities', () => {
+    const r = computeDerived({
+      entityValues: { '2221': 30, '2222': 10, '2223': 2026, '2224': 14, '2225': 32, '2226': 9 },
+      config: rtcCfg,
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+
+    expect(r[DerivedEntityId.EcuClock]).toBe(14 * 3600 + 32 * 60 + 9);
+    expect(r[DerivedEntityId.EcuDate]).toBe(20261030);
+  });
+
+  it('leaves both entities inert when the clock is unmapped', () => {
+    const r = computeDerived({
+      entityValues: {},
+      config: defaultDerivedConfig(),
+      gpsSpeedKmh: null,
+      gpsValid: false,
+    });
+
+    expect(r[DerivedEntityId.EcuClock]).toBeNull();
+    expect(r[DerivedEntityId.EcuDate]).toBeNull();
   });
 });
 
@@ -246,6 +378,26 @@ describe('autoDetectMapping', () => {
       mapEntityId: null,
       baroEntityId: null,
       gearEntityId: null,
+      fuelFlowEntityId: null,
+      injectorDutyEntityId: null,
+      rtc: {
+        statusEntityId: null,
+        dayEntityId: null,
+        monthEntityId: null,
+        yearEntityId: null,
+        hourEntityId: null,
+        minuteEntityId: null,
+        secondEntityId: null,
+      },
     });
+  });
+
+  it('detects the firmware fuel channels', () => {
+    const m = autoDetectMapping([
+      { id: 35, name: 'Fuelfow Est.' },
+      { id: 4, name: 'Injector duty' },
+    ]);
+    expect(m.fuelFlowEntityId).toBe(35);
+    expect(m.injectorDutyEntityId).toBe(4);
   });
 });

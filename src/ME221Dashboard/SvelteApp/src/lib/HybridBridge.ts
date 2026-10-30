@@ -2,7 +2,7 @@
  * HybridWebView Bridge - TypeScript wrapper for C# <-> Svelte communication
  */
 
-import { defaultDerivedConfig } from './derived/types';
+import { defaultDerivedConfig, defaultRtcConfig } from './derived/types';
 import type {
   ConnectionStateInfo,
   ConnectionResult,
@@ -136,13 +136,18 @@ async function invokeDotNetLogged(method: string, params?: unknown[]): Promise<s
   });
 }
 
-/** Reset bridge state (call after recovery) */
-export function resetBridgeState() {
-  _bridgeAlive = true;
-}
-
 export function isBridgeAlive() {
   return _bridgeAlive;
+}
+
+/** Copy a vehicle config deeply enough that callers can never mutate the cached payload. */
+function cloneVehicleConfig(config: VehicleConfig): VehicleConfig {
+  return {
+    ...config,
+    gearRatios: [...(config.gearRatios ?? [])],
+    rtc: { ...config.rtc },
+    shifter: config.shifter ? { ...config.shifter } : undefined,
+  };
 }
 
 export const HybridBridge = {
@@ -672,6 +677,20 @@ export const HybridBridge = {
     await invokeDotNetLogged('SetOdometerSpeedConfig', [JSON.stringify({ entityId, unit })]);
   },
 
+  // ─── Fuel trip (average fuel efficiency) ─────────────────────────────
+
+  getFuelTrip: async (): Promise<{ success: boolean; distanceKm: number; fuelLiters: number }> => {
+    if (!isWebViewAvailable()) return { success: true, distanceKm: 0, fuelLiters: 0 };
+    const result = await invokeDotNetLogged('GetFuelTrip');
+    return JSON.parse(result);
+  },
+
+  saveFuelTrip: async (distanceKm: number, fuelLiters: number): Promise<{ success: boolean; error?: string }> => {
+    if (!isWebViewAvailable()) return { success: false, error: 'No WebView' };
+    const result = await invokeDotNetLogged('SetFuelTrip', [distanceKm, fuelLiters]);
+    return JSON.parse(result);
+  },
+
   // ─── Vehicle Config (per-dashboard) ──────────────────────────────────
   // Cached to avoid ~50 JS→C# roundtrips/sec during live derived computation.
   // Invalidated on set and on dashboard switch so edits take effect immediately.
@@ -689,17 +708,21 @@ export const HybridBridge = {
   },
 
   getVehicleConfig: async (): Promise<VehicleConfig> => {
-    if (HybridBridge._configCache) {
-      const c = HybridBridge._configCache;
-      return { ...c, gearRatios: [...c.gearRatios], shifter: c.shifter ? { ...c.shifter } : undefined };
-    }
+    if (HybridBridge._configCache) return cloneVehicleConfig(HybridBridge._configCache);
     if (!isWebViewAvailable()) return defaultDerivedConfig();
     const result = await invokeDotNetLogged('GetVehicleConfig', []);
-    const config: VehicleConfig = { ...defaultDerivedConfig(), ...JSON.parse(result) };
+    const payload = JSON.parse(result);
+    // Normalize at the bridge boundary: a config written by an older build may
+    // omit the rtc block, and callers must never see a half-shaped object.
+    const config: VehicleConfig = {
+      ...defaultDerivedConfig(),
+      ...payload,
+      rtc: { ...defaultRtcConfig(), ...payload.rtc },
+    };
     // Cache the payload, but hand the caller a copy: mutating the returned
     // object must never poison the cache.
     HybridBridge._configCache = config;
-    return { ...config, gearRatios: [...config.gearRatios], shifter: config.shifter ? { ...config.shifter } : undefined };
+    return cloneVehicleConfig(config);
   },
 
   setVehicleConfig: async (config: VehicleConfig & { autoDetect?: boolean }): Promise<{ success: boolean; error?: string }> => {
@@ -714,12 +737,11 @@ export const HybridBridge = {
       // caller's array cannot poison the cache by later mutation.
       const { autoDetect: _a, ...persistable } = config;
       void _a;
-      HybridBridge._configCache = {
+      HybridBridge._configCache = cloneVehicleConfig({
         ...HybridBridge._configCache,
         ...persistable,
-        gearRatios: [...persistable.gearRatios],
         shifter: persistable.shifter ?? HybridBridge._configCache?.shifter,
-      };
+      });
     }
     return parsed;
   },

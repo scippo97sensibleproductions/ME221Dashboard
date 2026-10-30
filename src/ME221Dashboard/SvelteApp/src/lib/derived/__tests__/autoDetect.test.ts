@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { autoDetectMapping } from '../autoDetect';
 
+const NO_RTC = {
+  statusEntityId: null,
+  dayEntityId: null,
+  monthEntityId: null,
+  yearEntityId: null,
+  hourEntityId: null,
+  minuteEntityId: null,
+  secondEntityId: null,
+};
+
 const SENSORS = [
   { id: 1, name: 'Engine RPM' },
   { id: 2, name: 'Vehicle Speed' },
@@ -17,6 +27,9 @@ describe('autoDetectMapping', () => {
       mapEntityId: 3,
       baroEntityId: 4,
       gearEntityId: 5,
+      fuelFlowEntityId: null,
+      injectorDutyEntityId: null,
+      rtc: NO_RTC,
     });
   });
 
@@ -34,7 +47,38 @@ describe('autoDetectMapping', () => {
       mapEntityId: 30,
       baroEntityId: 40,
       gearEntityId: 50,
+      fuelFlowEntityId: null,
+      injectorDutyEntityId: null,
+      rtc: NO_RTC,
     });
+  });
+
+  it('detects the firmware fuel flow and injector duty channels', () => {
+    const sensors = [
+      { id: 35, name: 'Fuelfow Est.' },
+      { id: 4, name: 'Injector duty' },
+    ];
+    expect(autoDetectMapping(sensors)).toEqual({
+      rpmEntityId: null,
+      vssSpeedEntityId: null,
+      mapEntityId: null,
+      baroEntityId: null,
+      gearEntityId: null,
+      fuelFlowEntityId: 35,
+      injectorDutyEntityId: 4,
+      rtc: NO_RTC,
+    });
+  });
+
+  it('prefers the explicit "Fuel Flow" spelling over the firmware spelling', () => {
+    const sensors = [
+      { id: 35, name: 'Fuelfow Est.' },
+      { id: 36, name: 'Fuel Flow' },
+      { id: 4, name: 'Injector Duty' },
+    ];
+    const result = autoDetectMapping(sensors);
+    expect(result.fuelFlowEntityId).toBe(36);
+    expect(result.injectorDutyEntityId).toBe(4);
   });
 
   it('is case-insensitive and trims whitespace', () => {
@@ -75,6 +119,30 @@ describe('autoDetectMapping', () => {
       mapEntityId: null,
       baroEntityId: null,
       gearEntityId: null,
+      fuelFlowEntityId: null,
+      injectorDutyEntityId: null,
+      rtc: NO_RTC,
+    });
+  });
+
+  it('detects the firmware RTC channels by name', () => {
+    const sensors = [
+      { id: 2220, name: 'RTC Status' },
+      { id: 2221, name: 'RTC Day' },
+      { id: 2222, name: 'RTC Month' },
+      { id: 2223, name: 'RTC Year' },
+      { id: 2224, name: 'RTC Hour' },
+      { id: 2225, name: 'RTC Minutes' },
+      { id: 2226, name: 'RTC Seconds' },
+    ];
+    expect(autoDetectMapping(sensors).rtc).toEqual({
+      statusEntityId: 2220,
+      dayEntityId: 2221,
+      monthEntityId: 2222,
+      yearEntityId: 2223,
+      hourEntityId: 2224,
+      minuteEntityId: 2225,
+      secondEntityId: 2226,
     });
   });
 
@@ -85,6 +153,9 @@ describe('autoDetectMapping', () => {
       mapEntityId: null,
       baroEntityId: null,
       gearEntityId: null,
+      fuelFlowEntityId: null,
+      injectorDutyEntityId: null,
+      rtc: NO_RTC,
     });
   });
 });

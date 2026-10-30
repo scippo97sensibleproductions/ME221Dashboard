@@ -270,6 +270,78 @@ public sealed class VehicleConfigMigrationTests
     }
 
     [Fact]
+    public async Task Rtc_mapping_round_trips_through_the_persisted_config()
+    {
+        var cal = new FakeCalibrationService();
+        cal.Config = NewConfig(new Dictionary<string, DashboardDefinition> { ["a"] = new() }, global: NewVc(4.3, [3.6, 2.2, 1.5]));
+        var bridge = NewBridge(cal);
+        await bridge.SetActiveDashboard("a");
+
+        var rtc = new RtcConfig
+        {
+            StatusEntityId = 2220,
+            DayEntityId = 2221,
+            MonthEntityId = 2222,
+            YearEntityId = 2223,
+            HourEntityId = 2224,
+            MinuteEntityId = 2225,
+            SecondEntityId = 2226,
+            Hour12 = true,
+            ShowSeconds = false,
+        };
+
+        await bridge.SetVehicleConfig(VcPayload(4.3, [3.6, 2.2, 1.5], rtc: rtc));
+
+        cal.Config.Dashboards["a"].Vehicle!.Rtc.Should().BeEquivalentTo(rtc);
+
+        var json = await bridge.GetVehicleConfig();
+        using var doc = JsonDocument.Parse(json);
+        var rtcOut = doc.RootElement.GetProperty("rtc");
+        rtcOut.GetProperty("hourEntityId").GetInt32().Should().Be(2224);
+        rtcOut.GetProperty("secondEntityId").GetInt32().Should().Be(2226);
+        rtcOut.GetProperty("hour12").GetBoolean().Should().BeTrue();
+        rtcOut.GetProperty("showSeconds").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Absent_rtc_block_preserves_the_persisted_mapping()
+    {
+        var cal = new FakeCalibrationService();
+        cal.Config = NewConfig(new Dictionary<string, DashboardDefinition>
+        {
+            ["a"] = new()
+            {
+                Vehicle = new VehicleConfig
+                {
+                    Rtc = new RtcConfig { HourEntityId = 2224, MinuteEntityId = 2225, Hour12 = true },
+                },
+            },
+        }, global: NewVc(4.3, [3.6, 2.2, 1.5]));
+        var bridge = NewBridge(cal);
+        await bridge.SetActiveDashboard("a");
+
+        // Vehicle-only save (no rtc block) must not drop the clock mapping.
+        await bridge.SetVehicleConfig(VcPayload(4.6, [3.8, 2.4]));
+
+        var rtc = cal.Config.Dashboards["a"].Vehicle!.Rtc!;
+        rtc.HourEntityId.Should().Be(2224);
+        rtc.MinuteEntityId.Should().Be(2225);
+        rtc.Hour12.Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_missing_rtc_block_compares_equal_to_an_all_default_block()
+    {
+        // Adding the RTC mapping to an older config must not mark the seed
+        // template as changed (which would trigger a spurious seed refresh).
+        var withoutRtc = NewVc(4.3, [3.6, 2.2, 1.5]);
+        var withDefaults = NewVc(4.3, [3.6, 2.2, 1.5]);
+        withDefaults.Rtc = new RtcConfig();
+
+        VehicleConfigMigration.ValuesEqual(withoutRtc, withDefaults).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Seed_refresh_gate_excludes_incomplete_and_auto_detect_writes()
     {
         var cal = new FakeCalibrationService();
@@ -478,7 +550,7 @@ public sealed class VehicleConfigMigrationTests
 
     private static HybridBridgeService NewBridge(FakeCalibrationService cal) => TestBridge.Create(cal);
 
-    private static string VcPayload(double fd, double[] gears, int? rpm = null, ShifterConfig? shifter = null, bool autoDetect = false)
+    private static string VcPayload(double fd, double[] gears, int? rpm = null, ShifterConfig? shifter = null, bool autoDetect = false, RtcConfig? rtc = null)
     {
         return Json(new
         {
@@ -493,6 +565,20 @@ public sealed class VehicleConfigMigrationTests
             baroEntityId = (int?)null,
             gearEntityId = (int?)null,
             autoDetect,
+            rtc = rtc is null
+                ? null
+                : new
+                {
+                    statusEntityId = rtc.StatusEntityId,
+                    dayEntityId = rtc.DayEntityId,
+                    monthEntityId = rtc.MonthEntityId,
+                    yearEntityId = rtc.YearEntityId,
+                    hourEntityId = rtc.HourEntityId,
+                    minuteEntityId = rtc.MinuteEntityId,
+                    secondEntityId = rtc.SecondEntityId,
+                    hour12 = rtc.Hour12,
+                    showSeconds = rtc.ShowSeconds,
+                },
             shifter = shifter is null
                 ? null
                 : new { shiftPointRpm = shifter.ShiftPointRpm, downshiftFloorRpm = shifter.DownshiftFloorRpm },

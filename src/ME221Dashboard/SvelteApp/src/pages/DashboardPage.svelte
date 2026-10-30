@@ -5,14 +5,17 @@
   import GaugeSettingsModal from '../lib/GaugeSettingsModal.svelte';
   import { HybridBridge, type GaugeConfigEntry, type EntityInfo, type GpsLocation } from '../lib/HybridBridge';
   import { liveDataStore, STALE_MS } from '../lib/stores/LiveDataStore.svelte';
-  import { GaugeShapeCategory, toGaugeDefinition, formatValue, toSavePayload, estimateVisualSize, applyTransform, isTransformable, type ValueTransformStep } from '../lib/gauges/types';
+  import { GaugeShapeCategory, toGaugeDefinition, toSavePayload, estimateVisualSize, applyTransform, isTransformable, type ValueTransformStep } from '../lib/gauges/types';
   import type { GaugeDefinition } from '../lib/gauges/types';
+  import { formatEntityValue } from '../lib/gauges/formatting';
   import { warningEvaluator } from '../lib/stores/warningEvaluator';
   import { pushSample, type ChartSample } from '../lib/gauges/chartDataUtils';
   import { loadDerivedConfig } from '../lib/derived/vehicleConfig';
-  import { computeDerived, type ComputationInputs, type ComputationResult } from '../lib/derived/compute';
+  import { computeDerived, fuelFlowLph, selectFuelSpeedKmh, type ComputationInputs, type ComputationResult } from '../lib/derived/compute';
   import { shiftEvaluator, type ShiftRuntimeConfig } from '../lib/shift/shiftEvaluator';
-  import { DERIVED_ENTITIES, DerivedEntityId } from '../lib/derived/types';
+  import { DERIVED_ENTITIES, FUEL_EFFICIENCY_UNITS, defaultDerivedConfig, fuelEfficiencyRange, DerivedEntityId } from '../lib/derived/types';
+  import type { VehicleConfig } from '../lib/derived/types';
+  import { fuelTripStore } from '../lib/derived/fuelTripStore.svelte';
   import type { DashboardTableEntry } from '../lib/HybridBridgeTypes';
   import TableWidget from '../lib/tables/TableWidget.svelte';
   import TableSettingsModal from '../lib/tables/TableSettingsModal.svelte';
@@ -158,22 +161,67 @@
   });
 
   // ── Derived value computation ──────────────────────────────────────────
-  let derivedLookupInjected = false;
+  // The lookup only needs rebuilding when the configured fuel unit changes: the
+  // unit decides both the label and the gauge scale of the two fuel entities.
+  let _lookupFuelUnit: string | null = null;
 
-  function injectDerived(result: ComputationResult) {
-    if (!derivedLookupInjected) {
+  function injectDerived(result: ComputationResult, config: VehicleConfig) {
+    if (_lookupFuelUnit !== config.fuelEfficiencyUnit) {
       const entries: Record<string, EntityInfo> = {};
       for (const [idStr, info] of Object.entries(DERIVED_ENTITIES)) {
         const id = Number(idStr);
         entries[String(id)] = { name: info.name, unit: info.unit, minValue: info.minValue, maxValue: info.maxValue };
       }
-      entityLookup = { ...entityLookup, ...entries };
-      derivedLookupInjected = true;
+      // Both fuel entities follow the configured output unit, matching the picker.
+      const fuelUnit = config.fuelEfficiencyUnit;
+      const range = fuelEfficiencyRange(fuelUnit);
+      for (const id of [DerivedEntityId.FuelEfficiency, DerivedEntityId.AverageFuelEfficiency]) {
+        entries[String(id)] = {
+          ...entries[String(id)],
+          unit: FUEL_EFFICIENCY_UNITS[fuelUnit],
+          minValue: range.minValue,
+          maxValue: range.maxValue,
+        };
+      }
+      // Bridge-supplied metadata wins: it is already unit-aware and may carry
+      // user customizations, so a static fallback must never overwrite it.
+      entityLookup = { ...entries, ...entityLookup };
+      _lookupFuelUnit = config.fuelEfficiencyUnit;
     }
     for (const [idStr, value] of Object.entries(result)) {
       entityValues[idStr] = value;
       updateGaugeValue(Number(idStr), value);
     }
+  }
+
+  // ── Fuel trip (average efficiency) ────────────────────────────────────
+  // The instantaneous −3007 entity answers "what am I doing right now"; the trip
+  // average answers "how is the car doing overall". Accumulation runs on the frame
+  // tick because it needs real elapsed time, not just changed samples.
+  let activeConfig: VehicleConfig = defaultDerivedConfig();
+  let _tripLastTs = 0;
+
+  function injectAverageFuel() {
+    const average = fuelTripStore.average(activeConfig.fuelEfficiencyUnit);
+    entityValues[String(DerivedEntityId.AverageFuelEfficiency)] = average;
+    updateGaugeValue(DerivedEntityId.AverageFuelEfficiency, average);
+  }
+
+  function tickFuelTrip() {
+    const now = performance.now();
+    const dt = _tripLastTs > 0 ? (now - _tripLastTs) / 1000 : 0;
+    _tripLastTs = now;
+    if (dt <= 0 || !activeConfig.enabled) return;
+
+    const vss = activeConfig.vssSpeedEntityId !== null
+      ? entityValues[String(activeConfig.vssSpeedEntityId)] ?? null
+      : null;
+    const trueSpeed = entityValues[String(DerivedEntityId.TrueSpeed)] ?? null;
+    const gpsSpeed = gpsLocation?.speed != null ? gpsLocation.speed * 3.6 : null;
+
+    const speed = selectFuelSpeedKmh(activeConfig, vss, gpsSpeed, trueSpeed);
+    fuelTripStore.accumulate(speed, fuelFlowLph(activeConfig, entityValues), dt);
+    injectAverageFuel();
   }
 
   let _derivedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -190,7 +238,7 @@
       // is part of the fingerprint so a live shift-point edit recomputes the
       // countdown without RPM movement (KTD4).
       const gpsSpeed = gpsLocation?.speed != null ? gpsLocation.speed * 3.6 : null;
-      const fp = `${config.rpmEntityId}:${entityValues[String(config.rpmEntityId)] ?? ''}|${config.vssSpeedEntityId}:${entityValues[String(config.vssSpeedEntityId)] ?? ''}|${config.mapEntityId}:${entityValues[String(config.mapEntityId)] ?? ''}|${config.baroEntityId}:${entityValues[String(config.baroEntityId)] ?? ''}|${config.gearEntityId}:${entityValues[String(config.gearEntityId)] ?? ''}|${gpsSpeed ?? ''}|${config.shifter?.shiftPointRpm ?? ''}:${config.shifter?.downshiftFloorRpm ?? ''}`;
+      const fp = `${config.rpmEntityId}:${entityValues[String(config.rpmEntityId)] ?? ''}|${config.vssSpeedEntityId}:${entityValues[String(config.vssSpeedEntityId)] ?? ''}|${config.mapEntityId}:${entityValues[String(config.mapEntityId)] ?? ''}|${config.baroEntityId}:${entityValues[String(config.baroEntityId)] ?? ''}|${config.gearEntityId}:${entityValues[String(config.gearEntityId)] ?? ''}|${gpsSpeed ?? ''}|${config.shifter?.shiftPointRpm ?? ''}:${config.shifter?.downshiftFloorRpm ?? ''}|${config.fuelFlowEntityId}:${entityValues[String(config.fuelFlowEntityId)] ?? ''}|${config.injectorDutyEntityId}:${entityValues[String(config.injectorDutyEntityId)] ?? ''}|${config.injectorFlowCcPerMin ?? ''}:${config.cylinderCount ?? ''}|${config.fuelSpeedSource ?? ''}:${config.fuelEfficiencyUnit ?? ''}`;
       if (fp === _lastDerivedFingerprint) return;
       _lastDerivedFingerprint = fp;
 
@@ -200,8 +248,9 @@
         gpsSpeedKmh: gpsSpeed,
         gpsValid: gpsLocation != null && gpsLocation.speed != null,
       };
+      activeConfig = config;
       const result = computeDerived(inputs);
-      injectDerived(result);
+      injectDerived(result, config);
     }, 20);
   }
 
@@ -372,7 +421,7 @@
       next.push({
         ..._gaugeDefCache[i],
         value,
-        formattedValue: formatValue(value, sc.name, sc.unit, useLambdaMode, stoichAfr, sc.lowerName, sc.lowerUnit),
+        formattedValue: formatGaugeText(sc.config.entityId, value, sc.name, sc.unit, sc.lowerName, sc.lowerUnit),
         name: sc.name,
         unit: sc.unit,
         lowerName: sc.lowerName,
@@ -453,6 +502,26 @@
     return v;
   }
 
+  // Single formatting entry point for every gauge text path (rebuild, single
+  // update, frame tick) so clocks, dates and word-valued entities render the
+  // same way everywhere.
+  function formatGaugeText(
+    entityId: number,
+    value: number,
+    name: string,
+    unit: string,
+    lowerName?: string,
+    lowerUnit?: string,
+  ): string {
+    return formatEntityValue(entityId, value, name, unit, {
+      lambdaMode: useLambdaMode,
+      stoichAfr,
+      lowerName,
+      lowerUnit,
+      clock: { hour12: activeConfig.rtc.hour12, showSeconds: activeConfig.rtc.showSeconds },
+    });
+  }
+
   // Update a single gauge's value in place — O(1), no allocation
   function updateGaugeValue(entityId: number, value: number | null) {
     const idx = _gaugeIndexByEntityId.get(entityId);
@@ -460,7 +529,7 @@
     const g = gaugeStates[idx];
     const v = applyPipeline(value ?? 0, entityId, g);
     g.value = v;
-    g.formattedValue = formatValue(v, g.name, g.unit, useLambdaMode, stoichAfr, g.lowerName, g.lowerUnit);
+    g.formattedValue = formatGaugeText(entityId, v, g.name, g.unit, g.lowerName, g.lowerUnit);
   }
 
   // Rebuild gaugeStates when config or def cache changes (rare — on load, settings change).
@@ -499,7 +568,7 @@
         const val = applyPipeline(raw, g.entityId, g);
         if (g.value !== val) {
           g.value = val;
-          g.formattedValue = formatValue(val, g.name, g.unit, useLambdaMode, stoichAfr, g.lowerName, g.lowerUnit);
+          g.formattedValue = formatGaugeText(g.entityId, val, g.name, g.unit, g.lowerName, g.lowerUnit);
         }
         // Warning state fed by the shared evaluator (raw scale, R11)
         const ws = warningEvaluator.getState(g.entityId);
@@ -548,6 +617,7 @@
         }
       }
       computeAndInjectDerived();
+      tickFuelTrip();
     });
   });
 
@@ -1011,6 +1081,7 @@
     }).catch(() => {});
     loadShiftPayload();
     startShiftTick();
+    fuelTripStore.load().then(injectAverageFuel);
   });
 
   onDestroy(() => {
@@ -1018,6 +1089,7 @@
     if (saveTimer) clearTimeout(saveTimer);
     if (resizeObserver) resizeObserver.disconnect();
     stopShiftTick();
+    void fuelTripStore.flush();
   });
 </script>
 

@@ -35,7 +35,7 @@ public sealed class DerivedEntityBridgeTests
     }
 
     [Fact]
-    public async Task GetAvailableSensors_totalCount_equals_links_plus_derived_six()
+    public async Task GetAvailableSensors_totalCount_equals_links_plus_derived_entities()
     {
         var cal = new FakeCalibrationService();
         var bridge = TestBridge.Create(cal);
@@ -43,9 +43,155 @@ public sealed class DerivedEntityBridgeTests
         var json = await bridge.GetAvailableSensors("default");
         using var doc = JsonDocument.Parse(json);
 
-        doc.RootElement.GetProperty("totalCount").GetInt32().Should().Be(6,
-            "no links and no running GPS → exactly the six always-available derived entities");
-        doc.RootElement.GetProperty("sensors").GetArrayLength().Should().Be(6);
+        doc.RootElement.GetProperty("totalCount").GetInt32().Should().Be(
+            HybridBridgeService.S_derivedDefaults.Count,
+            "no links and no running GPS → exactly the always-available derived entities");
+        doc.RootElement.GetProperty("sensors").GetArrayLength()
+            .Should().Be(HybridBridgeService.S_derivedDefaults.Count);
+    }
+
+    [Fact]
+    public async Task GetAvailableSensors_lists_the_clock_and_date_entities()
+    {
+        var cal = new FakeCalibrationService();
+        var bridge = TestBridge.Create(cal);
+
+        var json = await bridge.GetAvailableSensors("default");
+        using var doc = JsonDocument.Parse(json);
+        var sensors = doc.RootElement.GetProperty("sensors").EnumerateArray().ToList();
+
+        var clock = sensors.First(s => s.GetProperty("id").GetInt32() == -3008);
+        clock.GetProperty("name").GetString().Should().Be("ECU Clock");
+        clock.GetProperty("category").GetString().Should().Be("Derived");
+        clock.GetProperty("maxValue").GetDouble().Should().Be(86400);
+
+        var date = sensors.First(s => s.GetProperty("id").GetInt32() == -3009);
+        date.GetProperty("name").GetString().Should().Be("ECU Date");
+        date.GetProperty("maxValue").GetDouble().Should().Be(99991231);
+    }
+
+    [Fact]
+    public async Task GetAvailableSensors_average_fuel_efficiency_uses_the_configured_unit()
+    {
+        var cal = new FakeCalibrationService
+        {
+            Config = new DashboardConfig
+            {
+                Dashboards = new Dictionary<string, DashboardDefinition>
+                {
+                    ["default"] = new()
+                    {
+                        Vehicle = new VehicleConfig { FuelEfficiencyUnit = FuelEfficiencyUnits.MilesPerGallon },
+                    },
+                },
+            },
+        };
+        var bridge = TestBridge.Create(cal);
+
+        var json = await bridge.GetAvailableSensors("default");
+        using var doc = JsonDocument.Parse(json);
+        var average = doc.RootElement.GetProperty("sensors").EnumerateArray()
+            .First(s => s.GetProperty("id").GetInt32() == -3010);
+
+        average.GetProperty("name").GetString().Should().Be("Avg Fuel Efficiency");
+        average.GetProperty("unit").GetString().Should().Be("MPG");
+        average.GetProperty("maxValue").GetDouble().Should().Be(80);
+    }
+
+    [Fact]
+    public async Task GetAvailableSensors_fuel_efficiency_uses_the_configured_unit_and_range()
+    {
+        var cal = new FakeCalibrationService
+        {
+            Config = new DashboardConfig
+            {
+                Dashboards = new Dictionary<string, DashboardDefinition>
+                {
+                    ["default"] = new()
+                    {
+                        Vehicle = new VehicleConfig { FuelEfficiencyUnit = FuelEfficiencyUnits.MilesPerGallon },
+                    },
+                },
+            },
+        };
+        var bridge = TestBridge.Create(cal);
+
+        var json = await bridge.GetAvailableSensors("default");
+        using var doc = JsonDocument.Parse(json);
+        var fuel = doc.RootElement.GetProperty("sensors").EnumerateArray()
+            .First(s => s.GetProperty("id").GetInt32() == -3007);
+
+        fuel.GetProperty("name").GetString().Should().Be("Fuel Efficiency");
+        fuel.GetProperty("category").GetString().Should().Be("Derived");
+        fuel.GetProperty("unit").GetString().Should().Be("MPG");
+        fuel.GetProperty("minValue").GetDouble().Should().Be(0);
+        fuel.GetProperty("maxValue").GetDouble().Should().Be(80);
+    }
+
+    [Fact]
+    public async Task GetAvailableSensors_lists_gps_and_odometer_from_the_shared_defaults()
+    {
+        var cal = new FakeCalibrationService();
+        var bridge = TestBridge.Create(cal, new FakeRunningGpsService());
+
+        var json = await bridge.GetAvailableSensors("default");
+        using var doc = JsonDocument.Parse(json);
+        var sensors = doc.RootElement.GetProperty("sensors").EnumerateArray().ToList();
+
+        var gpsSpeed = sensors.Single(s => s.GetProperty("id").GetInt32() == -1001);
+        gpsSpeed.GetProperty("name").GetString().Should().Be("GPS Speed");
+        gpsSpeed.GetProperty("category").GetString().Should().Be("GPS");
+        gpsSpeed.GetProperty("unit").GetString().Should().Be("km/h");
+
+        var odometer = sensors.Single(s => s.GetProperty("id").GetInt32() == -2001);
+        odometer.GetProperty("name").GetString().Should().Be("Odometer");
+        odometer.GetProperty("category").GetString().Should().Be("Odometer");
+
+        doc.RootElement.GetProperty("totalCount").GetInt32()
+            .Should().Be(6 + 1 + HybridBridgeService.S_derivedDefaults.Count,
+                "six GPS entities, the odometer, and every always-available derived entity");
+    }
+
+    [Fact]
+    public async Task GetAvailableSensors_without_a_persisted_config_still_lists_the_derived_entities()
+    {
+        // Fresh install: nothing on disk. The fuel-unit lookup must not throw here.
+        var cal = new FakeCalibrationService { Config = null! };
+        var bridge = TestBridge.Create(cal);
+
+        var json = await bridge.GetAvailableSensors("default");
+        using var doc = JsonDocument.Parse(json);
+
+        var fuel = doc.RootElement.GetProperty("sensors").EnumerateArray()
+            .Single(s => s.GetProperty("id").GetInt32() == -3007);
+        fuel.GetProperty("unit").GetString().Should().Be("km/L", "defaults apply when no dashboard exists");
+    }
+
+    [Fact]
+    public async Task GetDashboardConfig_reports_the_configured_fuel_unit_for_a_saved_gauge()
+    {
+        var cal = new FakeCalibrationService
+        {
+            Config = new DashboardConfig
+            {
+                Dashboards = new Dictionary<string, DashboardDefinition>
+                {
+                    ["default"] = new()
+                    {
+                        Gauges = [new GaugeConfigEntry { Id = -3007 }],
+                        Vehicle = new VehicleConfig { FuelEfficiencyUnit = FuelEfficiencyUnits.MilesPerGallon },
+                    },
+                },
+            },
+        };
+        var bridge = TestBridge.Create(cal);
+
+        var json = await bridge.GetDashboardConfig("default");
+        using var doc = JsonDocument.Parse(json);
+        var fuel = doc.RootElement.GetProperty("entities").GetProperty("-3007");
+
+        fuel.GetProperty("unit").GetString().Should().Be("MPG");
+        fuel.GetProperty("maxValue").GetDouble().Should().Be(80);
     }
 
     private static DashboardConfig TwoDashboardConfig()

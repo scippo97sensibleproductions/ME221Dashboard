@@ -58,9 +58,27 @@ public partial class HybridBridgeService : IDisposable
         [-3004] = ("Speed Error", "km/h", -50, 50),
         [-3005] = ("RPM to Shift", "rpm", 0, 9000),
         [-3006] = ("Shift State", "", -1, 1),
+        [-3007] = ("Fuel Efficiency", "km/L", 0, 50),
+        [-3008] = ("ECU Clock", "", 0, 86400),
+        [-3009] = ("ECU Date", "", 0, 99991231),
+        [-3010] = ("Avg Fuel Efficiency", "km/L", 0, 50),
     };
 
+    /// <summary>Synthetic entity metadata in picker order, precomputed so the
+    /// sensor listing does not re-sort a dictionary on every call.</summary>
+    internal static readonly (int Id, string Name, string Unit, double Min, double Max)[] S_gpsOrdered = OrderById(S_gpsDefaults);
+    internal static readonly (int Id, string Name, string Unit, double Min, double Max)[] S_odometerOrdered = OrderById(S_odometerDefaults);
+    internal static readonly (int Id, string Name, string Unit, double Min, double Max)[] S_derivedOrdered = OrderById(S_derivedDefaults);
+
+    private static (int Id, string Name, string Unit, double Min, double Max)[] OrderById(
+        Dictionary<int, (string Name, string Unit, double Min, double Max)> defaults) =>
+        [.. defaults.OrderBy(kv => kv.Key).Select(kv => (kv.Key, kv.Value.Name, kv.Value.Unit, kv.Value.Min, kv.Value.Max))];
+
     private const int OdometerEntityId = -2001;
+
+    /// <summary>Derived fuel-efficiency entities whose label/range follow the configured unit.</summary>
+    internal const int FuelEfficiencyEntityId = -3007;
+    internal const int AverageFuelEfficiencyEntityId = -3010;
 
     internal readonly IEcuConnectionService _connection;
     internal readonly ILiveDataService _liveData;

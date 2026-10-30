@@ -10,7 +10,20 @@ using Xunit;
 
 namespace ME221Dashboard.Tests.Mirror;
 
+/// <summary>
+/// These tests drive a real loopback WSS server and depend on short flush
+/// windows (the server closes 100 ms after the final frame so Fleck's send
+/// loop can drain). Running them alongside the rest of the suite starves that
+/// window on a loaded machine, so the collection opts out of parallelization.
+/// </summary>
+[CollectionDefinition(SerialCollectionName, DisableParallelization = true)]
+public sealed class MirrorServerCollection
+{
+    public const string SerialCollectionName = "Mirror server (serial)";
+}
+
 /// <summary>End-to-end WSS tests against the real Fleck server (loopback, self-signed TLS).</summary>
+[Collection(MirrorServerCollection.SerialCollectionName)]
 public sealed class MirrorServerTests : IAsyncLifetime
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-server-" + Guid.NewGuid().ToString("N"));

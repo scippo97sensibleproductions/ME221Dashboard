@@ -61,7 +61,7 @@ public sealed class FakeLiveDataService : ILiveDataService
 /// <summary>Convenience: a fully-wired bridge over in-memory fakes.</summary>
 public static class TestBridge
 {
-    public static HybridBridgeService Create(FakeCalibrationService cal)
+    public static HybridBridgeService Create(FakeCalibrationService cal, IGpsService? gps = null)
     {
         return new HybridBridgeService(
             new FakeConnectionService(),
@@ -69,6 +69,17 @@ public static class TestBridge
             cal,
             new DashboardPackageService(),
             new LogCapture(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<HybridBridgeService>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HybridBridgeService>.Instance,
+            gps);
     }
+}
+
+/// <summary>GPS source that reports as running without emitting fixes.</summary>
+public sealed class FakeRunningGpsService : IGpsService
+{
+    public bool IsRunning => true;
+    public Task<bool> StartAsync(CancellationToken ct = default) => Task.FromResult(true);
+    public Task StopAsync() => Task.CompletedTask;
+    public event EventHandler<GpsLocationEventArgs>? LocationUpdated;
+    public void RaiseLocation(GpsLocationEventArgs args) => LocationUpdated?.Invoke(this, args);
 }

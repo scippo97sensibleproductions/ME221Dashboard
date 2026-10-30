@@ -1,11 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Modal, Button } from 'flowbite-svelte';
-  import { defaultDerivedConfig } from './derived/types';
-  import type { VehicleConfig } from './derived/types';
+  import {
+    DERIVED_ENTITIES,
+    FUEL_EFFICIENCY_UNITS,
+    FUEL_SPEED_SOURCE_LABELS,
+    defaultDerivedConfig,
+    DerivedEntityId,
+  } from './derived/types';
+  import type { FuelEfficiencyUnit, FuelSpeedSource, RtcConfig, VehicleConfig } from './derived/types';
   import { loadDerivedConfig, saveDerivedConfig } from './derived/vehicleConfig';
   import { autoDetectMapping } from './derived/autoDetect';
-  import { DERIVED_ENTITIES } from './derived/types';
+  import { fuelTripStore } from './derived/fuelTripStore.svelte';
+  import NumberField from './ui/NumberField.svelte';
+  import SelectField from './ui/SelectField.svelte';
+  import CheckField from './ui/CheckField.svelte';
+  import EntitySelect from './ui/EntitySelect.svelte';
+  import MetroModal from './ui/MetroModal.svelte';
 
   let { open = $bindable(true), sensors, onclose }: {
     open: boolean;
@@ -13,32 +23,116 @@
     onclose: () => void;
   } = $props();
 
-  let config = $state<VehicleConfig>(defaultDerivedConfig());
+  const TABS = [
+    { id: 'vehicle', label: 'Vehicle' },
+    { id: 'fuel', label: 'Fuel' },
+    { id: 'clock', label: 'Clock' },
+    { id: 'mapping', label: 'Mapping' },
+    { id: 'available', label: 'Available' },
+  ] as const;
 
-  let tab: 'vehicle' | 'mapping' | 'gauges' = $state('vehicle');
+  type TabId = (typeof TABS)[number]['id'];
+  type MappingKey =
+    | 'rpmEntityId'
+    | 'vssSpeedEntityId'
+    | 'mapEntityId'
+    | 'baroEntityId'
+    | 'gearEntityId'
+    | 'fuelFlowEntityId'
+    | 'injectorDutyEntityId';
+  type RtcKey = Exclude<keyof RtcConfig, 'hour12' | 'showSeconds'>;
+
+  const MAPPING_ROWS: readonly { key: MappingKey; label: string }[] = [
+    { key: 'rpmEntityId', label: 'RPM' },
+    { key: 'vssSpeedEntityId', label: 'VSS Speed' },
+    { key: 'mapEntityId', label: 'MAP' },
+    { key: 'baroEntityId', label: 'Barometric Pressure' },
+    { key: 'gearEntityId', label: 'ECU Gear' },
+  ];
+
+  const FUEL_SOURCE_ROWS: readonly { key: MappingKey; label: string }[] = [
+    { key: 'fuelFlowEntityId', label: 'Fuel Flow (L/hr)' },
+    { key: 'injectorDutyEntityId', label: 'Injector Duty (%)' },
+  ];
+
+  const RTC_ROWS: readonly { key: RtcKey; label: string }[] = [
+    { key: 'statusEntityId', label: 'Status' },
+    { key: 'hourEntityId', label: 'Hour' },
+    { key: 'minuteEntityId', label: 'Minute' },
+    { key: 'secondEntityId', label: 'Second' },
+    { key: 'dayEntityId', label: 'Day' },
+    { key: 'monthEntityId', label: 'Month' },
+    { key: 'yearEntityId', label: 'Year' },
+  ];
+
+  const UNIT_OPTIONS = (Object.entries(FUEL_EFFICIENCY_UNITS) as [FuelEfficiencyUnit, string][])
+    .map(([value, label]) => ({ value, label }));
+  const SPEED_SOURCE_OPTIONS = (Object.entries(FUEL_SPEED_SOURCE_LABELS) as [FuelSpeedSource, string][])
+    .map(([value, label]) => ({ value, label }));
+
+  let config = $state<VehicleConfig>(defaultDerivedConfig());
+  let tab = $state<TabId>('vehicle');
 
   let tireStr = $state('');
   let fdStr = $state('');
   let gearStrs = $state<string[]>([]);
   let slipStr = $state('');
   let enabled = $state(true);
+  let injectorFlowStr = $state('');
+  let cylinderStr = $state('');
+  let fuelUnit = $state<FuelEfficiencyUnit>('kmL');
+  let fuelSpeedSource = $state<FuelSpeedSource>('auto');
+
   // Auto-detect tracking (R8): an auto-detect-applied save carries an explicit
   // payload flag so the seed template gate excludes it; a manual mapping edit
   // marks the save as deliberate (seed refresh allowed).
   let autoDetectApplied = $state(false);
   let mappingTouched = $state(false);
 
+  const tripAverage = $derived(fuelTripStore.average(fuelUnit));
+  const tripDistance = $derived(fuelTripStore.distanceKm);
+  const tripFuel = $derived(fuelTripStore.fuelLiters);
+
+  function mappingValue(key: MappingKey): number | null {
+    return config[key];
+  }
+
+  function setMapping(key: MappingKey, id: number | null) {
+    config[key] = id;
+    mappingTouched = true;
+  }
+
+  function rtcValue(key: RtcKey): number | null {
+    return config.rtc[key];
+  }
+
+  function setRtc(key: RtcKey, id: number | null) {
+    config.rtc[key] = id;
+  }
+
+  /** Unit shown for a derived entity in the "Available" list. */
+  function derivedUnit(id: number, fallback: string): string {
+    return id === DerivedEntityId.FuelEfficiency || id === DerivedEntityId.AverageFuelEfficiency
+      ? FUEL_EFFICIENCY_UNITS[fuelUnit]
+      : fallback;
+  }
+
+  async function resetTrip() {
+    await fuelTripStore.reset();
+  }
+
   onMount(async () => {
-    console.log('[VEHCFG] Modal onMount: loading per-dashboard config');
     const loaded = await loadDerivedConfig();
-    console.log('[VEHCFG] Modal loaded config:', loaded);
     config = loaded;
     enabled = loaded.enabled;
     tireStr = String(loaded.tireDiameterInches);
     fdStr = String(loaded.finalDriveRatio);
     gearStrs = loaded.gearRatios.map(String);
     slipStr = String(loaded.wheelSlipPercent);
-    console.log(`[VEHCFG] Modal form fields: tire=${tireStr}, fd=${fdStr}, gears=${gearStrs}, slip=${slipStr}, enabled=${enabled}`);
+    injectorFlowStr = String(loaded.injectorFlowCcPerMin);
+    cylinderStr = String(loaded.cylinderCount);
+    fuelUnit = loaded.fuelEfficiencyUnit;
+    fuelSpeedSource = loaded.fuelSpeedSource;
 
     // Auto-detect if no mapping saved
     if (loaded.rpmEntityId === null && sensors.length > 0) {
@@ -47,6 +141,9 @@
       if (detected.vssSpeedEntityId !== null) config.vssSpeedEntityId = detected.vssSpeedEntityId;
       if (detected.mapEntityId !== null) config.mapEntityId = detected.mapEntityId;
       if (detected.baroEntityId !== null) config.baroEntityId = detected.baroEntityId;
+      if (detected.fuelFlowEntityId !== null) config.fuelFlowEntityId = detected.fuelFlowEntityId;
+      if (detected.injectorDutyEntityId !== null) config.injectorDutyEntityId = detected.injectorDutyEntityId;
+      config.rtc = { ...config.rtc, ...detected.rtc };
       autoDetectApplied = true;
     }
   });
@@ -63,6 +160,13 @@
     config.finalDriveRatio = isNaN(fd) || fd <= 0 ? def.finalDriveRatio : fd;
     config.gearRatios = ratios.length > 0 ? ratios : def.gearRatios;
     config.wheelSlipPercent = isNaN(slip) ? def.wheelSlipPercent : slip;
+
+    const injectorFlow = parseFloat(injectorFlowStr);
+    const cylinders = parseInt(cylinderStr, 10);
+    config.injectorFlowCcPerMin = isNaN(injectorFlow) || injectorFlow < 0 ? 0 : injectorFlow;
+    config.cylinderCount = isNaN(cylinders) || cylinders < 1 ? def.cylinderCount : cylinders;
+    config.fuelEfficiencyUnit = fuelUnit;
+    config.fuelSpeedSource = fuelSpeedSource;
 
     // Vehicle-only save: strip the shifter block (this modal never edits shifter
     // settings) so it cannot zero or overwrite the shifter block on either the
@@ -82,107 +186,117 @@
   }
 </script>
 
-<Modal bind:open size="lg" placement="center" outsideclose={true} class="backdrop:bg-gray-900/80" ontoggle={(e) => { if (e.newState === 'closed') onclose(); }}>
-  {#snippet header()}
-    <div class="flex w-full items-center justify-between">
-      <h2 class="text-base font-semibold text-gray-100">Derived Values</h2>
-    </div>
-  {/snippet}
-
+<MetroModal bind:open title="Derived Values" size="lg" onclose={onclose}>
   <!-- Tabs -->
-  <div class="-mx-5 -mt-5 mb-4 flex border-b border-gray-700 px-4">
-    <button class={"px-3 py-2 text-sm border-b-2 transition-colors " + (tab === 'vehicle' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-gray-400 hover:text-gray-200')} onclick={() => tab = 'vehicle'}>Vehicle</button>
-    <button class={"px-3 py-2 text-sm border-b-2 transition-colors " + (tab === 'mapping' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-gray-400 hover:text-gray-200')} onclick={() => tab = 'mapping'}>Sensor Mapping</button>
-    <button class={"px-3 py-2 text-sm border-b-2 transition-colors " + (tab === 'gauges' ? 'border-cyan-400 text-cyan-300' : 'border-transparent text-gray-400 hover:text-gray-200')} onclick={() => tab = 'gauges'}>Available</button>
+  <div class="-mx-5 -mt-5 mb-4 flex px-4" style="border-bottom: 1px solid var(--metro-border);">
+    {#each TABS as item (item.id)}
+      <button
+        class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors"
+        style="border-bottom: 2px solid {tab === item.id ? 'var(--metro-blue)' : 'transparent'}; color: {tab === item.id ? 'var(--metro-text)' : 'var(--metro-text-secondary)'};"
+        onclick={() => tab = item.id}
+      >{item.label}</button>
+    {/each}
   </div>
 
   <div class="space-y-4">
     {#if tab === 'vehicle'}
-      <label class="flex items-center gap-2">
-        <input type="checkbox" bind:checked={enabled} class="rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500" />
-        <span class="text-sm text-gray-300">Enable derived values</span>
-      </label>
+      <CheckField label="Enable derived values" bind:checked={enabled} />
       <div class="grid grid-cols-2 gap-4">
-        <label class="space-y-1">
-          <span class="text-xs text-gray-400">Tire Diameter (in)</span>
-          <input type="number" step="0.1" bind:value={tireStr} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
-        </label>
-        <label class="space-y-1">
-          <span class="text-xs text-gray-400">Final Drive Ratio</span>
-          <input type="number" step="0.01" bind:value={fdStr} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
-        </label>
+        <NumberField label="Tire Diameter (in)" step="0.1" bind:value={tireStr} />
+        <NumberField label="Final Drive Ratio" step="0.01" bind:value={fdStr} />
       </div>
       <div class="space-y-1">
         <div class="flex items-center justify-between">
-          <span class="text-xs text-gray-400">Gear Ratios</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-text-secondary)">Gear Ratios</span>
           <div class="flex gap-1">
-            <button type="button" class="rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600" onclick={() => gearStrs = [...gearStrs, '1.0']}>+ Add Gear</button>
+            <button type="button" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style="border: 1px solid var(--metro-input-border); color: var(--metro-text-secondary);" onclick={() => gearStrs = [...gearStrs, '1.0']}>+ Add Gear</button>
             {#if gearStrs.length > 1}
-              <button type="button" class="rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600" onclick={() => gearStrs = gearStrs.slice(0, -1)}>− Remove</button>
+              <button type="button" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider" style="border: 1px solid var(--metro-input-border); color: var(--metro-text-secondary);" onclick={() => gearStrs = gearStrs.slice(0, -1)}>− Remove</button>
             {/if}
           </div>
         </div>
         <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
           {#each gearStrs as _, i (i)}
             <label class="space-y-0.5">
-              <span class="text-xs text-gray-500">{i + 1}</span>
-              <input type="number" step="0.01" bind:value={gearStrs[i]} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
+              <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-text-muted)">{i + 1}</span>
+              <input type="number" step="0.01" bind:value={gearStrs[i]} class="metro-input w-full font-mono" />
             </label>
           {/each}
         </div>
       </div>
-      <label class="space-y-1">
-        <span class="text-xs text-gray-400">Wheel Slip (%)</span>
-        <input type="number" step="0.5" bind:value={slipStr} class="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-cyan-500 focus:outline-none" />
-      </label>
-      <p class="text-xs text-gray-500">Tire diameter, final drive, and gear ratios are used to predict gear and calculate true speed from RPM.</p>
+      <NumberField label="Wheel Slip (%)" step="0.5" bind:value={slipStr} />
+      <p class="text-[11px] leading-relaxed" style="color: var(--metro-text-muted)">Tire diameter, final drive, and gear ratios are used to predict gear and calculate true speed from RPM.</p>
+
+    {:else if tab === 'fuel'}
+      <div class="grid grid-cols-2 gap-4">
+        <SelectField label="Output Unit" bind:value={fuelUnit} options={UNIT_OPTIONS} />
+        <SelectField label="Speed Source" bind:value={fuelSpeedSource} options={SPEED_SOURCE_OPTIONS} />
+      </div>
+      <div class="space-y-2">
+        {#each FUEL_SOURCE_ROWS as row (row.key)}
+          <EntitySelect label={row.label} value={mappingValue(row.key)} {sensors} onchange={(id) => setMapping(row.key, id)} />
+        {/each}
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <NumberField label="Injector Flow (cc/min)" step="5" bind:value={injectorFlowStr} />
+        <NumberField label="Cylinders" step="1" min="1" bind:value={cylinderStr} />
+      </div>
+      <div class="flex items-center justify-between gap-3 px-3 py-2" style="background-color: var(--metro-surface);">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--metro-text-muted)">Trip Average</span>
+          <span class="font-mono text-[16px] font-bold" style="color: var(--metro-text)">
+            {tripAverage === null ? '---' : tripAverage.toFixed(1)} {FUEL_EFFICIENCY_UNITS[fuelUnit]}
+          </span>
+          <span class="text-[10px]" style="color: var(--metro-text-muted)">{tripDistance.toFixed(1)} km · {tripFuel.toFixed(2)} L</span>
+        </div>
+        <button type="button" class="metro-btn-secondary" onclick={resetTrip}>Reset</button>
+      </div>
+      <p class="text-[11px] leading-relaxed" style="color: var(--metro-text-muted)">
+        Fuel flow is used directly when mapped; otherwise injector duty × injector flow × cylinders gives the flow. The trip average integrates fuel and distance, so idling and stops count against it. True Speed keeps the figure working without a speed sensor.
+      </p>
+
+    {:else if tab === 'clock'}
+      <div class="flex gap-6">
+        <CheckField label="12-hour clock" bind:checked={config.rtc.hour12} />
+        <CheckField label="Show seconds" bind:checked={config.rtc.showSeconds} />
+      </div>
+      <div class="space-y-2">
+        {#each RTC_ROWS as row (row.key)}
+          <EntitySelect label={row.label} value={rtcValue(row.key)} {sensors} onchange={(id) => setRtc(row.key, id)} />
+        {/each}
+      </div>
+      <p class="text-[11px] leading-relaxed" style="color: var(--metro-text-muted)">
+        The firmware reports the clock as separate channels. Map them once and the ECU Clock and ECU Date gauges become available. Status gates the clock: while the firmware reports “Err - Not Init” the gauge shows “---” instead of a plausible-looking 00:00.
+      </p>
 
     {:else if tab === 'mapping'}
-      <div class="space-y-3">
-        {#each [
-          { label: 'RPM', key: 'rpmEntityId' as const },
-          { label: 'VSS Speed', key: 'vssSpeedEntityId' as const },
-          { label: 'MAP', key: 'mapEntityId' as const },
-          { label: 'Barometric Pressure', key: 'baroEntityId' as const },
-          { label: 'ECU Gear', key: 'gearEntityId' as const },
-        ] as item (item.key)}
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-sm text-gray-300">{item.label}</span>
-            <select class="w-64 rounded-lg border border-gray-600 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 focus:border-cyan-500 focus:outline-none" value={config[item.key] ?? ''} onchange={(e) => { const v = (e.target as HTMLSelectElement).value; config[item.key] = v ? Number(v) : null; mappingTouched = true; }}>
-              <option value="">Auto-detect / Disabled</option>
-              {#each sensors as s (s.id)}
-                <option value={s.id}>{s.name} (ID {s.id})</option>
-              {/each}
-            </select>
+      <div class="space-y-2">
+        {#each MAPPING_ROWS as row (row.key)}
+          <EntitySelect label={row.label} value={mappingValue(row.key)} {sensors} onchange={(id) => setMapping(row.key, id)} />
+        {/each}
+      </div>
+      <p class="text-[11px] leading-relaxed" style="color: var(--metro-text-muted)">
+        Map each sensor to the correct entity. “Auto-detect / Disabled” uses name-based matching or skips the source.
+      </p>
+
+    {:else if tab === 'available'}
+      <div class="space-y-2">
+        <p class="text-[12px]" style="color: var(--metro-text)">Computed values available as gauges (add them from Configure):</p>
+        {#each Object.entries(DERIVED_ENTITIES) as [idStr, info] (idStr)}
+          <div class="flex items-center justify-between px-3 py-2" style="background-color: var(--metro-surface); border-left: 2px solid var(--metro-blue);">
+            <span class="text-[12px]" style="color: var(--metro-text)">{info.name}</span>
+            <span class="text-[11px]" style="color: var(--metro-text-muted)">{derivedUnit(Number(idStr), info.unit)}</span>
           </div>
         {/each}
-        <p class="text-xs text-gray-500">
-          Map each sensor to the correct entity. Entities with "Auto-detect / Disabled" use name-based matching or are skipped.
-        </p>
-      </div>
-
-    {:else if tab === 'gauges'}
-      <div class="space-y-2">
-        <p class="text-sm text-gray-300">The following derived values are computed and available as gauges (add them from Configure):</p>
-        <div class="space-y-1.5">
-          {#each Object.entries(DERIVED_ENTITIES) as [idStr, info] (idStr)}
-            <div class="flex items-center justify-between rounded-lg bg-gray-800/50 px-3 py-2">
-              <span class="text-sm text-gray-200">{info.name}</span>
-              <span class="text-xs text-gray-500">{info.unit || '—'}</span>
-            </div>
-          {/each}
-        </div>
-        <p class="text-xs text-gray-500">Gear prediction requires RPM + VSS or GPS Speed. True speed requires RPM + gear. Boost requires MAP.</p>
+        <p class="text-[11px] leading-relaxed" style="color: var(--metro-text-muted)">Gear prediction requires RPM + VSS or GPS Speed. True speed requires RPM + gear. Boost requires MAP. Fuel efficiency requires a fuel source plus speed; the average also needs a distance run. Clock and date require the RTC channels.</p>
       </div>
     {/if}
   </div>
 
   {#snippet footer()}
-    {#if tab !== 'gauges'}
-      <div class="flex w-full justify-end gap-2">
-        <Button color="alternative" class="!border-gray-600 !bg-gray-700 !text-gray-300 hover:!bg-gray-600" onclick={onclose}>Cancel</Button>
-        <Button class="!bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600" onclick={handleSave}>Save</Button>
-      </div>
+    {#if tab !== 'available'}
+      <button type="button" class="metro-btn-secondary" onclick={onclose}>Cancel</button>
+      <button type="button" class="metro-btn-primary" onclick={handleSave}>Save</button>
     {/if}
   {/snippet}
-</Modal>
+</MetroModal>

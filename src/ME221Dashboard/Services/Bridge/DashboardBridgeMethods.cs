@@ -242,6 +242,7 @@ public partial class HybridBridgeService
             var linksById = links.ToDictionary(l => (int)l.Id);
 
             var entityLookup = new Dictionary<string, object>();
+            var fuelUnit = ResolveVehicle(config, dashboardName).FuelEfficiencyUnit;
 
             foreach (var g in dashboard.Gauges)
             {
@@ -298,8 +299,9 @@ public partial class HybridBridgeService
                         maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : odo.Max,
                     };
                 }
-                else if (S_derivedDefaults.TryGetValue(g.Id, out var derived))
+                else if (S_derivedDefaults.TryGetValue(g.Id, out _))
                 {
+                    var derived = ResolveDerivedMeta(g.Id, fuelUnit);
                     entityLookup[key] = new
                     {
                         name = cust?.CustomName is { Length: > 0 } cn ? cn : derived.Name,
@@ -370,8 +372,9 @@ public partial class HybridBridgeService
                             maxValue = cust?.MaxRange.HasValue == true ? (double)cust.MaxRange.Value : odo.Max,
                         };
                     }
-                    else if (S_derivedDefaults.TryGetValue(le.EntityId, out var derived))
+                    else if (S_derivedDefaults.TryGetValue(le.EntityId, out _))
                     {
+                        var derived = ResolveDerivedMeta(le.EntityId, fuelUnit);
                         entityLookup[key] = new
                         {
                             name = cust?.CustomName is { Length: > 0 } cn ? cn : derived.Name,
@@ -863,6 +866,21 @@ public partial class HybridBridgeService
     // ─── Sensor Selection / Gauge Config Methods ─────────────────────────────
 
     /// <summary>
+    /// Project a sensor customization to the shape the WebView consumes. Shared by
+    /// the calibration-link and derived blocks so a new customization field only
+    /// needs adding here — two hand-maintained copies drifted apart before.
+    /// </summary>
+    private static object? ProjectCustomization(ME221.Data.Models.SensorCustomization? c) => c is null ? null : new
+    {
+        customName = c.CustomName,
+        customUnit = c.CustomUnit,
+        minRange = c.MinRange.HasValue ? (double)c.MinRange.Value : (double?)null,
+        maxRange = c.MaxRange.HasValue ? (double)c.MaxRange.Value : (double?)null,
+        minRangeBypass = c.MinRangeBypass,
+        maxRangeBypass = c.MaxRangeBypass,
+    };
+
+    /// <summary>
     /// Get all available sensors from calibration with selection state and customizations.
     /// Called from JS: window.HybridWebView.InvokeDotNet('GetAvailableSensors', [dashboardName])
     /// </summary>
@@ -899,27 +917,22 @@ public partial class HybridBridgeService
                     maxValue = effectiveMax,
                     inEntityMap = ecuEntityIds.Contains((int)l.Id),
                     isSelected = selectedIds.Contains((int)l.Id),
-                    customization = c is not null ? new
-                    {
-                        customName = c.CustomName,
-                        customUnit = c.CustomUnit,
-                        minRange = c.MinRange.HasValue ? (double)c.MinRange.Value : (double?)null,
-                        maxRange = c.MaxRange.HasValue ? (double)c.MaxRange.Value : (double?)null,
-                        minRangeBypass = c.MinRangeBypass,
-                        maxRangeBypass = c.MaxRangeBypass,
-                    } : null,
+                    customization = ProjectCustomization(c),
                 });
             }
 
             if (_gps is { IsRunning: true })
             {
-                sensorList.Add(new { id = -1001, name = "GPS Speed", category = "GPS", unit = "km/h", inEntityMap = true, isSelected = selectedIds.Contains(-1001), customization = (object?)null });
-                sensorList.Add(new { id = -1002, name = "GPS Latitude", category = "GPS", unit = "\u00b0", inEntityMap = true, isSelected = selectedIds.Contains(-1002), customization = (object?)null });
-                sensorList.Add(new { id = -1003, name = "GPS Longitude", category = "GPS", unit = "\u00b0", inEntityMap = true, isSelected = selectedIds.Contains(-1003), customization = (object?)null });
-                sensorList.Add(new { id = -1004, name = "GPS Altitude", category = "GPS", unit = "m", inEntityMap = true, isSelected = selectedIds.Contains(-1004), customization = (object?)null });
-                sensorList.Add(new { id = -1005, name = "GPS Course", category = "GPS", unit = "\u00b0", inEntityMap = true, isSelected = selectedIds.Contains(-1005), customization = (object?)null });
-                sensorList.Add(new { id = -1006, name = "GPS Accuracy", category = "GPS", unit = "m", inEntityMap = true, isSelected = selectedIds.Contains(-1006), customization = (object?)null });
-                sensorList.Add(new { id = -2001, name = "Odometer", category = "Odometer", unit = "km", inEntityMap = true, isSelected = selectedIds.Contains(-2001), customization = (object?)null });
+                // Names, units and ranges come from the shared defaults so the
+                // picker cannot drift from the entity metadata the bridge emits.
+                foreach (var (id, name, unit, _, _) in S_gpsOrdered)
+                {
+                    sensorList.Add(new { id, name, category = "GPS", unit, inEntityMap = true, isSelected = selectedIds.Contains(id), customization = (object?)null });
+                }
+                foreach (var (id, name, unit, _, _) in S_odometerOrdered)
+                {
+                    sensorList.Add(new { id, name, category = "Odometer", unit, inEntityMap = true, isSelected = selectedIds.Contains(id), customization = (object?)null });
+                }
             }
 
             // Derived entities — always available, with real picker metadata
@@ -929,32 +942,28 @@ public partial class HybridBridgeService
             // a customized derived sensor (e.g. "Gear" renamed to "True Gear")
             // looks reset after a restart, and the next save rebuilds the dict
             // from the nulled entries — silently DELETING the customization.
-            foreach (var (id, meta) in S_derivedDefaults.OrderBy(kv => kv.Key))
+            var fuelUnit = ResolveVehicle(config, dashboardName).FuelEfficiencyUnit;
+            foreach (var (id, name, _, _, _) in S_derivedOrdered)
             {
                 customizations.TryGetValue(id, out var c);
+                var meta = ResolveDerivedMeta(id, fuelUnit);
                 sensorList.Add(new
                 {
                     id,
-                    name = meta.Name,
+                    name,
                     category = "Derived",
                     unit = meta.Unit,
                     minValue = meta.Min,
                     maxValue = meta.Max,
                     inEntityMap = true,
                     isSelected = selectedIds.Contains(id),
-                    customization = c is not null ? new
-                    {
-                        customName = c.CustomName,
-                        customUnit = c.CustomUnit,
-                        minRange = c.MinRange.HasValue ? (double)c.MinRange.Value : (double?)null,
-                        maxRange = c.MaxRange.HasValue ? (double)c.MaxRange.Value : (double?)null,
-                        minRangeBypass = c.MinRangeBypass,
-                        maxRangeBypass = c.MaxRangeBypass,
-                    } : null,
+                    customization = ProjectCustomization(c),
                 });
             }
 
-            var totalCount = links.Count + (_gps is { IsRunning: true } ? 7 : 0) + S_derivedDefaults.Count;
+            var totalCount = links.Count
+                + (_gps is { IsRunning: true } ? S_gpsOrdered.Length + S_odometerOrdered.Length : 0)
+                + S_derivedOrdered.Length;
 
             return JsonSerializer.Serialize(new
             {

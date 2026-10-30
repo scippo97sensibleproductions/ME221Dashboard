@@ -4,7 +4,6 @@
 
 import type { ColorScheme } from './tables/types';
 import type { ValueTransformStep } from './gauges/transformUtils';
-import type { ShifterConfig } from './derived/types';
 
 export type { ColorScheme };
 
@@ -377,22 +376,12 @@ export interface SaveLayoutPayload {
   chartBackgroundColor?: string;
 }
 
-// ─── Vehicle Config ──────────────────────────────────────────────────────────
 // ─── Vehicle Config (per-dashboard) ─────────────────────────────────────────
+// Single type home: the derivation config is the authoritative shape, and the
+// bridge payload is the same object (C# always serializes every field with a
+// default). Re-exported here so bridge callers keep one import path.
 
-export interface VehicleConfig {
-  enabled: boolean;
-  tireDiameterInches: number;
-  finalDriveRatio: number;
-  gearRatios: number[];
-  wheelSlipPercent: number;
-  rpmEntityId: number | null;
-  vssSpeedEntityId: number | null;
-  mapEntityId: number | null;
-  baroEntityId: number | null;
-  gearEntityId: number | null;
-  shifter?: ShifterConfig;
-}
+export type { VehicleConfig } from './derived/types';
 
 // ─── Sensor Selection / Config Types ─────────────────────────────────────────
 

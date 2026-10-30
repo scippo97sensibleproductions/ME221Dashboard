@@ -57,6 +57,8 @@ public sealed class DashboardDefinition
     public OdometerConfig? Odometer { get; set; }
     public VehicleConfig? Vehicle { get; set; }
     public ShifterConfig? ShifterConfig { get; set; }
+    /// <summary>Accumulated distance/fuel for the derived average-efficiency entity.</summary>
+    public FuelTripConfig? FuelTrip { get; set; }
     [System.Text.Json.Serialization.JsonPropertyName("WarningSettings")]
     [System.Obsolete("Migrated to DashboardConfig.WarningSettings. Kept for deserialization of old configs.")]
     public List<DataLinkWarningSetting>? LegacyWarningSettings { get; set; }
@@ -120,6 +122,54 @@ public sealed class VehicleConfig
     public int? MapEntityId { get; set; }
     public int? BaroEntityId { get; set; }
     public int? GearEntityId { get; set; }
+    /// <summary>Fuel flow channel (L/hr) feeding the derived fuel efficiency, e.g. "Fuelfow Est." (ID 35).</summary>
+    public int? FuelFlowEntityId { get; set; }
+    /// <summary>Injector duty channel (%) used to calculate flow when no flow channel is mapped.</summary>
+    public int? InjectorDutyEntityId { get; set; }
+    /// <summary>Per-injector nominal flow (cc/min); zero disables the duty-based calculation.</summary>
+    public double InjectorFlowCcPerMin { get; set; }
+    /// <summary>Cylinder count used with injector duty to calculate fuel flow.</summary>
+    public int CylinderCount { get; set; } = 4;
+    /// <summary>Output unit of the derived fuel efficiency: "l100km", "kmL" or "mpg".</summary>
+    public string FuelEfficiencyUnit { get; set; } = "kmL";
+    /// <summary>Speed source for the fuel efficiency: "auto" (VSS→GPS), "gps" or "trueSpeed".</summary>
+    public string FuelSpeedSource { get; set; } = "auto";
+    /// <summary>ECU clock/date source mapping and display options.</summary>
+    public RtcConfig? Rtc { get; set; }
+}
+
+/// <summary>
+/// Source mapping for the ECU real-time clock, which the firmware exposes as
+/// separate datalinks (status, day, month, year, hour, minutes, seconds).
+/// </summary>
+public sealed class RtcConfig
+{
+    /// <summary>Clock status channel; 0 is the firmware's "Err - Not Init" and withholds the clock.</summary>
+    public int? StatusEntityId { get; set; }
+    public int? DayEntityId { get; set; }
+    public int? MonthEntityId { get; set; }
+    public int? YearEntityId { get; set; }
+    public int? HourEntityId { get; set; }
+    public int? MinuteEntityId { get; set; }
+    public int? SecondEntityId { get; set; }
+    /// <summary>Render the clock as 12-hour with an AM/PM suffix.</summary>
+    public bool Hour12 { get; set; }
+    /// <summary>Include seconds in the clock text.</summary>
+    public bool ShowSeconds { get; set; } = true;
+
+    public RtcConfig Clone() => (RtcConfig)MemberwiseClone();
+}
+
+/// <summary>
+/// Persisted trip totals behind the average fuel-efficiency entity. Distance is
+/// in kilometers and fuel in liters regardless of the display unit, so changing
+/// the unit never invalidates an in-progress trip.
+/// </summary>
+public sealed class FuelTripConfig
+{
+    public double DistanceKm { get; set; }
+    public double FuelLiters { get; set; }
+    public DateTimeOffset? UpdatedAtUtc { get; set; }
 }
 
 public sealed class ShifterConfig
