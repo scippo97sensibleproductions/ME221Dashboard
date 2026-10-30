@@ -44,22 +44,32 @@ jobs:
           dotnet-version: 11.x
           dotnet-quality: preview
 
+      # Restore the app project only: a solution-wide restore also evaluates the
+      # Windows-only test project, which cannot reference an Android-only app
+      # project and so fails on Linux runners.
       - name: Install MAUI workloads
-        run: dotnet workload restore
+        run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
       - name: Install npm dependencies
         working-directory: src/ME221Dashboard/SvelteApp
         run: npm ci
 
       - name: Build & publish
-        run: >
-          dotnet run scripts/build.cs --
-          -p windows -c Release --publish --no-install --no-clean
-          --msbuild SelfContained=true
-          --msbuild PublishSingleFile=true
-          --msbuild IncludeNativeLibrariesForSelfExtract=true
-          --msbuild ApplicationDisplayVersion=${{ env.VERSION }}
-          --msbuild ApplicationVersion=${{ github.run_number }}
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run scripts/build.cs -- \
+            -p windows -c Release --publish --no-install --no-clean \
+            --msbuild SelfContained=true \
+            --msbuild PublishSingleFile=true \
+            --msbuild IncludeNativeLibrariesForSelfExtract=true \
+            --msbuild ApplicationDisplayVersion=${{ env.VERSION }} \
+            --msbuild ApplicationVersion=${{ github.run_number }} 2>&1 | tee build-release-windows.log
+
+      - name: Surface Windows build errors
+        if: failure()
+        shell: bash
+        run: bash .github/scripts/surface-build-errors.sh "Windows release" build-release-windows.log
 
       - name: Package Windows artifact
         shell: pwsh
@@ -78,7 +88,9 @@ jobs:
   build-macos:
     name: macOS (Catalyst)
     needs: validate
-    runs-on: macos-latest
+    # Mac Catalyst needs Xcode 27.0 exactly (the workload rejects 26.x as too old
+    # and 27.1/27.2 as unsupported); only the xcode-27 image carries it.
+    runs-on: xcode-27
     env:
       VERSION: ${{ needs.validate.outputs.version }}
     steps:
@@ -93,24 +105,38 @@ jobs:
           dotnet-version: 11.x
           dotnet-quality: preview
 
-      - name: Select Xcode 26.6
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '26.6'
+      - name: Select Xcode 27.0
+        shell: bash
+        run: |
+          xcode_path=/Applications/Xcode_27.0.app
+          if [ ! -d "$xcode_path" ]; then
+            echo "::error title=Xcode 27.0 missing::$xcode_path not found. Installed: $(ls -d /Applications/Xcode*.app | tr '\n' ' ')"
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path" >> "$GITHUB_ENV"
+          xcodebuild -version
 
       - name: Install MAUI workloads
-        run: dotnet workload restore
+        run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
       - name: Install npm dependencies
         working-directory: src/ME221Dashboard/SvelteApp
         run: npm ci
 
       - name: Build & publish
-        run: >
-          dotnet run scripts/build.cs --
-          -p macos -c Release --publish --no-install --no-clean
-          --msbuild ApplicationDisplayVersion=${{ env.VERSION }}
-          --msbuild ApplicationVersion=${{ github.run_number }}
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run scripts/build.cs -- \
+            -p macos -c Release --publish --no-install --no-clean \
+            --msbuild ApplicationDisplayVersion=${{ env.VERSION }} \
+            --msbuild ApplicationVersion=${{ github.run_number }} 2>&1 | tee build-release-macos.log
+
+      - name: Surface macOS build errors
+        if: failure()
+        shell: bash
+        run: bash .github/scripts/surface-build-errors.sh "macOS release" build-release-macos.log
 
       - name: Package macOS artifact
         shell: bash
@@ -146,10 +172,14 @@ jobs:
           dotnet-quality: preview
 
       - name: Install MAUI workloads
-        run: dotnet workload restore
+        run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
+      # The action's default package list includes the retired legacy "tools"
+      # package, which makes sdkmanager fail before any project code runs.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Decode keystore
         if: env.KEYSTORE_BASE64 != ''
@@ -160,17 +190,24 @@ jobs:
         run: npm ci
 
       - name: Build & publish
-        run: >
-          dotnet run scripts/build.cs --
-          -p android-all -c Release --publish --no-install --no-clean
-          --msbuild EnableWindowsTargeting=true
-          --msbuild ApplicationDisplayVersion=${{ env.VERSION }}
-          --msbuild ApplicationVersion=${{ github.run_number }}
-          --msbuild AndroidKeyStore=true
-          --msbuild AndroidSigningKeyStore=/tmp/me221-release.keystore
-          --msbuild AndroidSigningKeyAlias=me221app
-          --msbuild AndroidSigningKeyPass=me221app
-          --msbuild AndroidSigningStorePass=me221app
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run scripts/build.cs -- \
+            -p android-all -c Release --publish --no-install --no-clean \
+            --msbuild EnableWindowsTargeting=true \
+            --msbuild ApplicationDisplayVersion=${{ env.VERSION }} \
+            --msbuild ApplicationVersion=${{ github.run_number }} \
+            --msbuild AndroidKeyStore=true \
+            --msbuild AndroidSigningKeyStore=/tmp/me221-release.keystore \
+            --msbuild AndroidSigningKeyAlias=me221app \
+            --msbuild AndroidSigningKeyPass=me221app \
+            --msbuild AndroidSigningStorePass=me221app 2>&1 | tee build-release-android.log
+
+      - name: Surface Android build errors
+        if: failure()
+        shell: bash
+        run: bash .github/scripts/surface-build-errors.sh "Android release" build-release-android.log
 
       - name: Rename APK with version
         run: |
