@@ -142,10 +142,13 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_CHANNEL }}
 
-      - name: Select Xcode 26.6
+      # The .NET for MacCatalyst workload in a given SDK band requires a matching
+      # Xcode, and the SDK floats on 11.0.x, so track the newest stable Xcode
+      # instead of pinning: a fixed Xcode fails as soon as the workload bumps.
+      - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.6'
+          xcode-version: latest-stable
 
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
