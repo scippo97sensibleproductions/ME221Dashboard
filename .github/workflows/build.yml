@@ -128,11 +128,10 @@ jobs:
   build-macos:
     name: macOS (Catalyst)
     needs: build-svelte
-    # .NET 11 for Mac Catalyst (27.0.x workload) refuses to build against anything
-    # below Xcode 27, and macos-latest only ships Xcode 26.x. The dedicated
-    # xcode-27 image is the only one with Xcode 27 installed, so builds run there;
-    # it ships a single default Xcode, so no selection step is needed. Revisit the
-    # label once that image is out of preview and macos-latest picks up Xcode 27.
+    # .NET 11 for Mac Catalyst (27.0.x workload) accepts Xcode 27.0 only: 26.x is
+    # rejected as too old and 27.1/27.2 as unsupported, so the build runs on the
+    # xcode-27 image and pins 27.0 there. Revisit the label once macos-latest
+    # carries an Xcode the workload accepts.
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +145,18 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_CHANNEL }}
+
+      - name: Select Xcode 27.0
+        shell: bash
+        run: |
+          xcode_path=/Applications/Xcode_27.0.app
+          if [ ! -d "$xcode_path" ]; then
+            echo "::error title=Xcode 27.0 missing::$xcode_path not found. Installed: $(ls -d /Applications/Xcode*.app | tr '\n' ' ')"
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode_path"
+          echo "DEVELOPER_DIR=$xcode_path" >> "$GITHUB_ENV"
+          xcodebuild -version
 
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
