@@ -54,8 +54,12 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_CHANNEL }}
 
+      # The action defaults to "tools platform-tools", but the legacy "tools"
+      # package was retired from the SDK repository, so only ask for platform-tools.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
@@ -72,19 +76,7 @@ jobs:
       - name: Surface Android build errors
         if: failure()
         shell: bash
-        run: |
-          {
-            echo "### Android build failed"
-            echo '```'
-            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-android.log | head -n 60 || true
-            echo '```'
-            echo '<details><summary>last 40 log lines</summary>'
-            echo '```'
-            tail -n 40 build-android.log
-            echo '```'
-            echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
-          tail -n 40 build-android.log
+        run: bash .github/scripts/surface-build-errors.sh Android build-android.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -124,19 +116,7 @@ jobs:
       - name: Surface Windows build errors
         if: failure()
         shell: bash
-        run: |
-          {
-            echo "### Windows build failed"
-            echo '```'
-            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-windows.log | head -n 60 || true
-            echo '```'
-            echo '<details><summary>last 40 log lines</summary>'
-            echo '```'
-            tail -n 40 build-windows.log
-            echo '```'
-            echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
-          tail -n 40 build-windows.log
+        run: bash .github/scripts/surface-build-errors.sh Windows build-windows.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -181,19 +161,7 @@ jobs:
       - name: Surface macOS build errors
         if: failure()
         shell: bash
-        run: |
-          {
-            echo "### macOS build failed"
-            echo '```'
-            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-macos.log | head -n 60 || true
-            echo '```'
-            echo '<details><summary>last 40 log lines</summary>'
-            echo '```'
-            tail -n 40 build-macos.log
-            echo '```'
-            echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
-          tail -n 40 build-macos.log
+        run: bash .github/scripts/surface-build-errors.sh macOS build-macos.log
 
       - uses: actions/upload-artifact@v4
         with:
