@@ -15,6 +15,7 @@ namespace ME221Dashboard.Tests.Mirror;
 /// RePair, and the disconnect exit. This is the layer where the inverted reconnect
 /// loop bug lived; the pure state-machine tests cannot cover it.
 /// </summary>
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class MirrorClientTransportTests : IAsyncLifetime
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-client-" + Guid.NewGuid().ToString("N"));

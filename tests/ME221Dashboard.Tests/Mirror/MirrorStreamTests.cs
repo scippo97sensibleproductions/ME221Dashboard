@@ -14,6 +14,7 @@ using Xunit;
 namespace ME221Dashboard.Tests.Mirror;
 
 /// <summary>End-to-end streaming tests: real WSS server + stream service + client loopback.</summary>
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class MirrorStreamTests : IAsyncLifetime
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-stream-" + Guid.NewGuid().ToString("N"));
@@ -241,31 +242,34 @@ public sealed class MirrorStreamTests : IAsyncLifetime
     {
         // The client never acks; after 3 attempts the session closes with "snapshot failed".
         var entry = await _store.AddAsync("client-1", "Tablet");
-        using var client = await ConnectAsync();
-        await SendJsonAsync(client, new HelloMessage { AppVersion = "1.2.3", DeviceName = "Tablet", Token = entry.Token, ClientId = "client-1" });
+        await using var client = await MirrorSocketClient.ConnectAsync(_port);
+        await client.SendAsync(new HelloMessage { AppVersion = "1.2.3", DeviceName = "Tablet", Token = entry.Token, ClientId = "client-1" });
 
-        var first = MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as HelloAckMessage;
-        first!.Status.Should().Be("approved");
+        (await client.NextAsync<HelloAckMessage>()).Status.Should().Be("approved");
 
-        // Drain: expect close within a few ack timeouts (3 attempts × 200ms).
+        // Read continuously: the server closes right after its last frame, and a
+        // client that starts reading afterwards loses the close reason.
         var gotClose = false;
-        using var cts = new CancellationTokenSource(5000);
-        try
+        while (true)
         {
-            while (true)
+            string json;
+            try
             {
-                var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(client, 5000));
-                if (msg is CloseMessage close)
-                {
-                    close.Reason.Should().Be("snapshot failed");
-                    gotClose = true;
-                    break;
-                }
-                if (msg is SnapshotChunkMessage)
-                    continue; // deliberately not acking
+                json = await client.NextRawAsync(5000);
             }
+            catch (Xunit.Sdk.XunitException)
+            {
+                break; // the socket closed without delivering a close frame
+            }
+
+            if (MirrorProtocol.Parse(json) is not CloseMessage close)
+                continue; // snapshot chunks are deliberately left unacked
+
+            close.Reason.Should().Be("snapshot failed");
+            gotClose = true;
+            break;
         }
-        catch (OperationCanceledException) { }
+
         gotClose.Should().BeTrue("the server must close the session after exhausting snapshot retries");
     }
 

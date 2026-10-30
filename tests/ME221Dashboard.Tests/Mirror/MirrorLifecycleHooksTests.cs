@@ -11,6 +11,7 @@ using Xunit;
 namespace ME221Dashboard.Tests.Mirror;
 
 /// <summary>R19 hooks and approval flow over a real WSS loopback (U5).</summary>
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class MirrorLifecycleHooksTests : IAsyncLifetime
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-hooks-" + Guid.NewGuid().ToString("N"));

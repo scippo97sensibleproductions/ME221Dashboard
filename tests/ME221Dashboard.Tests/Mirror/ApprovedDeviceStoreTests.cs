@@ -114,6 +114,7 @@ public sealed class ApprovedDeviceStoreTests : IDisposable
     }
 }
 
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class DiscoveryResponderTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-responder-" + Guid.NewGuid().ToString("N"));
@@ -170,6 +171,7 @@ public sealed class DiscoveryResponderTests : IDisposable
     }
 }
 
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class DiscoveryResponderEcuStateTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-responder-" + Guid.NewGuid().ToString("N"));

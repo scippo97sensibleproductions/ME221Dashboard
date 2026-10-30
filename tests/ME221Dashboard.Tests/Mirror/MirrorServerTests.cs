@@ -10,20 +10,8 @@ using Xunit;
 
 namespace ME221Dashboard.Tests.Mirror;
 
-/// <summary>
-/// These tests drive a real loopback WSS server and depend on short flush
-/// windows (the server closes 100 ms after the final frame so Fleck's send
-/// loop can drain). Running them alongside the rest of the suite starves that
-/// window on a loaded machine, so the collection opts out of parallelization.
-/// </summary>
-[CollectionDefinition(SerialCollectionName, DisableParallelization = true)]
-public sealed class MirrorServerCollection
-{
-    public const string SerialCollectionName = "Mirror server (serial)";
-}
-
 /// <summary>End-to-end WSS tests against the real Fleck server (loopback, self-signed TLS).</summary>
-[Collection(MirrorServerCollection.SerialCollectionName)]
+[Collection(MirrorNetworkCollection.Name)]
 public sealed class MirrorServerTests : IAsyncLifetime
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "me221-server-" + Guid.NewGuid().ToString("N"));
@@ -279,15 +267,16 @@ public sealed class MirrorServerTests : IAsyncLifetime
     public async Task RevokeClosesSessionWithRevokeMessage()
     {
         var entry = await _store.AddAsync("client-1", "Tablet");
-        using var client = await ConnectAsync();
-        await SendJsonAsync(client, new HelloMessage { AppVersion = "1.2.3", DeviceName = "Tablet", Token = entry.Token, ClientId = "client-1" });
-        (MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as HelloAckMessage)!.Status.Should().Be("approved");
+        await using var client = await MirrorSocketClient.ConnectAsync(_port);
+        await client.SendAsync(new HelloMessage { AppVersion = "1.2.3", DeviceName = "Tablet", Token = entry.Token, ClientId = "client-1" });
+        (await client.NextAsync<HelloAckMessage>()).Status.Should().Be("approved");
 
         await _server.RevokeDeviceAsync("client-1");
 
-        var msg = MirrorProtocol.Parse(await ReceiveJsonAsync(client)) as RevokedMessage;
-        msg.Should().NotBeNull();
-        msg!.Reason.Should().Be("revoked");
+        // The pump reads continuously, so the revoke frame survives the close
+        // that follows it immediately.
+        var msg = await client.NextAsync<RevokedMessage>();
+        msg.Reason.Should().Be("revoked");
     }
 
     [Fact]
