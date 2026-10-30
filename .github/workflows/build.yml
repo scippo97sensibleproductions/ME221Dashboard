@@ -128,13 +128,12 @@ jobs:
   build-macos:
     name: macOS (Catalyst)
     needs: build-svelte
-    runs-on: macos-latest
-    # .NET 11 for Mac Catalyst requires Xcode 27, but no runner image ships it
-    # yet (Xcode 27 is still an Apple public preview). Keep building so real
-    # regressions stay visible in the job summary, but do not fail the workflow
-    # on the toolchain gap. Tracking latest-stable Xcode makes this self-heal
-    # as soon as the image gains an Xcode the workload accepts.
-    continue-on-error: true
+    # .NET 11 for Mac Catalyst (27.0.x workload) refuses to build against anything
+    # below Xcode 27, and macos-latest only ships Xcode 26.x. The dedicated
+    # xcode-27 image is the only one with Xcode 27 installed, so builds run there;
+    # it ships a single default Xcode, so no selection step is needed. Revisit the
+    # label once that image is out of preview and macos-latest picks up Xcode 27.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
 
@@ -147,14 +146,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           dotnet-quality: ${{ env.DOTNET_CHANNEL }}
-
-      # The .NET for MacCatalyst workload in a given SDK band requires a matching
-      # Xcode, and the SDK floats on 11.0.x, so track the newest stable Xcode
-      # instead of pinning: a fixed Xcode fails as soon as the workload bumps.
-      - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
 
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
