@@ -60,11 +60,31 @@ jobs:
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
-      - run: >
-          dotnet build src/ME221Dashboard/ME221Dashboard.csproj
-          -f net11.0-android37.0
-          -c Release
-          -p:EnableWindowsTargeting=true
+      - name: Build (Android, arm64)
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/ME221Dashboard/ME221Dashboard.csproj \
+            -f net11.0-android37.0 \
+            -c Release \
+            -p:EnableWindowsTargeting=true 2>&1 | tee build-android.log
+
+      - name: Surface Android build errors
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### Android build failed"
+            echo '```'
+            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-android.log | head -n 60 || true
+            echo '```'
+            echo '<details><summary>last 40 log lines</summary>'
+            echo '```'
+            tail -n 40 build-android.log
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 build-android.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -93,10 +113,30 @@ jobs:
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
-      - run: >
-          dotnet build src/ME221Dashboard/ME221Dashboard.csproj
-          -f net11.0-windows10.0.19041.0
-          -c Release
+      - name: Build (Windows)
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/ME221Dashboard/ME221Dashboard.csproj \
+            -f net11.0-windows10.0.19041.0 \
+            -c Release 2>&1 | tee build-windows.log
+
+      - name: Surface Windows build errors
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### Windows build failed"
+            echo '```'
+            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-windows.log | head -n 60 || true
+            echo '```'
+            echo '<details><summary>last 40 log lines</summary>'
+            echo '```'
+            tail -n 40 build-windows.log
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 build-windows.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,10 +170,30 @@ jobs:
       - name: Restore MAUI workloads
         run: dotnet workload restore src/ME221Dashboard/ME221Dashboard.csproj
 
-      - run: >
-          dotnet build src/ME221Dashboard/ME221Dashboard.csproj
-          -f net11.0-maccatalyst
-          -c Release
+      - name: Build (Mac Catalyst)
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/ME221Dashboard/ME221Dashboard.csproj \
+            -f net11.0-maccatalyst \
+            -c Release 2>&1 | tee build-macos.log
+
+      - name: Surface macOS build errors
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### macOS build failed"
+            echo '```'
+            grep -E "error (CS|XA|NU|MSB|NETSDK)|error :" build-macos.log | head -n 60 || true
+            echo '```'
+            echo '<details><summary>last 40 log lines</summary>'
+            echo '```'
+            tail -n 40 build-macos.log
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -n 40 build-macos.log
 
       - uses: actions/upload-artifact@v4
         with:
